@@ -49,6 +49,7 @@ Install python 10.3
 
 ###############Create enviromanet  out side repo directory ############
 apt install python3.10-dev python3.10-venv
+
 python3.10 -m venv env
 
 ###############Active enviroment###########
@@ -64,12 +65,19 @@ pip install -r requirements.txt
 ############## If getting any error install this all packages ############
 
 sudo apt-get install python3.10-dev libmysqlclient-dev
+
 sudo apt-get install libpq5
+
 sudo apt-get install libpq-dev
+
 sudo apt install libgraphviz-dev
+
 sudo pip install pygraphviz
+
 sudo apt install build-essential
+
 sudo apt-get install libpq-dev
+
 pip install gevent
 
 ##############Run Setup ############
