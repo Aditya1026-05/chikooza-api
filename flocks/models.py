@@ -1,7 +1,7 @@
 from django.db import models
 
 # Create your models here.
-from common.base_models import BaseModel, Users
+from common.base_models import BaseModel, Users, PublicId
 from farm.models import Country, Farm, State
 
 
@@ -36,6 +36,10 @@ class Breed(BaseModel):
     name = models.CharField(max_length=255)
     line = models.CharField(max_length=255)
 
+    def save(self, *args, **kwargs):
+        self.public_id = PublicId.create_public_id()
+        super(Breed, self).save(*args, **kwargs)
+
 
 class Integrator(BaseModel):
     """
@@ -57,6 +61,10 @@ class Integrator(BaseModel):
     phone = models.CharField(max_length=255, null=True)
     phone2 = models.CharField(max_length=255, null=True)
     contact = models.CharField(max_length=255, null=True)
+
+    def save(self, *args, **kwargs):
+        self.public_id = PublicId.create_public_id()
+        super(Integrator, self).save(*args, **kwargs)
 
 
 sys_choices = [("M", "M"), ("A", "A"), ("B", "B")]
