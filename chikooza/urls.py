@@ -26,6 +26,7 @@ urlpatterns = [
     path("", include("purchase.urls")),
     path("", include("dailydata.urls")),
     path("", include("sales.urls")),
+    path("", include("rest_framework.urls")),
     path("o/", include("oauth2_provider.urls", namespace="oauth2_provider")),
 ]
 if settings.DEBUG:
