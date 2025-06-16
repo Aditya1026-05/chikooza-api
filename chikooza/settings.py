@@ -65,6 +65,7 @@ MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
     "common.middleware.PageNotFoundMiddleware",
     "common.middleware.AuthenticationErrorMessage",
+    'oauth2_provider.middleware.OAuth2TokenMiddleware',
 ]
 CORS_ORIGIN_ALLOW_ALL = True
 ROOT_URLCONF = "chikooza.urls"
@@ -138,6 +139,7 @@ OAUTH2_PROVIDER = {
         "update": "update scope",
         "delete": "delete scope",
         "groups": "Access to your groups",
+        "write": "Write scope",
     },
     "ACCESS_TOKEN_EXPIRE_SECONDS": 31556952,
     "ACCESS_TOKEN_GENERATOR": "common.token_generator.generate_token",

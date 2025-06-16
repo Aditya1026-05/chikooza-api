@@ -91,15 +91,28 @@ def create_token(user, password, client_id, client_secret):
         "password": password,
         "grant_type": "password",
         "client_id": client_id,
-        "client_secret": client_secret,
+        "client_secret":"abc123",
+        # "client_secret":client_secret,
     }
-    token = requests.post(HOSTNAME + "o/token/", data=data)
+    headers = {
+    "Content-Type": "application/x-www-form-urlencoded",
+    "Accept": "application/json"
+    }
+
+    token = requests.post(
+        f"{HOSTNAME}o/token/",
+        data=data,
+        headers=headers
+    )
+
     logger.info("Successfully get access_token, expires_in and token_type.")
     return {
         "access_token": token.json().get("access_token"),
         "expires_in": token.json().get("expires_in"),
         "token_type": token.json().get("token_type"),
     }
+    
+    
 
 
 def check_email_validate(email):
