@@ -33,6 +33,8 @@ from flocks.serializers import (
 )
 from flocks.services import AddFlockService, UpdateFlockService
 from purchase.models import Purchase
+from flocks.utils import prepare_daily_data_response
+from dailydata.models import DailyData
 
 
 class FlockView(viewsets.ViewSet):
@@ -235,10 +237,36 @@ class FlockSummaryView(viewsets.ViewSet):
         try:
             validate_url_value(pk, "flockPublicId")
             flock = Flock.objects.get(public_id=pk)
-            return get_detail(
-                "Flock Summary",
-                FlockSummarySerializer(flock).data,
-                status.HTTP_200_OK,
-            )
+            
+            # Get base flock data
+            base_data = FlockSummarySerializer(flock).data
+            
+            # Get latest daily data if exists
+            latest_daily_data = DailyData.objects.filter(flock=flock).order_by('-date').first()
+            
+            if latest_daily_data:
+                enriched = prepare_daily_data_response(latest_daily_data, flock)
+                base_data.update({
+                    "birds_count": enriched["bird_count"],
+                    "total_feed_purchased": enriched["total_feed_purchased"],
+                    "total_feed_consumed": enriched["total_feed_consumed"],
+                    "feed_stock": enriched["feed_stock"],
+                    "average_feed_per_bird": enriched["average_feed_per_bird"],
+                    "total_average_feed": enriched["total_average_feed"],
+                    "total_mortality_percentage": enriched["total_mortality_percentage"],
+                    "cum_mort": enriched["cum_mort"],
+                    "fcr": enriched["fcr"],
+                    "total_fcr": enriched["total_fcr"],
+                    "remarks": enriched["remarks"],
+                })
+            
+            return Response({
+                "success": True,
+                "results": base_data
+            }, status=status.HTTP_200_OK)
+            
         except Flock.DoesNotExist:
-            return Response({ERROR: FLOCK_DOES_NOT_EXIST}, status.HTTP_404_NOT_FOUND)
+            return Response({
+                "success": False,
+                "error": FLOCK_DOES_NOT_EXIST
+            }, status=status.HTTP_404_NOT_FOUND)

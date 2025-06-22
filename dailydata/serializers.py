@@ -262,7 +262,6 @@ class DailyDataFCRSerializer(serializers.ModelSerializer):
 class GetDailyDataListSerializer(serializers.ModelSerializer):
     flock_public_id = serializers.IntegerField(source="flock.public_id")
     age = serializers.SerializerMethodField()
-
     class Meta:
         model = DailyData
         fields = ['date', 'public_id', 'flock_public_id', 'mortality', 'total_mort', 'current_bird_count', 'feed_stock',

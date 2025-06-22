@@ -6,6 +6,7 @@ from common.base_models import PublicId
 from common.utils import validation_return_response
 from dailydata.models import DailyData, FlockVaccination, Vaccines, DarknessTime, FeedAvailability
 from flocks.models import Flock
+from flocks.utils import generate_remarks  
 from purchase.models import Purchase
 from sales.models import Sales
 
@@ -19,7 +20,6 @@ class CreateDailyDataService(services.Service):
         data = self.data.get("data")
         user = self.data.get("user")
         flock_vaccinations = data.get("flock_vaccination")
-
         quantity = 0
         purchases = Purchase.objects.filter(
             flock__public_id=data.get("flock_public_id"),
@@ -32,7 +32,6 @@ class CreateDailyDataService(services.Service):
             else:
                 purchase.quantity = purchase.quantity
             quantity = quantity + purchase.quantity
-
         flock = Flock.objects.get(public_id=data.get("flock_public_id"))
         yesterday = data.get("date") - datetime.timedelta(days=1)
 
@@ -42,6 +41,7 @@ class CreateDailyDataService(services.Service):
                 current_bird_count = yesterday_daily_data.current_bird_count
             else:
                 current_bird_count = flock.actual_birds
+                
             total_feed = yesterday_daily_data.total_feed + data.get("feed_intake")
             real_current_bird_count = current_bird_count - data.get("mortality")
             avg_feed = yesterday_daily_data.total_average_feed
@@ -53,7 +53,7 @@ class CreateDailyDataService(services.Service):
 
             avg_feed = 0
             res_fcr = 0
-        feed_stock = quantity - data.get("feed_intake")
+        feed_stock = quantity-total_feed
         if Sales.objects.filter(flock=flock).exists():
             sale = Sales.objects.filter(flock=flock).last()
             sales_date = sale.date
@@ -71,9 +71,9 @@ class CreateDailyDataService(services.Service):
         else:
             average_feed = (data.get("feed_intake") * 1000) / real_current_bird_count
         total_average_feed = avg_feed + average_feed
-        total_mortality = (
-                                  (flock.actual_birds - actual_bird_count) * 100
-                          ) / flock.actual_birds
+        # Calculate cumulative mortality: total dead birds / initial bird count
+        total_dead_birds = flock.actual_birds - actual_bird_count
+        total_mortality = (total_dead_birds * 100) / flock.actual_birds
         fcr = (
             total_average_feed / (average_bird_weight - flock.chick_weight)
             if (average_bird_weight - flock.chick_weight) > 0
@@ -97,12 +97,9 @@ class CreateDailyDataService(services.Service):
         if data.get("mortality") > current_bird_count:
             return validation_return_response("mortality", "Mortality cannot be greater than bird count")
 
-            # sales_date = Sales.objects.filter(flock=flock).date
-            # if datetime.datetime.today() > sales_date:
-            #     final_current_bird_count = flock.actual_birds - data.get("mortality")
-            # else:
-            #     final_current_bird_count = real_current_bird_count
-            # final_current_bird_count = final_current_bird_count
+        # Generate remarks using the consolidated function
+        remarks = []
+
         daily_data = DailyData.objects.create(
             public_id=PublicId.create_public_id(),
             flock=flock,
@@ -126,7 +123,10 @@ class CreateDailyDataService(services.Service):
             status=True,
             darkness_time=darkness_time,
             feed_availability=feed_availability,
+            remarks=remarks,
         )
+        
+        # Create flock vaccinations separately - no vaccine names in remarks here
         if flock_vaccinations:
             for i in range(len(flock_vaccinations['vaccine_public_id'])):
                 FlockVaccination.objects.create(
@@ -138,6 +138,7 @@ class CreateDailyDataService(services.Service):
                     ),
                     status=flock_vaccinations["status"][i],
                 )
+        
         return daily_data
 
 
@@ -183,9 +184,9 @@ class UpdateDailyDataService(services.Service):
         else:
             avg_feed = round((feed_intake * 1000) / real_current_bird_count, 2)
         total_average_feed = avg_feed + average_feed
-        total_mortality = (
-                                  (flock.actual_birds - real_current_bird_count) * 100
-                          ) / flock.actual_birds
+        # Calculate cumulative mortality: total dead birds / initial bird count
+        total_dead_birds = flock.actual_birds - real_current_bird_count
+        total_mortality = (total_dead_birds * 100) / flock.actual_birds
         fcr = (
             total_average_feed / (average_bird_weight - flock.chick_weight)
             if (average_bird_weight - flock.chick_weight)
@@ -225,7 +226,10 @@ class UpdateDailyDataService(services.Service):
         medicine = data.get("medicine") or False
         if data.get("mortality") > current_bird_count:
             return validation_return_response("mortality", "Mortality cannot be greater than bird count")
-
+        
+        # Generate remarks using the consolidated function
+        remarks = []
+        
         daily_data.mortality = mortality
         daily_data.feed_intake = feed_intake
         daily_data.current_bird_count = real_current_bird_count
@@ -243,6 +247,9 @@ class UpdateDailyDataService(services.Service):
         daily_data.feed_stock = feed_stock
         daily_data.darkness_time = darkness_time_final
         daily_data.feed_availability = feed_availability_final
+        daily_data.remarks = remarks
+        
+        # Handle flock vaccinations separately - no vaccine names in remarks here
         if flock_vaccinations:
             for i in range(len(flock_vaccinations['flock_vaccination_public_id'])):
                 if flock_vaccinations['flock_vaccination_public_id'][i] == 0:
@@ -269,9 +276,9 @@ class UpdateDailyDataService(services.Service):
             yes_daily_data = DailyData.objects.get(date=yes, flock=flock)
             if data.get('mortality'):
                 dailydata.current_bird_count = yes_daily_data.current_bird_count - dailydata.mortality
-                dailydata.total_mort = round(
-                    (flock.actual_birds - dailydata.current_bird_count) * 100 / flock.actual_birds,
-                    2)
+                # Calculate cumulative mortality: total dead birds / initial bird count
+                total_dead_birds = flock.actual_birds - dailydata.current_bird_count
+                dailydata.total_mort = round((total_dead_birds * 100) / flock.actual_birds, 2)
                 dailydata.save()
             if data.get('feed_intake'):
                 dailydata.feed_stock = yes_daily_data.feed_stock - dailydata.feed_intake

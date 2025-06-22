@@ -50,6 +50,7 @@ from flocks.serializers import GetDailyDataDetailSerializer
 from purchase.models import Purchase
 from sales.models import Sales
 from users.utils import render_to_pdf
+from flocks.utils import prepare_daily_data_response
 
 
 class DailyDataView(viewsets.ViewSet):
@@ -100,29 +101,31 @@ class DailyDataView(viewsets.ViewSet):
             if serializer.is_valid(raise_exception=True):
                 serializer_data = serializer.validated_data
                 flock_public_id = serializer_data["flock"].get("public_id")
-                flock_date = Flock.objects.get(public_id=flock_public_id).hatch_date
+                flock = Flock.objects.get(public_id=flock_public_id)
+                flock_date = flock.hatch_date
                 date = serializer_data["date"]
                 number_of_days = (date - flock_date).days
                 yesterday = date - datetime.timedelta(days=1)
-                if DailyData.objects.filter(
-                        flock__public_id=flock_public_id, date=yesterday
-                ).exists():
+                
+                if DailyData.objects.filter(flock__public_id=flock_public_id, date=yesterday).exists():
                     yesterday_daily_data = DailyData.objects.get(
                         flock__public_id=flock_public_id, date=yesterday
                     )
-                    yesterday_daily_data_result = YesterdayDailyDataGetSerializer(
-                        yesterday_daily_data
-                    ).data
+                    yesterday_daily_data_result = YesterdayDailyDataGetSerializer(yesterday_daily_data).data
+                    # Add calculated values
+                    yesterday_calculated = prepare_daily_data_response(yesterday_daily_data, flock)
+                    yesterday_daily_data_result.update(yesterday_calculated)
                 else:
                     yesterday_daily_data_result = {}
-                if DailyData.objects.filter(
-                        flock__public_id=flock_public_id, date=date
-                ).exists():
+                    
+                if DailyData.objects.filter(flock__public_id=flock_public_id, date=date).exists():
                     dailydata = DailyData.objects.get(
                         flock__public_id=flock_public_id, date=date
                     )
                     result = DailyDataGetSerializer(dailydata).data
-
+                    # Add calculated values
+                    today_calculated = prepare_daily_data_response(dailydata, flock)
+                    result.update(today_calculated)
                 else:
                     result = {}
                 return get_detail(
@@ -136,7 +139,7 @@ class DailyDataView(viewsets.ViewSet):
                 )
         except Flock.DoesNotExist:
             return Response({ERROR: FLOCK_DOES_NOT_EXIST}, status.HTTP_404_NOT_FOUND)
-
+        
     @classmethod
     def partial_update(cls, request, pk):
         try:
@@ -269,11 +272,34 @@ class DailyDataDetailView(viewsets.ViewSet):
             daily_data = DailyData.objects.filter(
                 flock__public_id=request.GET.get("flock_public_id")
             )
+            result_data = []
+
+            for entry in daily_data:
+                flock = entry.flock
+                enriched = prepare_daily_data_response(entry, flock)
+                
+                base_data = GetDailyDataListSerializer(entry).data
+                
+                base_data.update({
+                    "bird_count": enriched["bird_count"],
+                    "total_feed_purchased": enriched["total_feed_purchased"],
+                    "total_feed_consumed": enriched["total_feed_consumed"],
+                    "feed_stock": enriched["feed_stock"],
+                    "average_feed_per_bird": enriched["average_feed_per_bird"],
+                    "total_average_feed": enriched["total_average_feed"],
+                    "total_mortality_percentage": enriched["total_mortality_percentage"],
+                    "cum_mort": enriched["cum_mort"],
+                    "fcr": enriched["fcr"],
+                    "total_fcr": enriched["total_fcr"],
+                    "remarks": enriched["remarks"],
+                })
+                
+                result_data.append(base_data)
             return list_response(
                 "Daily Data List.",
                 daily_data.count(),
                 "daily_data_list",
-                GetDailyDataDetailSerializer(daily_data, many=True).data,
+                result_data,
                 status.HTTP_200_OK,
             )
         except DailyData.DoesNotExist:
@@ -480,13 +506,40 @@ class DailyDataListView(viewsets.ViewSet):
     def list(cls, request):
         try:
             daily_data = DailyData.objects.filter(
-                flock__public_id=request.GET.get("flock_public_id")
+            flock__public_id=request.GET.get("flock_public_id")
             )
+            result_data = []
+
+            for entry in daily_data:
+                flock = entry.flock
+                enriched = prepare_daily_data_response(entry, flock)
+                
+                # Get the original serialized data
+                base_data = GetDailyDataListSerializer(entry).data
+                
+                # Update only the fields from enrichment that should overwrite/augment base
+                base_data.update({
+                    "bird_count": enriched["bird_count"],
+                    "total_feed_purchased": enriched["total_feed_purchased"],
+                    "total_feed_consumed": enriched["total_feed_consumed"],
+                    "feed_stock": enriched["feed_stock"],
+                    "average_feed_per_bird": enriched["average_feed_per_bird"],
+                    "total_average_feed": enriched["total_average_feed"],
+                    "total_mortality_percentage": enriched["total_mortality_percentage"],
+                    "cum_mort": enriched["cum_mort"],
+                    "fcr": enriched["fcr"],
+                    "total_fcr": enriched["total_fcr"],
+                    "remarks": enriched["remarks"],
+                })
+                
+                result_data.append(base_data)
+
+            
             return list_response(
                 "Daily Data List.",
                 daily_data.count(),
                 "daily_data_list",
-                GetDailyDataListSerializer(daily_data, many=True).data,
+                result_data,
                 status.HTTP_200_OK,
             )
         except DailyData.DoesNotExist:
@@ -543,13 +596,39 @@ class PDFView(viewsets.ViewSet):
     @classmethod
     def list(cls, request):
         template_name = "dailydata.html"
-        records = DailyData.objects.filter(
+        daily_data = DailyData.objects.filter(
                 flock__public_id=request.GET.get("flock_public_id")
             )
+        
+        result_data = []
+
+        for entry in daily_data:
+            flock = entry.flock
+            enriched = prepare_daily_data_response(entry, flock)
+                
+            # Get the original serialized data
+            base_data = GetDailyDataListSerializer(entry).data
+                
+            # Update only the fields from enrichment that should overwrite/augment base
+            base_data.update({
+                "bird_count": enriched["bird_count"],
+                "total_feed_purchased": enriched["total_feed_purchased"],
+                "total_feed_consumed": enriched["total_feed_consumed"],
+                "feed_stock": enriched["feed_stock"],
+                "average_feed_per_bird": enriched["average_feed_per_bird"],
+                "total_average_feed": enriched["total_average_feed"],
+                "total_mortality_percentage": enriched["total_mortality_percentage"],
+                "cum_mort": enriched["cum_mort"],
+                "fcr": enriched["fcr"],
+                "total_fcr": enriched["total_fcr"],
+                "remarks": enriched["remarks"],
+            })
+                
+            result_data.append(base_data)
 
         return render_to_pdf(
             template_name,
             {
-                "record": records,
+                "record": result_data,
             },
         )

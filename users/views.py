@@ -174,6 +174,7 @@ class LoginView(viewsets.ViewSet):
                         user_detail.first().client_id,
                         user_detail.first().client_secret,
                     )
+                    # print(user_detail.first().client_secret)
                     token["public_id"] = user.public_id
                     token["name"] = user.first_name
                     return get_detail("User Login", token, status.HTTP_200_OK)
