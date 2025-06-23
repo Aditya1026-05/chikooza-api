@@ -275,7 +275,15 @@ class FlockSummarySerializer(serializers.Serializer):
 
     def get_current_bird_count(self, obj):
         daily_data = DailyData.objects.filter(flock=obj).last()
-        return daily_data.current_bird_count
+        lifting_count = 0
+        if Sales.objects.filter(flock=daily_data.flock, date__gt=daily_data.date).exists():
+            sales = Sales.objects.filter(flock=daily_data.flock, date__gt=daily_data.date)
+            for sale in sales:
+                lifting_count += sale.lifting_count
+            current_bird_count = daily_data.current_bird_count - lifting_count
+        else:
+            current_bird_count = daily_data.current_bird_count
+        return current_bird_count
 
     def get_other(self, obj):
         cost = 0

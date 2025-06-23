@@ -281,7 +281,7 @@ class DailyDataDetailView(viewsets.ViewSet):
                 base_data = GetDailyDataListSerializer(entry).data
                 
                 base_data.update({
-                    "bird_count": enriched["bird_count"],
+                    "birds_count": enriched["bird_count"],
                     "total_feed_purchased": enriched["total_feed_purchased"],
                     "total_feed_consumed": enriched["total_feed_consumed"],
                     "feed_stock": enriched["feed_stock"],
