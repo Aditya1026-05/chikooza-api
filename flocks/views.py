@@ -33,9 +33,11 @@ from flocks.serializers import (
 )
 from flocks.services import AddFlockService, UpdateFlockService
 from purchase.models import Purchase
+
+#MV-23-6-25- 17-10 new imports
 from flocks.utils import prepare_daily_data_response
 from dailydata.models import DailyData
-
+#MV-23-6-25- 17-10 change end
 
 class FlockView(viewsets.ViewSet):
     """
@@ -237,11 +239,17 @@ class FlockSummaryView(viewsets.ViewSet):
         try:
             validate_url_value(pk, "flockPublicId")
             flock = Flock.objects.get(public_id=pk)
+            # return get_detail(Add commentMore actions
+            #     "Flock Summary",
+            #     FlockSummarySerializer(flock).data,
+            #     status.HTTP_200_OK,
+            # )
+        # except Flock.DoesNotExist:Add commentMore actions
+        #     return Response({ERROR: FLOCK_DOES_NOT_EXIST}, status.HTTP_404_NOT_FOUND)
             
-            # Get base flock data
+#MV-23-6-25- 17-10 update response
             base_data = FlockSummarySerializer(flock).data
             
-            # Get latest daily data if exists
             latest_daily_data = DailyData.objects.filter(flock=flock).order_by('-date').first()
             
             if latest_daily_data:
@@ -270,3 +278,4 @@ class FlockSummaryView(viewsets.ViewSet):
                 "success": False,
                 "error": FLOCK_DOES_NOT_EXIST
             }, status=status.HTTP_404_NOT_FOUND)
+#MV-23-6-25- 17-10 change end

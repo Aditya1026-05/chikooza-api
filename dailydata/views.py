@@ -50,7 +50,11 @@ from flocks.serializers import GetDailyDataDetailSerializer
 from purchase.models import Purchase
 from sales.models import Sales
 from users.utils import render_to_pdf
+
+#MV-23-6-25- 17-10 import function prepare_daily_data_response
 from flocks.utils import prepare_daily_data_response
+#MV-23-6-25- 17-10 change end
+
 
 
 class DailyDataView(viewsets.ViewSet):
@@ -101,8 +105,13 @@ class DailyDataView(viewsets.ViewSet):
             if serializer.is_valid(raise_exception=True):
                 serializer_data = serializer.validated_data
                 flock_public_id = serializer_data["flock"].get("public_id")
+                #flock_date = Flock.objects.get(public_id=flock_public_id).hatch_date
+                
+#MV-23-6-25- 17-10 get flock and hatch date
                 flock = Flock.objects.get(public_id=flock_public_id)
                 flock_date = flock.hatch_date
+#MV-23-6-25- 17-10 change end
+
                 date = serializer_data["date"]
                 number_of_days = (date - flock_date).days
                 yesterday = date - datetime.timedelta(days=1)
@@ -112,9 +121,12 @@ class DailyDataView(viewsets.ViewSet):
                         flock__public_id=flock_public_id, date=yesterday
                     )
                     yesterday_daily_data_result = YesterdayDailyDataGetSerializer(yesterday_daily_data).data
-                    # Add calculated values
+                    
+#MV-23-6-25- 17-10 update with calculated values
                     yesterday_calculated = prepare_daily_data_response(yesterday_daily_data, flock)
                     yesterday_daily_data_result.update(yesterday_calculated)
+#MV-23-6-25- 17-10 change end
+
                 else:
                     yesterday_daily_data_result = {}
                     
@@ -123,9 +135,12 @@ class DailyDataView(viewsets.ViewSet):
                         flock__public_id=flock_public_id, date=date
                     )
                     result = DailyDataGetSerializer(dailydata).data
-                    # Add calculated values
+                    
+#MV-23-6-25- 17-10 update with calculated values
                     today_calculated = prepare_daily_data_response(dailydata, flock)
                     result.update(today_calculated)
+#MV-23-6-25- 17-10 change end
+
                 else:
                     result = {}
                 return get_detail(
@@ -272,6 +287,8 @@ class DailyDataDetailView(viewsets.ViewSet):
             daily_data = DailyData.objects.filter(
                 flock__public_id=request.GET.get("flock_public_id")
             )
+            
+#MV-23-6-25- 17-10 append new values to response
             result_data = []
 
             for entry in daily_data:
@@ -295,11 +312,18 @@ class DailyDataDetailView(viewsets.ViewSet):
                 })
                 
                 result_data.append(base_data)
+#MV-23-6-25- 17-10 change end
+
             return list_response(
                 "Daily Data List.",
                 daily_data.count(),
                 "daily_data_list",
+                # GetDailyDataDetailSerializer(daily_data, many=True).data,
+                
+#MV-23-6-25- 17-10 add to response
                 result_data,
+#MV-23-6-25- 17-10 change end
+
                 status.HTTP_200_OK,
             )
         except DailyData.DoesNotExist:
@@ -508,16 +532,16 @@ class DailyDataListView(viewsets.ViewSet):
             daily_data = DailyData.objects.filter(
             flock__public_id=request.GET.get("flock_public_id")
             )
+            
+#MV-23-6-25- 17-10 append new values to response
             result_data = []
 
             for entry in daily_data:
                 flock = entry.flock
                 enriched = prepare_daily_data_response(entry, flock)
                 
-                # Get the original serialized data
                 base_data = GetDailyDataListSerializer(entry).data
                 
-                # Update only the fields from enrichment that should overwrite/augment base
                 base_data.update({
                     "bird_count": enriched["bird_count"],
                     "total_feed_purchased": enriched["total_feed_purchased"],
@@ -533,13 +557,18 @@ class DailyDataListView(viewsets.ViewSet):
                 })
                 
                 result_data.append(base_data)
-
+#MV-23-6-25- 17-10 change end
             
             return list_response(
                 "Daily Data List.",
                 daily_data.count(),
                 "daily_data_list",
+                # GetDailyDataListSerializer(daily_data, many=True).data,
+
+#MV-23-6-25- 17-10 change add to response
                 result_data,
+#MV-23-6-25- 17-10 change end
+
                 status.HTTP_200_OK,
             )
         except DailyData.DoesNotExist:
@@ -596,6 +625,9 @@ class PDFView(viewsets.ViewSet):
     @classmethod
     def list(cls, request):
         template_name = "dailydata.html"
+
+#MV-23-6-25- 17-10 append to response
+        # records = DailyData.objects.filter(flock__public_id=request.GET.get("flock_public_id"))
         daily_data = DailyData.objects.filter(
                 flock__public_id=request.GET.get("flock_public_id")
             )
@@ -606,10 +638,8 @@ class PDFView(viewsets.ViewSet):
             flock = entry.flock
             enriched = prepare_daily_data_response(entry, flock)
                 
-            # Get the original serialized data
             base_data = GetDailyDataListSerializer(entry).data
                 
-            # Update only the fields from enrichment that should overwrite/augment base
             base_data.update({
                 "bird_count": enriched["bird_count"],
                 "total_feed_purchased": enriched["total_feed_purchased"],
@@ -625,10 +655,14 @@ class PDFView(viewsets.ViewSet):
             })
                 
             result_data.append(base_data)
+#MV-23-6-25- 17-10 change end
 
         return render_to_pdf(
             template_name,
             {
+                # "record": records,
+#MV-23-6-25- 17-10 new var
                 "record": result_data,
+#MV-23-6-25- 17-10 change end
             },
         )

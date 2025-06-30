@@ -8,7 +8,7 @@ from xhtml2pdf import pisa
 from common.base_models import Otp, PublicId, Users
 from common.constant import ERROR, INVALID_OTP
 from common.utils import create_token, get_detail, mobile_number_validation
-
+from chikooza.settings import HOSTNAME
 
 def verify_otp(mobile_number, otp):
     if Otp.objects.filter(mobile_number=mobile_number, otp=otp).exists():
@@ -36,6 +36,7 @@ def create_user(data, sign_up=None):
         authorization_grant_type="password",
         client_type="confidential",
         name="user",
+        redirect_uris = HOSTNAME
     )
     data["status_code"] = 201
     token = create_token(

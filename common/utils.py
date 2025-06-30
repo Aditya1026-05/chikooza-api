@@ -91,20 +91,17 @@ def create_token(user, password, client_id, client_secret):
         "password": password,
         "grant_type": "password",
         "client_id": client_id,
-        "client_secret":"abc123",
-        # "client_secret":client_secret,
-    }
-    headers = {
-    "Content-Type": "application/x-www-form-urlencoded",
-    "Accept": "application/json"
-    }
+        
+#MV-16-6-25- 17-10 comment hardcoded 
+        # "client_secret":"abc123",
+        "client_secret": client_secret
+#MV-16-6-25- 17-10 change end
 
-    token = requests.post(
-        f"{HOSTNAME}o/token/",
-        data=data,
-        headers=headers
-    )
-
+    }
+#MV-16-6-25- 17-10 added headers
+    headers = {'Content-type': 'application/x-www-form-urlencoded'}
+    token = requests.post(HOSTNAME + "o/token/", data=data , headers=headers)
+#MV-16-6-25- 17-10 comment hardcoded 
     logger.info("Successfully get access_token, expires_in and token_type.")
     return {
         "access_token": token.json().get("access_token"),

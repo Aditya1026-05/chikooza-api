@@ -192,7 +192,11 @@ class FlockSummarySerializer(serializers.Serializer):
     chick_breed_public_id = serializers.IntegerField(
         source="breed.public_id", allow_null=True
     )
+
+#MV-23-6-25- 17-10 add field
     sales_data = serializers.SerializerMethodField()
+#MV-23-6-25- 17-10 change end
+
     hatchery_name = serializers.CharField(max_length=555)
     farm_public_id = serializers.IntegerField(source="farm.public_id")
     farm_name = serializers.CharField(source="farm.name", max_length=255)
@@ -216,8 +220,12 @@ class FlockSummarySerializer(serializers.Serializer):
     chick_cost_per_kg = serializers.SerializerMethodField()
     vaccine = serializers.SerializerMethodField()
     medicine = serializers.SerializerMethodField()
+    
+#MV-23-6-25- 17-10 added fields
     labour = serializers.SerializerMethodField()
     equipment = serializers.SerializerMethodField()
+#MV-23-6-25- 17-10 change end
+
     other = serializers.SerializerMethodField()
     total_cost = serializers.SerializerMethodField()
     status = serializers.SerializerMethodField()
@@ -243,7 +251,12 @@ class FlockSummarySerializer(serializers.Serializer):
             "total_feed_cost", "feed_cost_per_kg", "chick_cost_per_kg", "vaccine",
             "medicine", "total_cost", "sales_total_weight",
             "other", "status", "birds_count", "sales_amount", "sales_average_weight", "sales_rate_per_kg",
-            "profit_loss","labour","equipment","sales_data",
+            "profit_loss",
+            
+#MV-23-6-25- 17-10 added new
+            "labour","equipment","sales_data",
+#MV-23-6-25- 17-10 change end
+
             "penalties", "incentives", "other_taxes", "current_bird_count"
         ]
 
@@ -275,6 +288,9 @@ class FlockSummarySerializer(serializers.Serializer):
 
     def get_current_bird_count(self, obj):
         daily_data = DailyData.objects.filter(flock=obj).last()
+        # return daily_data.current_bird_count
+        
+#MV-23-6-25- 17-10 new get_current_bird_count logic
         lifting_count = 0
         if Sales.objects.filter(flock=daily_data.flock, date__gt=daily_data.date).exists():
             sales = Sales.objects.filter(flock=daily_data.flock, date__gt=daily_data.date)
@@ -284,6 +300,7 @@ class FlockSummarySerializer(serializers.Serializer):
         else:
             current_bird_count = daily_data.current_bird_count
         return current_bird_count
+#MV-23-6-25- 17-10 change end
 
     def get_other(self, obj):
         cost = 0
@@ -291,26 +308,35 @@ class FlockSummarySerializer(serializers.Serializer):
         for purchase in purchases:
             cost += purchase.cost
         return cost
+    
+#MV-23-6-25- 17-10 function def for labor & equip
     def get_labour(self, obj):
         cost = 0
         purchases = Purchase.objects.filter(flock=obj, type='Labour')
         for purchase in purchases:
             cost += purchase.cost
         return cost
+    
     def get_equipment(self, obj):
         cost = 0
         purchases = Purchase.objects.filter(flock=obj, type='Equipment')
         for purchase in purchases:
             cost += purchase.cost
         return cost
+#MV-23-6-25- 17-10 change end
+
 
     def get_total_cost(self, obj):
         vaccine_cost = 0
         other_cost = 0
         med_cost = 0
+        
+#MV-23-6-25- 17-10 added var
         equip_cost = 0
         lab_cost = 0
         feed_cost = 0
+#MV-23-6-25- 17-10 change end
+
         purchases = Purchase.objects.filter(flock=obj, type='Vaccination')
         for purchase in purchases:
             vaccine_cost += purchase.cost
@@ -320,6 +346,8 @@ class FlockSummarySerializer(serializers.Serializer):
         purchases = Purchase.objects.filter(flock=obj, type='Medicine')
         for purchase in purchases:
             med_cost += purchase.cost
+            
+#MV-23-6-25- 17-10 costs for 3
         purchases = Purchase.objects.filter(flock=obj, type='Equipment')
         for purchase in purchases:
             equip_cost += purchase.cost
@@ -329,10 +357,21 @@ class FlockSummarySerializer(serializers.Serializer):
         purchases = Purchase.objects.filter(flock=obj, type='Feed')
         for purchase in purchases:
             feed_cost += purchase.cost
+#MV-23-6-25- 17-10 change end
+
+        # if obj.chick_cost is not None:
+        #     return med_cost + other_cost + vaccine_cost 
+        # else:
+        #     return med_cost + other_cost + vaccine_cost
+
+#MV-23-6-25- 17-10 modified values returned        
         if obj.chick_cost is not None:
             return med_cost + other_cost + vaccine_cost + obj.chick_cost + equip_cost + lab_cost + feed_cost
         else:
             return med_cost + other_cost + vaccine_cost + equip_cost + lab_cost + feed_cost
+#MV-23-6-25- 17-10 change end
+
+        
 
     def get_chick_cost_per_kg(self, obj):
         if obj.chick_cost is not None:
@@ -393,12 +432,21 @@ class FlockSummarySerializer(serializers.Serializer):
         daily_data = DailyData.objects.filter(flock=obj).last()
         return daily_data.feed_stock
 
+    # def get_status(self, obj):
+    #     if Sales.objects.filter(flock=obj, sales_type='final_lifting').exists():
+    #         status = 'sold'
+    #     else:
+    #         status = 'current'
+    #     return status
+
+#MV-23-6-25- 17-10 change get_status logic
     def get_status(self, obj):
         if Sales.objects.filter(flock=obj, sales_type='final_lifting').exists():
             status = 'sold'
         else:
             status = 'current'
         return status
+#MV-23-6-25- 17-10 change end
 
     def get_birds_count(self, obj):
         lifting_count = 0
@@ -468,11 +516,40 @@ class FlockSummarySerializer(serializers.Serializer):
             other_taxes = sale.less_amct + sale.less_tds + sale.other_taxes
         return other_taxes
 
+    # def get_profit_loss(self, obj):Add commentMore actions
+    #     vaccine_cost = 0
+    #     other_cost = 0
+    #     med_cost = 0
+    #     purchases = Purchase.objects.filter(flock=obj, type='Vaccination')
+    #     for purchase in purchases:
+    #         vaccine_cost += purchase.cost
+    #     purchases = Purchase.objects.filter(flock=obj, type='Other')
+    #     for purchase in purchases:
+    #         other_cost += purchase.cost
+    #     purchases = Purchase.objects.filter(flock=obj, type='Medicine')
+    #     for purchase in purchases:
+    #         med_cost += purchase.cost
+    #     if obj.chick_cost is not None:
+    #         total_cost = med_cost + other_cost + vaccine_cost + obj.chick_cost
+    #     else:
+    #         total_cost = med_cost + other_cost + vaccine_cost
+
+    #     sales_amount = 0
+    #     sales = Sales.objects.filter(flock=obj)
+    #     for sale in sales:
+    #         sales_amount += sale.cost
+    #     total_cost = self.get_total_cost(obj)
+    #     sales_amount = self.get_sales_amount(obj)
+    #     return sales_amount - total_cost
+    
+#MV-23-6-25- 17-10 change get_profit_loss function
     def get_profit_loss(self, obj):
         total_cost = self.get_total_cost(obj)
         sales_amount = self.get_sales_amount(obj)
         return sales_amount - total_cost
+#MV-23-6-25- 17-10 change end
 
+#MV-23-6-25- 17-10 new function definition
     def get_sales_data(self, obj):
             sales = Sales.objects.filter(flock=obj).order_by('date')
             return [
@@ -485,3 +562,4 @@ class FlockSummarySerializer(serializers.Serializer):
                 }
                 for sale in sales
             ]
+#MV-23-6-25- 17-10 change end

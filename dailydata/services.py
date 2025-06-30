@@ -6,7 +6,11 @@ from common.base_models import PublicId
 from common.utils import validation_return_response
 from dailydata.models import DailyData, FlockVaccination, Vaccines, DarknessTime, FeedAvailability
 from flocks.models import Flock
+
+#MV-23-6-25- 17-10 import flocks/utils.py/generate_remarks
 from flocks.utils import generate_remarks  
+#MV-23-6-25- 17-10 change end
+
 from purchase.models import Purchase
 from sales.models import Sales
 
@@ -53,7 +57,11 @@ class CreateDailyDataService(services.Service):
 
             avg_feed = 0
             res_fcr = 0
+        #feed_stock = quantity - data.get("feed_intake")
+#MV-23-6-25- 17-10 changed feed stock calcuation formula
         feed_stock = quantity-total_feed
+#MV-23-6-25- 17-10 change end
+
         if Sales.objects.filter(flock=flock).exists():
             sale = Sales.objects.filter(flock=flock).last()
             sales_date = sale.date
@@ -71,9 +79,11 @@ class CreateDailyDataService(services.Service):
         else:
             average_feed = (data.get("feed_intake") * 1000) / real_current_bird_count
         total_average_feed = avg_feed + average_feed
-        # Calculate cumulative mortality: total dead birds / initial bird count
+        
         total_dead_birds = flock.actual_birds - actual_bird_count
         total_mortality = (total_dead_birds * 100) / flock.actual_birds
+
+        
         fcr = (
             total_average_feed / (average_bird_weight - flock.chick_weight)
             if (average_bird_weight - flock.chick_weight) > 0
@@ -97,8 +107,17 @@ class CreateDailyDataService(services.Service):
         if data.get("mortality") > current_bird_count:
             return validation_return_response("mortality", "Mortality cannot be greater than bird count")
 
-        # Generate remarks using the consolidated function
+        # sales_date = Sales.objects.filter(flock=flock).dateAdd commentMore actions
+            # if datetime.datetime.today() > sales_date:
+            #     final_current_bird_count = flock.actual_birds - data.get("mortality")
+            # else:
+            #     final_current_bird_count = real_current_bird_count
+            # final_current_bird_count = final_current_bird_count
+        
+#MV-23-6-25- 17-10 empty remarks
         remarks = []
+#MV-23-6-25- 17-10 change ended
+
 
         daily_data = DailyData.objects.create(
             public_id=PublicId.create_public_id(),
@@ -123,10 +142,13 @@ class CreateDailyDataService(services.Service):
             status=True,
             darkness_time=darkness_time,
             feed_availability=feed_availability,
+            
+#MV-23-6-25- 17-10 added remarks
             remarks=remarks,
+#MV-23-6-25- 17-10 change end
+
         )
         
-        # Create flock vaccinations separately - no vaccine names in remarks here
         if flock_vaccinations:
             for i in range(len(flock_vaccinations['vaccine_public_id'])):
                 FlockVaccination.objects.create(
@@ -184,9 +206,11 @@ class UpdateDailyDataService(services.Service):
         else:
             avg_feed = round((feed_intake * 1000) / real_current_bird_count, 2)
         total_average_feed = avg_feed + average_feed
-        # Calculate cumulative mortality: total dead birds / initial bird count
+        
         total_dead_birds = flock.actual_birds - real_current_bird_count
         total_mortality = (total_dead_birds * 100) / flock.actual_birds
+
+        
         fcr = (
             total_average_feed / (average_bird_weight - flock.chick_weight)
             if (average_bird_weight - flock.chick_weight)
@@ -227,8 +251,10 @@ class UpdateDailyDataService(services.Service):
         if data.get("mortality") > current_bird_count:
             return validation_return_response("mortality", "Mortality cannot be greater than bird count")
         
-        # Generate remarks using the consolidated function
+#MV-23-6-25- 17-10 empty remarks
         remarks = []
+#MV-23-6-25- 17-10 change end
+
         
         daily_data.mortality = mortality
         daily_data.feed_intake = feed_intake
@@ -247,9 +273,12 @@ class UpdateDailyDataService(services.Service):
         daily_data.feed_stock = feed_stock
         daily_data.darkness_time = darkness_time_final
         daily_data.feed_availability = feed_availability_final
-        daily_data.remarks = remarks
         
-        # Handle flock vaccinations separately - no vaccine names in remarks here
+#MV-23-6-25- 17-10 added remarks
+        daily_data.remarks = remarks
+#MV-23-6-25- 17-10 change end
+
+        
         if flock_vaccinations:
             for i in range(len(flock_vaccinations['flock_vaccination_public_id'])):
                 if flock_vaccinations['flock_vaccination_public_id'][i] == 0:
@@ -276,9 +305,10 @@ class UpdateDailyDataService(services.Service):
             yes_daily_data = DailyData.objects.get(date=yes, flock=flock)
             if data.get('mortality'):
                 dailydata.current_bird_count = yes_daily_data.current_bird_count - dailydata.mortality
-                # Calculate cumulative mortality: total dead birds / initial bird count
+                
                 total_dead_birds = flock.actual_birds - dailydata.current_bird_count
                 dailydata.total_mort = round((total_dead_birds * 100) / flock.actual_birds, 2)
+
                 dailydata.save()
             if data.get('feed_intake'):
                 dailydata.feed_stock = yes_daily_data.feed_stock - dailydata.feed_intake
