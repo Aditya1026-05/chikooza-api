@@ -42,3 +42,11 @@ psycopg2-binary==2.8.6
 isort==5.10.1
 flake8==4.0.1
 black==22.6.0
+
+#MV-2025-07-04-<1>  STARTS
+langchain-community
+langchain
+ollama
+sentence-transformers
+better-profanity
+#MV-2025-07-04-<1>  ENDS

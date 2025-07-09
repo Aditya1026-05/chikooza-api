@@ -77,6 +77,11 @@ INSTALLED_APPS = [
     "dailydata",
     "sales",
     'django_extensions',
+    
+#MV-2025-07-04-<8>  STARTS
+    "chatbot",
+#MV-2025-07-04-<8>  ENDS
+
 ]
 HOSTNAME = parse_env_list('API_BASE_URL')
 
@@ -92,6 +97,9 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "common.middleware.PageNotFoundMiddleware",
     "common.middleware.AuthenticationErrorMessage",
+#MV-2025-07-04-<10>  STARTS
+    'chatbot.middleware.LoggingMiddleware',
+#MV-2025-07-04-<10>  ENDS
     
 #MV-16-6-25- 17-10 added oauth2 middleware 
     'oauth2_provider.middleware.OAuth2TokenMiddleware',
