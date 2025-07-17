@@ -3,6 +3,7 @@
 .env.local
 .env.prod
 .env.dev
+/venv/
 
 # SSL certificates
 *.crt
@@ -15,6 +16,7 @@
 *.sqlite3
 *.db
 /db1.sqlite3
+/db.sqbpro
 
 # Django
 __pycache__/
@@ -27,3 +29,12 @@ __pycache__/
 # Media and static
 /media/
 /staticfiles/
+/data/
+
+#Logs
+/chatbot_logs/
+/aibot_logs/
+
+# local_settings
+local_settings.py
+*/local_settings.py

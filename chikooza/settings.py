@@ -12,19 +12,6 @@ https://docs.djangoproject.com/en/4.0/ref/settings/
 import os
 from pathlib import Path
 
-# MV-30-6-25- 11-56 access from .env
-from dotenv import load_dotenv
-load_dotenv()
-# MV-30-6-25- 11-56 change end
-
-# MV-30-6-25- 12-35 helper function to parse comma-separated env vars
-def parse_env_list(env_var, default=None):
-    value = os.getenv(env_var)
-    if value is None:
-        return default if default is not None else []
-    return [item.strip() for item in value.split(',') if item.strip()]
-# MV-30-6-25- 12-35 change end
-
 import django_heroku
 from corsheaders.defaults import default_headers
 
@@ -34,33 +21,20 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/4.0/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-
-# MV-30-6-25- 11-56 secret removed
-SECRET_KEY = parse_env_list('SECRET_KEY') 
-# MV-30-6-25- 11-56 change end
+SECRET_KEY = "django-insecure-r59bgclxkscsn72w79bl%(0yp0+wg*65*00yrk8d^1%=*#7!os"
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = (True,)
 CORS_ORIGIN_ALLOW_ALL = True
-
-#MV-27-6-25- 17-12 updated allowed hosts only for local setup
-ALLOWED_HOSTS = parse_env_list('ALLOWED_HOSTS') 
-#MV-27-6-25- 17-12 change end
-
-#MV-27-6-25- 17-11 added allowed origins
-CORS_ALLOWED_ORIGINS = parse_env_list('CORS_ALLOWED_ORIGINS')
-#MV-27-6-25- 17-11 change end
-
 CORS_ALLOW_HEADERS = default_headers + ("Access-Control-Allow-Origin",)
 DEBUG = True
 CORS_ALLOW_CREDENTIALS = True
 APPEND_SLASH = False
 USE_TZ = False
-
+ALLOWED_HOSTS = ["*", "https://chikooza-app.herokuapp.com/"]
 
 # Application definition
 INSTALLED_APPS = [
-    "corsheaders",
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -70,24 +44,20 @@ INSTALLED_APPS = [
     "users",
     "rest_framework",
     "oauth2_provider",
+    "corsheaders",
     "common",
     "farm",
     "flocks",
     "purchase",
     "dailydata",
     "sales",
-    'django_extensions',
-    
-#MV-2025-07-04-<8>  STARTS
-    "chatbot",
-#MV-2025-07-04-<8>  ENDS
-
+#MV-2025-07-17-<1>  STARTS
+    "chatbot"
+#MV-2025-07-17-<1>  ENDS
 ]
-HOSTNAME = parse_env_list('API_BASE_URL')
-
+HOSTNAME = "http://127.0.0.1:8001/"
 
 MIDDLEWARE = [
-    "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -95,24 +65,14 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "corsheaders.middleware.CorsMiddleware",
     "common.middleware.PageNotFoundMiddleware",
     "common.middleware.AuthenticationErrorMessage",
-#MV-2025-07-04-<10>  STARTS
-    'chatbot.middleware.LoggingMiddleware',
-#MV-2025-07-04-<10>  ENDS
-    
-#MV-16-6-25- 17-10 added oauth2 middleware 
-    'oauth2_provider.middleware.OAuth2TokenMiddleware',
-#MV-16-6-25- 17-10 added trusted origins 
-
+#MV-2025-07-17-<2>  STARTS
+    "chatbot.middleware.LoggingMiddleware"
+#MV-2025-07-17-<2>  ENDS
 ]
-
-CORS_ALLOW_CREDENTIALS = True
-
-#MV-27-6-25- 17-10 added trusted origins 
-CSRF_TRUSTED_ORIGINS = parse_env_list('CSRF_TRUSTED_ORIGINS') 
-#MV-27-6-25- 17-10 change end
-
+CORS_ORIGIN_ALLOW_ALL = True
 ROOT_URLCONF = "chikooza.urls"
 
 TEMPLATES = [
@@ -184,7 +144,6 @@ OAUTH2_PROVIDER = {
         "update": "update scope",
         "delete": "delete scope",
         "groups": "Access to your groups",
-        "write": "Write scope",
     },
     "ACCESS_TOKEN_EXPIRE_SECONDS": 31556952,
     "ACCESS_TOKEN_GENERATOR": "common.token_generator.generate_token",
