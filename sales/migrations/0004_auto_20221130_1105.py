@@ -10,29 +10,29 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RenameField(
-            model_name='sales',
-            old_name='chicks_rate',
-            new_name='feed_total',
-        ),
-        migrations.RemoveField(
-            model_name='sales',
-            name='chicks_quantity',
-        ),
-        migrations.RemoveField(
-            model_name='sales',
-            name='feed_quantity',
-        ),
-        migrations.RemoveField(
-            model_name='sales',
-            name='feed_rate',
-        ),
-        migrations.RemoveField(
-            model_name='sales',
-            name='med_name',
-        ),
-        migrations.RemoveField(
-            model_name='sales',
-            name='vacc_name',
-        ),
+        # migrations.RenameField(
+        #     model_name='sales',
+        #     old_name='chicks_rate',
+        #     new_name='feed_total',
+        # ),
+        # migrations.RemoveField(
+        #     model_name='sales',
+        #     name='chicks_quantity',
+        # ),
+        # migrations.RemoveField(
+        #     model_name='sales',
+        #     name='feed_quantity',
+        # ),
+        # migrations.RemoveField(
+        #     model_name='sales',
+        #     name='feed_rate',
+        # ),
+        # migrations.RemoveField(
+        #     model_name='sales',
+        #     name='med_name',
+        # ),
+        # migrations.RemoveField(
+        #     model_name='sales',
+        #     name='vacc_name',
+        # ),
     ]

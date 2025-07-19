@@ -44,4 +44,4 @@ class ChatLogHandler:
             
         with open(log_file, 'r') as f:
             return [json.loads(line) for line in f.readlines()]
-#MV-2025-07-04-<8>  STARTS
+#MV-2025-07-04-<8>  ENDS

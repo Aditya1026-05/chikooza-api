@@ -16,7 +16,6 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 
 class RAGService:
     def __init__(self):
-        # Define paths relative to Django project
         self.index_dir = os.path.join(settings.BASE_DIR, 'data')
         self.index_path = os.path.join(self.index_dir, 'index')
         self.qa_chain = None
