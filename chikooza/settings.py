@@ -52,8 +52,9 @@ INSTALLED_APPS = [
     "dailydata",
     "sales",
 #MV-2025-07-17-<1>  STARTS
-    "chatbot"
+    "chatbot",
 #MV-2025-07-17-<1>  ENDS
+    "aibot"
 ]
 HOSTNAME = "http://127.0.0.1:8001/"
 
