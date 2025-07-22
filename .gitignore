@@ -36,5 +36,8 @@ __pycache__/
 /aibot_logs/
 
 # local_settings
-local_settings.py
 */local_settings.py
+settings.py/
+/settings.py/
+
+local_settings.py
