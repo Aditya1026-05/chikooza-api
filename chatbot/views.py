@@ -49,7 +49,7 @@ def chat_api(request):
             'context': serializable_context,
             'prompt_type': prompt_type,
             'processing_time': processing_time,
-            'model': 'gemma3:1b'
+            'model': 'llama3.2:3b'
         }
         
         return JsonResponse({
