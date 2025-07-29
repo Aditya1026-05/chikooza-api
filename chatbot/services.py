@@ -18,7 +18,7 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 
 class RAGService:
     def __init__(self):
-        self.index_dir = os.path.join(settings.BASE_DIR, 'data')
+        self.index_dir = os.path.join(settings.BASE_DIR, 'chatbot', 'data')
         self.index_path = os.path.join(self.index_dir, 'index')
         self.qa_chain = None
         self._load_components()
@@ -118,5 +118,6 @@ class RAGService:
         # 4. Save the updated index
         self.vector_store.save_local(self.index_dir, index_name="index")
         print(f"[✅] Added {len(split_docs)} new chunks to FAISS index.")
+
     
 #MV-2025-07-04-<5>  ENDS
