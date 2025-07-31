@@ -93,8 +93,8 @@ def create_token(user, password, client_id, client_secret):
         "client_id": client_id,
         
 #MV-16-6-25- 17-10 comment hardcoded 
-        # "client_secret":"abc123",
-        "client_secret": client_secret
+         "client_secret":"abc123",
+       # "client_secret": client_secret
 #MV-16-6-25- 17-10 change end
 
     }
