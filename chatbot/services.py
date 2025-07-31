@@ -42,7 +42,7 @@ class RAGService:
     
         self.qa_chain = RetrievalQA.from_chain_type(
             llm=OllamaLLM(
-                model="llama3.2:3b",
+                model="gemma3:1b",
                 base_url=f"{ollama_base_url}",  
             ), 
             chain_type="stuff",

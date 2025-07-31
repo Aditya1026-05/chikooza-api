@@ -153,6 +153,6 @@ OAUTH2_PROVIDER = {
 django_heroku.settings(locals())
 
 try:
-    from .local_settings import *  # noqa
+    from .local_settings import *
 except ImportError:
     pass
