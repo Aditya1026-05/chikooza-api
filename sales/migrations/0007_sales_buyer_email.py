@@ -10,9 +10,11 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.AddField(
-            model_name='sales',
-            name='buyer_email',
-            field=models.EmailField(max_length=254, null=True),
-        ),
+        # No-op for fresh setup: buyer_email is already present in 0001_initial.
+        # OLD:
+        # migrations.AddField(
+        #     model_name='sales',
+        #     name='buyer_email',
+        #     field=models.EmailField(max_length=254, null=True),
+        # ),
     ]

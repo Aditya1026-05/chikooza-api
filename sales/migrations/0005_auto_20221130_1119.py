@@ -10,14 +10,16 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.AlterField(
-            model_name='sales',
-            name='med_price',
-            field=models.FloatField(default=0),
-        ),
-        migrations.AlterField(
-            model_name='sales',
-            name='vacc_price',
-            field=models.FloatField(default=0),
-        ),
+        # No-op for fresh setup: 0001_initial already defines these as FloatField.
+        # OLD:
+        # migrations.AlterField(
+        #     model_name='sales',
+        #     name='med_price',
+        #     field=models.FloatField(default=0),
+        # ),
+        # migrations.AlterField(
+        #     model_name='sales',
+        #     name='vacc_price',
+        #     field=models.FloatField(default=0),
+        # ),
     ]

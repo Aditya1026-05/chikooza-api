@@ -1,5 +1,6 @@
 #MV-2025-07-04-<5>  STARTS
 import time
+import re
 from langchain_community.vectorstores import FAISS
 from langchain.chains import RetrievalQA
 from langchain_community.llms import Ollama
@@ -21,6 +22,8 @@ class RAGService:
         self.index_dir = os.path.join(settings.BASE_DIR, 'data')
         self.index_path = os.path.join(self.index_dir, 'index')
         self.qa_chain = None
+        self.ollama_base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+        self.ollama_model = os.getenv("OLLAMA_MODEL", "llama3.2:3b")
         self._load_components()
 
     
@@ -37,13 +40,13 @@ class RAGService:
             allow_dangerous_deserialization=True
         )
         #AS-2025-07-21-<1>  STARTS
-        # Read the Ollama URL from the environment, with a fallback default
-        ollama_base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-    
+        # OLD: ollama_base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+        # NEW: read Ollama URL/model once during service setup so local setup can override both values.
         self.qa_chain = RetrievalQA.from_chain_type(
             llm=OllamaLLM(
-                model="llama3.2:3b",
-                base_url=f"{ollama_base_url}",  
+                # OLD: model="llama3.2:3b",
+                model=self.ollama_model,
+                base_url=f"{self.ollama_base_url}",  
             ), 
             chain_type="stuff",
             retriever=self.vector_store.as_retriever(search_kwargs={"k": 3}),
@@ -91,7 +94,42 @@ class RAGService:
             
         except Exception as e:
             print(f"Error during query: {e}")
-            return None
+            # OLD: return None
+            # NEW: keep /chat/ usable for local MVP testing when Ollama is not installed/running.
+            return self._retrieval_only_fallback(query_text, e)
+
+    def _retrieval_only_fallback(self, query_text, error):
+        """
+        Return retrieved context when the local Ollama LLM is unavailable.
+        This is not a replacement for the real RAG answer; it prevents a 500 and
+        tells the tester exactly which local model dependency is missing.
+        """
+        try:
+            docs = self.vector_store.similarity_search(query_text, k=3)
+        except Exception as retrieval_error:
+            return {
+                "result": (
+                    "The chatbot could not answer because the local RAG components "
+                    f"failed to retrieve context. Details: {retrieval_error}"
+                ),
+                "context": []
+            }
+
+        snippets = []
+        for index, doc in enumerate(docs, start=1):
+            text = re.sub(r"\s+", " ", doc.page_content).strip()
+            snippets.append(f"{index}. {text[:500]}")
+
+        return {
+            "result": (
+                "The local chatbot LLM is not running, so this is a retrieval-only "
+                f"fallback instead of a generated answer. Start Ollama at {self.ollama_base_url} "
+                f"and pull/run model `{self.ollama_model}` for full chatbot answers.\n\n"
+                "Relevant retrieved context:\n" + "\n\n".join(snippets)
+            ),
+            "context": docs
+        }
+
     def add_files_to_index(self, file_paths):
         """
         Incrementally add new files to the FAISS vector store.

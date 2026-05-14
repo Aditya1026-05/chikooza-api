@@ -56,7 +56,12 @@ INSTALLED_APPS = [
 #MV-2025-07-17-<1>  ENDS
     "aibot"
 ]
-HOSTNAME = "http://127.0.0.1:8001/"
+# OLD: HOSTNAME = "http://127.0.0.1:8001/"
+# NEW: Keep OAuth/token callback URLs configurable for local setup and deployment.
+# The previous hardcoded port broke login/signup whenever the API ran anywhere except 8001.
+HOSTNAME = os.environ.get("CHIKOOZA_API_BASE_URL", "http://127.0.0.1:8002/")
+if not HOSTNAME.endswith("/"):
+    HOSTNAME = f"{HOSTNAME}/"
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",

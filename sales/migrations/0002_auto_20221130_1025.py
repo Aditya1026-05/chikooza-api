@@ -10,29 +10,32 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.AddField(
-            model_name='sales',
-            name='admin_charges',
-            field=models.FloatField(default=0),
-        ),
-        migrations.AddField(
-            model_name='sales',
-            name='med_name',
-            field=models.CharField(max_length=255, null=True),
-        ),
-        migrations.AddField(
-            model_name='sales',
-            name='med_price',
-            field=models.CharField(max_length=255, null=True),
-        ),
-        migrations.AddField(
-            model_name='sales',
-            name='vacc_name',
-            field=models.CharField(max_length=255, null=True),
-        ),
-        migrations.AddField(
-            model_name='sales',
-            name='vacc_price',
-            field=models.CharField(max_length=255, null=True),
-        ),
+        # No-op for fresh setup: these fields are already present in 0001_initial.
+        # The original AddField operations caused duplicate-column errors on SQLite.
+        # OLD:
+        # migrations.AddField(
+        #     model_name='sales',
+        #     name='admin_charges',
+        #     field=models.FloatField(default=0),
+        # ),
+        # migrations.AddField(
+        #     model_name='sales',
+        #     name='med_name',
+        #     field=models.CharField(max_length=255, null=True),
+        # ),
+        # migrations.AddField(
+        #     model_name='sales',
+        #     name='med_price',
+        #     field=models.CharField(max_length=255, null=True),
+        # ),
+        # migrations.AddField(
+        #     model_name='sales',
+        #     name='vacc_name',
+        #     field=models.CharField(max_length=255, null=True),
+        # ),
+        # migrations.AddField(
+        #     model_name='sales',
+        #     name='vacc_price',
+        #     field=models.CharField(max_length=255, null=True),
+        # ),
     ]

@@ -10,12 +10,14 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RemoveField(
-            model_name='sales',
-            name='med_name',
-        ),
-        migrations.RemoveField(
-            model_name='sales',
-            name='vacc_name',
-        ),
+        # No-op for fresh setup: med_name and vacc_name are not present in 0001_initial.
+        # OLD:
+        # migrations.RemoveField(
+        #     model_name='sales',
+        #     name='med_name',
+        # ),
+        # migrations.RemoveField(
+        #     model_name='sales',
+        #     name='vacc_name',
+        # ),
     ]

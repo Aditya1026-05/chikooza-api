@@ -10,9 +10,11 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.AddField(
-            model_name='sales',
-            name='integration_cost',
-            field=models.FloatField(default=0),
-        ),
+        # No-op for fresh setup: integration_cost is already present in 0001_initial.
+        # OLD:
+        # migrations.AddField(
+        #     model_name='sales',
+        #     name='integration_cost',
+        #     field=models.FloatField(default=0),
+        # ),
     ]

@@ -8,8 +8,19 @@ import json
 import time
 import uuid
 
-rag_service = RAGService()
+# OLD: rag_service = RAGService()
+# NEW: lazy-load RAG only when /chat/ is called, so chatbot setup does not block API startup.
+rag_service = None
 preprocessor = QueryPreprocessor()
+
+
+def get_rag_service():
+    global rag_service
+    if rag_service is None:
+        rag_service = RAGService()
+    return rag_service
+
+
 @csrf_exempt
 def chat_api(request):
     if request.method != 'POST':
@@ -23,7 +34,9 @@ def chat_api(request):
         clean_query = preprocessor.preprocess(query_text)
         
         start_time = time.time()
-        result = rag_service.query(clean_query, prompt_type)
+        # OLD: result = rag_service.query(clean_query, prompt_type)
+        # NEW: use lazy-loaded service so missing local LLM/model setup affects only /chat/.
+        result = get_rag_service().query(clean_query, prompt_type)
         processing_time = time.time() - start_time
         
         if not result:

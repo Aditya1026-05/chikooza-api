@@ -19,18 +19,30 @@ django-log-request-id==1.6.0
 django-oauth-toolkit==1.7.0
 django-service-objects==0.7.0
 django-sms==0.5.0
-djangorestframework==3.11.0
+# OLD: djangorestframework==3.11.0
+# NEW: Django 4.1 removed django.conf.urls.url, so DRF must be Django-4-compatible.
+djangorestframework==3.14.0
 gunicorn==20.1.0
-h11==0.12.0
+# OLD: h11==0.12.0
+# NEW: httpx 0.28 uses httpcore 1.x, which requires h11 0.16+.
+h11==0.16.0
 heroku==0.1.4
-httpcore
+# OLD: httpcore
+# NEW: Pin httpcore so fresh installs resolve consistently with httpx 0.28.
+httpcore==1.0.9
 httpx==0.28.1
 idna==3.3
 kombu==5.2.4
 oauthlib==3.2.0
 onesignal-sdk==2.0.0
 pdfkit==1.0.0
-Pillow==9.1.1
+# OLD: missing xhtml2pdf dependency even though users/utils.py imports it.
+# NEW: Add a compatible xhtml2pdf/reportlab pair for PDF generation imports.
+xhtml2pdf==0.2.11
+reportlab==3.6.13
+# OLD: Pillow==9.1.1
+# NEW: Pillow 10.4 has Python 3.11 macOS wheels and avoids local JPEG header builds.
+Pillow==10.4.0
 prompt-toolkit==3.0.29
 python-dateutil==1.5
 pytz==2022.1
@@ -44,9 +56,14 @@ flake8==4.0.1
 black==22.6.0
 
 #MV-2025-07-04-<1>  STARTS
-langchain-community
-langchain
-ollama
-sentence-transformers
-better-profanity
+# OLD: AI packages below were mostly unpinned, which allowed incompatible LangChain 1.x packages.
+# NEW: Pin compatible LangChain 0.3.x integration packages plus FAISS used by chatbot/services.py.
+langchain-community==0.3.27
+langchain==0.3.30
+langchain-huggingface==0.3.1
+langchain-ollama==0.3.10
+faiss-cpu==1.13.2
+ollama==0.6.2
+sentence-transformers==5.5.0
+better-profanity==0.7.0
 #MV-2025-07-04-<1>  ENDS

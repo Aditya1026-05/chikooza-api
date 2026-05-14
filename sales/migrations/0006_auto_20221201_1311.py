@@ -10,14 +10,16 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.AddField(
-            model_name='sales',
-            name='buyer_address',
-            field=models.CharField(max_length=255, null=True),
-        ),
-        migrations.AddField(
-            model_name='sales',
-            name='buyer_phone_no',
-            field=models.IntegerField(null=True),
-        ),
+        # No-op for fresh setup: these fields are already present in 0001_initial.
+        # OLD:
+        # migrations.AddField(
+        #     model_name='sales',
+        #     name='buyer_address',
+        #     field=models.CharField(max_length=255, null=True),
+        # ),
+        # migrations.AddField(
+        #     model_name='sales',
+        #     name='buyer_phone_no',
+        #     field=models.IntegerField(null=True),
+        # ),
     ]
