@@ -1,6 +1,6 @@
-import { Alert, Row, Col, Table, Card, CardTitle, CardBody, Button, Form, FormGroup, Label, Input, FormText, Nav, NavItem } from "reactstrap";
+import { Alert, Row, Col, Card, CardTitle, CardBody, Button, Form, FormGroup, Label, Input } from "reactstrap";
 import '../../assets/css/header.css';
-import { contentArea, apiPath, config } from "../../Constants";
+import { contentArea, apiPath, getAuthConfig, handleUnauthorized } from "../../Constants";
 import Accordion from 'react-bootstrap/Accordion'
 import { useState, useEffect } from "react";
 import axios from 'axios';
@@ -21,9 +21,10 @@ const ManageFlock = () => {
     let [intgcom, setIntgcom] = useState([]);
     useEffect(() => {
         let url = `${apiPath}farm/`;
-        config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
-        axios.get(url, config).then((res) => {
-            if (res.data.results.length == 0) {
+        // U: Replaced shared config mutation with per-request auth headers from getAuthConfig().
+        // config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
+        axios.get(url, getAuthConfig()).then((res) => {
+            if (res.data.results.length === 0) {
                 setFarms([{ public_id: 0, name: 'No farm available' }]);
             } else {
                 setFarms(res.data.results);
@@ -31,38 +32,27 @@ const ManageFlock = () => {
         }).catch((err) => {
             console.log(err)
             setFarms([{ public_id: 0, name: 'No farm available' }]);
-            if (err.response.status === 401) {
-                localStorage.clear();
-                navigate("/login")
-            }
+            handleUnauthorized(err, navigate);
         });
-    }, [])
+    }, [navigate])
     useEffect(() => {
         let url = `${apiPath}breeds/`;
-        config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
-        axios.get(url, config).then((res) => {
+        axios.get(url, getAuthConfig()).then((res) => {
             setBreeds(res.data.results);
         }).catch((err) => {
             //setBreeds(res.data.results);
-            if (err.response.status === 401) {
-                localStorage.clear();
-                navigate("/login")
-            }
+            handleUnauthorized(err, navigate);
         });
-    }, [])
+    }, [navigate])
     useEffect(() => {
         let url = `${apiPath}integrators/`;
-        config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
-        axios.get(url, config).then((res) => {
+        axios.get(url, getAuthConfig()).then((res) => {
             setIntgcom(res.data.results);
         }).catch((err) => {
             //setIntgcom(res.data.results);
-            if (err.response.status === 401) {
-                localStorage.clear();
-                navigate("/login")
-            }
+            handleUnauthorized(err, navigate);
         });
-    }, [])
+    }, [navigate])
 
     let [addData, setAddData] = useState({
         hatch_date: '',
@@ -95,43 +85,39 @@ const ManageFlock = () => {
     let [drinking_syserr, setDrinking_syserr] = useState(null);
     //let [farm_public_iderr ,setFarm_public_iderr] = useState(null);
     //let [flock_public_iderr ,setFlock_public_iderr] = useState(null);
-    let [integration, setIntegration] = useState(2);
+    let [, setIntegration] = useState(2);
 
     const save = (e) => {
         e.preventDefault();
         setLoading(false);//console.log(addData.integration);
         let error = 0;
         //if(addData.farm_public_id == 0 || addData.farm_public_id == null){setFarm_public_iderr('Please select farm');error = 1;}else{setFarm_public_iderr('');}
-        if (addData.integration == true) { addData.integration = 1; } else if (addData.integration == false) { addData.integration = 2; }
-        if (addData.ec_shed == true) { addData.ec_shed = 1; } else if (addData.ec_shed == false) { addData.ec_shed = 2; }
-        if (addData.hatch_date.trim() == '') { setHatch_dateerr('Hatch date is required'); error = 1; } else { setHatch_dateerr(''); }
-        if (addData.flock_name.trim() == '') { setFlock_nameerr('Flock name is required'); error = 1; } else { setFlock_nameerr(''); }
-        if (addData.flock_size <= 0 || addData.flock_size == null) { setFlock_sizeerr('Flock size is required'); error = 1; } else { setFlock_sizeerr(''); }
-        if (addData.actual_birds <= 0 || addData.actual_birds == null) { setActual_birdserr('Flock Actual birds count is required'); error = 1; } else { setActual_birdserr(''); }
-        if (addData.chick_breed_public_id == 0 || addData.chick_breed_public_id == null) { setBreed_public_iderr('Please select Breed'); error = 1; } else { setBreed_public_iderr(''); }
-        if (addData.hatchery_name.trim() == '') { setHatchery_nameerr('Hatchery name is required'); error = 1; } else { setHatchery_nameerr(''); }
-        if (addData.chick_weight <= 0 || addData.flock_size == null) { setChick_weighterr('Day one weight is required'); error = 1; } else { setChick_weighterr(''); }
-        if (addData.ec_shed == 0 || addData.ec_shed == null) { setEc_shederr('Please select ec shed'); error = 1; } else { setEc_shederr(''); }
-        if (addData.feed_sys == 0 || addData.feed_sys == null) { setFeed_syserr('Please select feed system'); error = 1; } else { setFeed_syserr(''); }
-        if (addData.drinking_sys == 0 || addData.drinking_sys == null) { setDrinking_syserr('Please select Drinking System'); error = 1; } else { setDrinking_syserr(''); }
-        if (addData.integration == 0 || addData.integration == null) {
+        // U: Replaced direct addData mutation with local normalized values for validation/payload.
+        const normalizedIntegration = addData.integration === true ? 1 : addData.integration === false ? 2 : Number(addData.integration);
+        const normalizedEcShed = addData.ec_shed === true ? 1 : addData.ec_shed === false ? 2 : Number(addData.ec_shed);
+        if ((addData.hatch_date || '').trim() === '') { setHatch_dateerr('Hatch date is required'); error = 1; } else { setHatch_dateerr(''); }
+        if ((addData.flock_name || '').trim() === '') { setFlock_nameerr('Flock name is required'); error = 1; } else { setFlock_nameerr(''); }
+        if (addData.flock_size <= 0 || addData.flock_size === null) { setFlock_sizeerr('Flock size is required'); error = 1; } else { setFlock_sizeerr(''); }
+        if (addData.actual_birds <= 0 || addData.actual_birds === null) { setActual_birdserr('Flock Actual birds count is required'); error = 1; } else { setActual_birdserr(''); }
+        if (String(addData.chick_breed_public_id) === "0" || addData.chick_breed_public_id === null) { setBreed_public_iderr('Please select Breed'); error = 1; } else { setBreed_public_iderr(''); }
+        if ((addData.hatchery_name || '').trim() === '') { setHatchery_nameerr('Hatchery name is required'); error = 1; } else { setHatchery_nameerr(''); }
+        if (addData.chick_weight <= 0 || addData.chick_weight === null) { setChick_weighterr('Day one weight is required'); error = 1; } else { setChick_weighterr(''); }
+        if (normalizedEcShed === 0 || addData.ec_shed === null) { setEc_shederr('Please select ec shed'); error = 1; } else { setEc_shederr(''); }
+        if (String(addData.feed_sys) === "0" || addData.feed_sys === null) { setFeed_syserr('Please select feed system'); error = 1; } else { setFeed_syserr(''); }
+        if (String(addData.drinking_sys) === "0" || addData.drinking_sys === null) { setDrinking_syserr('Please select Drinking System'); error = 1; } else { setDrinking_syserr(''); }
+        if (normalizedIntegration === 0 || addData.integration === null) {
             setIntegrationerr('Please select integration'); error = 1;
-            if (addData.chick_cost <= 0 || addData.chick_cost == null) { console.log('1'); setChick_costerr('Chicks Cost is required'); error = 1; } else { setChick_costerr(''); }
+            if (addData.chick_cost <= 0 || addData.chick_cost === null) { setChick_costerr('Chicks Cost is required'); error = 1; } else { setChick_costerr(''); }
         } else {
             setIntegrationerr('');
-            if (addData.integration == 1) {
-                if (addData.integrator_public_id == 0 || addData.integrator_public_id == null) { setIntegrator_public_iderr('Please select Intrigation company'); error = 1; } else { setIntegrator_public_iderr(''); }
-            } else if (addData.integration == 2) {
-                if (addData.chick_cost <= 0 || addData.chick_cost == null) { console.log(addData.chick_cost + '2'); setChick_costerr('Chicks Cost is required'); error = 1; } else { setChick_costerr(''); }
+            if (normalizedIntegration === 1) {
+                if (String(addData.integrator_public_id) === "0" || addData.integrator_public_id === null) { setIntegrator_public_iderr('Please select Intrigation company'); error = 1; } else { setIntegrator_public_iderr(''); }
+            } else if (normalizedIntegration === 2) {
+                if (addData.chick_cost <= 0 || addData.chick_cost === null) { setChick_costerr('Chicks Cost is required'); error = 1; } else { setChick_costerr(''); }
             }
         }
-        if (error == 0) {
+        if (error === 0) {
             setLoading(true);
-            if (addData.ec_shed == 1) {
-                addData.ec_shed = true;
-            } else {
-                addData.ec_shed = false;
-            }
             let flock = {
                 hatch_date: addData.hatch_date,
                 flock_size: addData.flock_size,
@@ -143,22 +129,21 @@ const ManageFlock = () => {
                 //integration:addData.integration,
                 //integrator_public_id:addData.integrator_public_id,
                 //chick_cost:addData.chick_cost,
-                ec_shed: addData.ec_shed,
+                ec_shed: normalizedEcShed === 1,
                 feed_sys: addData.feed_sys,
                 drinking_sys: addData.drinking_sys
             };
-            if (addData.integration == 1) {
+            if (normalizedIntegration === 1) {
                 flock.integration = true;
                 flock.integrator_public_id = addData.integrator_public_id;
             } else {
                 flock.integration = false;
                 flock.chick_cost = addData.chick_cost;
             }
-            console.log("bodyyyy", flock)
             let url = `${apiPath}flocks/${addData.flock_public_id}/`;
-            console.log(config);
-            config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
-            axios.patch(url, flock, config).then((res) => {
+            // U: Replaced shared config mutation with per-request auth headers from getAuthConfig().
+            // config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
+            axios.patch(url, flock, getAuthConfig()).then((res) => {
                 setShow(true);
                 setLoading(false);
                 setTimeout(successMsg, 3000);
@@ -178,10 +163,7 @@ const ManageFlock = () => {
             }).catch((err) => {
                 setErr('Something went wrong. Please try again');
                 setLoading(false);
-                if (err.response.status === 401) {
-                    localStorage.clear();
-                    navigate("/login")
-                }
+                handleUnauthorized(err, navigate);
             });
         } else {
             setErr('Validation error. Please check all fields.');
@@ -190,52 +172,52 @@ const ManageFlock = () => {
 
     let changeFarm = (e) => {
         //setAddData({...addData,farm_public_id:e.target.value});
-        if (e.target.value == 0) {
+        if (e.target.value === "0") {
             //setFarm_public_iderr('Please select farm');
+            setShowFlocks(0);
+            setShowForm(0);
+            setFlocks([]);
         } else {
             //setFarm_public_iderr('');
             let url = `${apiPath}flocks/${e.target.value}/`;
-            config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
-            axios.get(url, config).then((res) => {
+            // U: Replaced shared config mutation with per-request auth headers from getAuthConfig().
+            // config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
+            axios.get(url, getAuthConfig()).then((res) => {
                 setShowFlocks(1);
                 setShowForm(0);
-                if (res.data.results.total_records == 0) {
+                if (res.data.results.total_records === 0) {
                     setFlocks([{ flock_public_id: 0, flock_name: 'No flock available' }]);
                 } else {
                     setFlocks(res.data.results.flock_list);
                 }
             }).catch((err) => {
                 //setFlocks(err.data.results);
-                if (err.response.status === 401) {
-                    localStorage.clear();
-                    navigate("/login")
-                }
+                handleUnauthorized(err, navigate);
             });
         }
     }
     let changeFlocks = (e) => {
         //setAddData({...addData,farm_public_id:e.target.value});
-        if (e.target.value == 0) {
+        if (e.target.value === "0") {
             //setFlock_public_iderr('Please select flocks');
+            setShowForm(0);
         } else {
             //setFlock_public_iderr('');
             let url = `${apiPath}flocksDetail/${e.target.value}/`;
-            config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
-            axios.get(url, config).then((res) => {
+            // U: Replaced shared config mutation with per-request auth headers from getAuthConfig().
+            // config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
+            axios.get(url, getAuthConfig()).then((res) => {
                 setShowForm(1);
                 setAddData(res.data.results);
             }).catch((err) => {
                 //setFlocks(err.data.results);
-                if (err.response.status === 401) {
-                    localStorage.clear();
-                    navigate("/login")
-                }
+                handleUnauthorized(err, navigate);
             });
         }
     }
     let changeBreed = (e) => {
         setAddData({ ...addData, chick_breed_public_id: e.target.value });
-        e.target.value == 0 ? setBreed_public_iderr('Please select Breed') : setBreed_public_iderr('');
+        e.target.value === "0" ? setBreed_public_iderr('Please select Breed') : setBreed_public_iderr('');
     }
     //let changeIntrigation = (e) => {
       //  setAddData({ ...addData, integration: e.target.value });
@@ -247,14 +229,14 @@ const ManageFlock = () => {
        // }
    // }
 
-{/* AS-20-6-25 17-10 corrected Integration default value logic */}
+// AS-20-6-25 17-10 corrected Integration default value logic
    let changeIntrigation = (e) => {
     let value = e.target.value === "1" ? true : false;
     setAddData({ ...addData, integration: value });
-    e.target.value == 0 ? setIntegrationerr('Please select integration') : setIntegrationerr('');
+    e.target.value === "0" ? setIntegrationerr('Please select integration') : setIntegrationerr('');
     setIntegration(value ? 1 : 2);
     }
-{/* AS-20-6-25 17-10 change end */}
+// AS-20-6-25 17-10 change end
 
     let changeActualbirds = (e) => {
         setAddData({ ...addData, actual_birds: e.target.value });
@@ -262,14 +244,14 @@ const ManageFlock = () => {
     }
     let changeHatchery = (e) => {
         setAddData({ ...addData, hatchery_name: e.target.value });
-        e.target.value == 0 ? setHatchery_nameerr('Hatchery name is required') : setHatchery_nameerr('');
+        e.target.value.trim() === "" ? setHatchery_nameerr('Hatchery name is required') : setHatchery_nameerr('');
     }
     let changeDayoneweight = (e) => {
         setAddData({ ...addData, chick_weight: e.target.value });
         e.target.value <= 0 ? setChick_weighterr('Day one weight is required') : setChick_weighterr('');
     }
     let changeChickcost = (e) => {
-        if (addData.integration != 1) {
+        if (addData.integration !== true) {
             setAddData({ ...addData, chick_cost: e.target.value });
             e.target.value <= 0 ? setChick_costerr('Chicks Cost is required') : setChick_costerr('');
         }
@@ -281,28 +263,28 @@ const ManageFlock = () => {
     };
     let changeDrinkingsys = (e) => {
         setAddData({ ...addData, drinking_sys: e.target.value });
-        e.target.value == 0 ? setDrinking_syserr('Please select Drinking System') : setDrinking_syserr('');
+        e.target.value === "0" ? setDrinking_syserr('Please select Drinking System') : setDrinking_syserr('');
     }
     let changeFeedsys = (e) => {
         setAddData({ ...addData, feed_sys: e.target.value });
-        e.target.value == 0 ? setFeed_syserr('Please select feed system') : setFeed_syserr('');
+        e.target.value === "0" ? setFeed_syserr('Please select feed system') : setFeed_syserr('');
     }
     let changeFlockname = (e) => {
         setAddData({ ...addData, flock_name: e.target.value });
-        e.target.value == 0 ? setFlock_nameerr('Flock name is required') : setFlock_nameerr('');
+        e.target.value.trim() === "" ? setFlock_nameerr('Flock name is required') : setFlock_nameerr('');
     }
     let changeHatchdate = (e) => {
         setAddData({ ...addData, hatch_date: e.target.value });
-        e.target.value == 0 ? setHatch_dateerr('Hatch date is required') : setHatch_dateerr('');
+        e.target.value === "" ? setHatch_dateerr('Hatch date is required') : setHatch_dateerr('');
     }
     let changeFlocksize = (e) => {
         setAddData({ ...addData, flock_size: e.target.value });
         e.target.value <= 0 ? setFlock_sizeerr('Flock size is required') : setFlock_sizeerr('');
     }
     let changeIntco = (e) => {
-        if (addData.integration == 1) {
+        if (addData.integration === true) {
             setAddData({ ...addData, integrator_public_id: e.target.value });
-            e.target.value == 0 ? setIntegrator_public_iderr('Please select Intrigation company') : setIntegrator_public_iderr('');
+            e.target.value === "0" ? setIntegrator_public_iderr('Please select Intrigation company') : setIntegrator_public_iderr('');
         }
     }
     function successMsg() {
@@ -356,13 +338,13 @@ const ManageFlock = () => {
                             <Col sm="12" md={{ offset: 2, size: 8 }}>
                                 <div className={contentArea}>
                                     <div className='gridmargin'>
-                                        {(err != '') && <Alert color="danger">{err}</Alert>}
+                                        {(err !== '') && <Alert color="danger">{err}</Alert>}
                                         <Form onSubmit={save}>
                                             <FormGroup>
                                                 <Label for="farmselect">Select Farm</Label>
                                                 <div className="input-group">
-                                                    <Input onChange={changeFarm} id="farmSelect" defaultValue={'Select Farm'} name="farm" type="select">
-                                                        <option disabled defaultValue={-1}>Select Farm</option>
+                                                    <Input onChange={changeFarm} id="farmSelect" defaultValue="0" name="farm" type="select">
+                                                        <option value="0">Select Farm</option>
                                                         {
                                                             farms.map((item) => {
                                                                 return (
@@ -373,12 +355,12 @@ const ManageFlock = () => {
                                                     </Input>
                                                 </div>
                                             </FormGroup>
-                                            {(showFlocks == 1) ?
+                                            {(showFlocks === 1) ?
                                                 <FormGroup>
                                                     <Label for="farmselect">Select Flocks</Label>
                                                     <div className="input-group">
-                                                        <Input onChange={changeFlocks} id="farmSelect" defaultValue={"Select Flock"} name="farm" type="select">
-                                                            <option selected={true} disabled defaultValue={0}>Select Flocks</option>
+                                                        <Input onChange={changeFlocks} id="farmSelect" defaultValue="0" name="farm" type="select">
+                                                            <option value="0">Select Flocks</option>
                                                             {
                                                                 flocks.map((item) => {
                                                                     return (
@@ -390,7 +372,7 @@ const ManageFlock = () => {
                                                     </div>
                                                 </FormGroup>
                                                 : null}
-                                            {(showForm == 1) ?
+                                            {(showForm === 1) ?
                                                 <>
                                                     <Accordion defaultActiveKey="" className="mb-3">
                                                         <Accordion.Item eventKey="0">
@@ -432,12 +414,12 @@ const ManageFlock = () => {
                                                                 <FormGroup>
                                                                     <Label for="farmselect">Chick Breed</Label>
                                                                     <div className="input-group">
-                                                                        <Input onChange={changeBreed} id="chickbreed" name="chickbreed" type="select">
+                                                                        <Input onChange={changeBreed} value={addData.chick_breed_public_id || "0"} id="chickbreed" name="chickbreed" type="select">
                                                                             <option value="0" disabled>-Chick Breed</option>
                                                                             {
                                                                                 breeds.map((item) => {
                                                                                     return (
-                                                                                        <option selected={addData.chick_breed_public_id == item.public_id} key={item.public_id} value={item.public_id}>{item.name}</option>
+                                                                                        <option key={item.public_id} value={item.public_id}>{item.name}</option>
                                                                                     )
                                                                                 })
                                                                             }
@@ -492,7 +474,7 @@ const ManageFlock = () => {
 {/* AS-20-6-25 17-10 change end */}
 
                                                                 {
-                                                                    (addData.integration == true) ?
+                                                                    (addData.integration === true) ?
                                                                         <FormGroup>
                                                                             <Label for="flockname">Int Co.?</Label>
                                                                             <div className="input-group">
@@ -501,7 +483,7 @@ const ManageFlock = () => {
                                                                                     {
                                                                                         intgcom.map((item) => {
                                                                                             return (
-                                                                                                <option selected={item.public_id == addData.integrator_public_id} key={item.public_id} value={item.public_id}>{item.name}</option>
+                                                                                                <option key={item.public_id} value={item.public_id}>{item.name}</option>
                                                                                             )
                                                                                         })
                                                                                     }
@@ -532,10 +514,16 @@ const ManageFlock = () => {
                                                                 <FormGroup>
                                                                     <Label for="farmselect">EC Shed?</Label>
                                                                     <div className="input-group">
-                                                                        <Input onChange={changeEcshed} value={addData.ec_shed} id="ecshed" name="ecshed" type="select">
+                                                                        <Input
+                                                                            onChange={changeEcshed}
+                                                                            value={addData.ec_shed === true ? "true" : addData.ec_shed === false ? "false" : "0"}
+                                                                            id="ecshed"
+                                                                            name="ecshed"
+                                                                            type="select"
+                                                                        >
                                                                             <option disabled value="0">-EC Shed</option>
-                                                                            <option value={true} selected={addData.ec_shed == true}>Yes</option>
-                                                                            <option value={false} selected={addData.ec_shed == false}>No</option>
+                                                                            <option value="true">Yes</option>
+                                                                            <option value="false">No</option>
                                                                         </Input>
                                                                     </div>
                                                                     <small className="text-danger">{ec_shederr}</small>
@@ -545,8 +533,8 @@ const ManageFlock = () => {
                                                                     <div className="input-group">
                                                                         <Input onChange={changeFeedsys} value={addData.feed_sys} id="feedsys" name="feedsys" type="select">
                                                                             <option disabled value="0">-Feed Sys?</option>
-                                                                            <option value="M" selected={addData.feed_sys == "M"}>Manual</option>
-                                                                            <option value="A" selected={addData.feed_sys == "A"}>Auto</option>
+                                                                            <option value="M">Manual</option>
+                                                                            <option value="A">Auto</option>
                                                                         </Input>
                                                                     </div>
                                                                     <small className="text-danger">{feed_syserr}</small>
@@ -556,9 +544,9 @@ const ManageFlock = () => {
                                                                     <div className="input-group">
                                                                         <Input onChange={changeDrinkingsys} value={addData.drinking_sys} id="drinkingsys" name="drinkingsys" type="select">
                                                                             <option disabled value="0">-Drinking Sys</option>
-                                                                            <option value="M" selected={addData.drinking_sys == "M"}>Manual</option>
-                                                                            <option value="A" selected={addData.drinking_sys == "A"}>Auto</option>
-                                                                            <option value="B" selected={addData.drinking_sys == "B"}>Both</option>
+                                                                            <option value="M">Manual</option>
+                                                                            <option value="A">Auto</option>
+                                                                            <option value="B">Both</option>
                                                                         </Input>
                                                                     </div>
                                                                     <small className="text-danger">{drinking_syserr}</small>
