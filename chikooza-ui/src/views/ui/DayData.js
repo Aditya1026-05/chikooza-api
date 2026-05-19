@@ -1,7 +1,7 @@
 import { Row, Col, Card, CardTitle, CardBody, Alert, Button, Form, Label, Input } from "reactstrap";
 import '../../assets/css/header.css';
 import { useState, useEffect } from "react";
-import { contentArea, apiPath, config } from "../../Constants";
+import { contentArea, apiPath, getAuthConfig, handleUnauthorized } from "../../Constants";
 import Accordion from 'react-bootstrap/Accordion';
 import { Link, useParams } from "react-router-dom";
 import axios from 'axios';
@@ -59,27 +59,24 @@ const DaywiseData = () => {
     }
     // console.log("sdvf", formValues);
     let removeFormFields = (i, public_id) => {
-        if (public_id == "") {
+        if (public_id === "") {
             formValues.splice(i, 1)
             // console.log(formValues.splice(i, 1));
             setFormValues([...formValues])
         } else {
             let url = `${apiPath}flockVaccination/${public_id}/`;
-            config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
-            axios.delete(url, config).then((res) => {
+            // U: OLD: config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
+            axios.delete(url, getAuthConfig()).then(() => {
                 let newFormValues = [...formValues];
                 newFormValues.splice(i, 1);
                 setFormValues(newFormValues)
             }).catch((err) => {//console.log(err);
-                if (err.response.status === 404) {
+                if (err?.response?.status === 404) {
                     let newFormValues = [...formValues];
                     newFormValues.splice(i, 1);
                     setFormValues(newFormValues)
                 }
-                if (err.response.status === 401) {
-                    localStorage.clear();
-                    navigate("/login")
-                }
+                handleUnauthorized(err, navigate);
             });
         }
     }
@@ -89,23 +86,23 @@ const DaywiseData = () => {
         let error = 0;
         setLoading(true);
         let midData = 0;
-        if (addData.darkness_time_public_id === 0) { setDarknessError('This fields is not a valid.'); error = 1; } else { setDarknessError(''); }
-        if (addData.feed_availability_public_id === 0) { setFeedAvaibilityError('This fields is not a valid.'); error = 1; } else { setFeedAvaibilityError(''); }
-        if (oldValues.current_bird_count == null) { midData = flockDetails.actual_birds; } else { midData = oldValues.current_bird_count; }
+        if (addData.darkness_time_public_id === 0 || addData.darkness_time_public_id === "0") { setDarknessError('This fields is not a valid.'); error = 1; } else { setDarknessError(''); }
+        if (addData.feed_availability_public_id === 0 || addData.feed_availability_public_id === "0") { setFeedAvaibilityError('This fields is not a valid.'); error = 1; } else { setFeedAvaibilityError(''); }
+        if (oldValues.current_bird_count === null) { midData = flockDetails.actual_birds; } else { midData = oldValues.current_bird_count; }
         // console.log(addData.mortality + " > " + midData);
-        if (addData.mortality === null || addData.mortality == '' || addData.mortality < 0 || addData.mortality >= midData) { setMortalityError('This fields is not a valid.'); error = 1; } else { setMortalityError(''); }
+        if (addData.mortality === null || addData.mortality === '' || addData.mortality < 0 || addData.mortality >= midData) { setMortalityError('This fields is not a valid.'); error = 1; } else { setMortalityError(''); }
         midData = 0;
         if (oldValues.feed_stock === 0) { midData = oldValues.initial_total_feed; } else { midData = oldValues.feed_stock; }
-        if (addData.feed_intake === null || addData.feed_intake == '' || addData.feed_intake <= 0 || addData.feed_intake > midData) { setFeedintakeError('This fields is not a valid.'); error = 1; } else { setFeedintakeError(''); }
+        if (addData.feed_intake === null || addData.feed_intake === '' || addData.feed_intake <= 0 || addData.feed_intake > midData) { setFeedintakeError('This fields is not a valid.'); error = 1; } else { setFeedintakeError(''); }
         let midWeight = 0;
-        if (addData.average_bird_weight == null || addData.feed_intake == '') {
+        if (addData.average_bird_weight === null || addData.feed_intake === '') {
             midWeight = 0;
         } else {
             midWeight = addData.average_bird_weight;
         }
 
         //console.log(error);
-        if (error == 0) {
+        if (error === 0) {
             let mid = 1;
             let dailyData = {
                 flock_public_id: flockid,
@@ -144,11 +141,12 @@ const DaywiseData = () => {
                     status: [],
                 }
             }; //console.log(dailyData);
-            if (updation == true) {
-                formValues.map((item, index) => {//console.log(item);
-                    if ((item.vaccine_public_id != '') && (item.status != '')) {
+            if (updation === true) {
+                // U: OLD: map() was used for side effects and returned nothing.
+                formValues.forEach((item) => {//console.log(item);
+                    if ((item.vaccine_public_id !== '') && (item.status !== '')) {
                         mid = 0;
-                        if (item.public_id != '') {
+                        if (item.public_id !== '') {
                             dailyDataVaccination.flock_vaccination.flock_vaccination_public_id.push(item.public_id);
                         } else {
                             dailyDataVaccination.flock_vaccination.flock_vaccination_public_id.push(0);
@@ -157,44 +155,37 @@ const DaywiseData = () => {
                         dailyDataVaccination.flock_vaccination.status.push(item.status);
                     }
                 });//console.log(dailyDataVaccination);
-                if (mid == 1) {
+                if (mid === 1) {
                     //  console.log(dailyData);
                     let url = `${apiPath}dailyData/${dailyDataPublicID}/`;
-                    config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
-                    axios.patch(url, dailyData, config).then((res) => {
+                    // U: OLD: config.headers['Authorization'] was mutated before each save request.
+                    axios.patch(url, dailyData, getAuthConfig()).then(() => {
                         //setErr('Form created successfully');
                         setShow(true);
-                        const myTimeout = setTimeout(successMsg, 3000);
+                        setTimeout(successMsg, 3000);
                     }).catch((err) => {
                         //  console.log(err);
                         setErr('Something went wrong. Please try again');
                         setLoading(false);
-                        if (err.response.status === 401) {
-                            localStorage.clear();
-                            navigate("/login")
-                        }
+                        handleUnauthorized(err, navigate);
 
                     });
                 } else {
                     //console.log(dailyDataVaccination);
                     let url = `${apiPath}dailyData/${dailyDataPublicID}/`;
-                    config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
-                    axios.patch(url, dailyDataVaccination, config).then((res) => {
+                    axios.patch(url, dailyDataVaccination, getAuthConfig()).then(() => {
                         //setErr('Form created successfully');
                         setShow(true);
-                        const myTimeout = setTimeout(successMsg, 3000);
+                        setTimeout(successMsg, 3000);
                     }).catch((err) => {
                         //console.log(err);
                         setErr('Something went wrong. Please try again');
                         setLoading(false);
-                        if (err.response.status === 401) {
-                            localStorage.clear();
-                            navigate("/login")
-                        }
+                        handleUnauthorized(err, navigate);
                     });
                 }
             } else {
-                formValues.map((item) => {
+                formValues.forEach((item) => {
                     if (item.vaccine_public_id.length > 0) {
                         mid = 0;
                         dailyDataVaccination.flock_vaccination.vaccine_public_id.push(item.vaccine_public_id);
@@ -205,41 +196,33 @@ const DaywiseData = () => {
                         }
                     }
                 })
-                if (mid == 1) {
+                if (mid === 1) {
                     // console.log(dailyData);
                     let url = `${apiPath}dailyData/`;
-                    config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
-                    axios.post(url, dailyData, config).then((res) => {
+                    axios.post(url, dailyData, getAuthConfig()).then(() => {
                         //setErr('Form created successfully');
                         setAddData({ ...addData, mortality: null, feed_intake: null, average_bird_weight: null })
                         setShow(true);
-                        const myTimeout = setTimeout(successMsg, 3000);
+                        setTimeout(successMsg, 3000);
                     }).catch((err) => {
                         // console.log(err);
                         setErr('Something went wrong. Please try again');
                         setLoading(false);
-                        if (err.response.status === 401) {
-                            localStorage.clear();
-                            navigate("/login")
-                        }
+                        handleUnauthorized(err, navigate);
                     });
                 } else {
                     // console.log(dailyDataVaccination);
                     let url = `${apiPath}dailyData/`;
-                    config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
-                    axios.post(url, dailyDataVaccination, config).then((res) => {
+                    axios.post(url, dailyDataVaccination, getAuthConfig()).then(() => {
                         //setErr('Form created successfully');
                         setAddData({ ...addData, mortality: null, feed_intake: null, average_bird_weight: null })
                         setShow(true);
-                        const myTimeout = setTimeout(successMsg, 3000);
+                        setTimeout(successMsg, 3000);
                     }).catch((err) => {
                         // console.log(err);
                         setErr('Something went wrong. Please try again');
                         setLoading(false);
-                        if (err.response.status === 401) {
-                            localStorage.clear();
-                            navigate("/login")
-                        }
+                        handleUnauthorized(err, navigate);
                     });
                 }
             }
@@ -257,236 +240,199 @@ const DaywiseData = () => {
     }
     useEffect(() => {
         setFormValues([{ public_id: "", vaccine_public_id: "", status: "" }]);
-        let day = new Array();
+        const day = [];
         const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
         let dt = new Date(date);
         let textday = `${dt.getDate()}`;
-        if (textday.length == 1) {
+        if (textday.length === 1) {
             textday = `0${textday}`;
         }
         day.push(`${textday} ${monthNames[dt.getMonth()]} ${dt.getFullYear()}`);
 
         dt.setDate(dt.getDate() + 1);
         textday = `${dt.getDate()}`;
-        if (textday.length == 1) {
+        if (textday.length === 1) {
             textday = `0${textday}`;
         }
         day.push(`${textday} ${monthNames[dt.getMonth()]} ${dt.getFullYear()}`);
 
         dt.setDate(dt.getDate() - 2);
         textday = `${dt.getDate()}`;
-        if (textday.length == 1) {
+        if (textday.length === 1) {
             textday = `0${textday}`;
         }
         day.push(`${textday} ${monthNames[dt.getMonth()]} ${dt.getFullYear()}`);
 
         dt.setDate(dt.getDate());
         textday = `${dt.getDate()}`;
-        if (textday.length == 1) {
+        if (textday.length === 1) {
             textday = `0${textday}`;
         }
 
         let text = `${new Date(dt).getMonth() + 1}`;
-        if (text.length == 1) {
+        if (text.length === 1) {
             text = `0${text}`;
         }
         day.push(`${dt.getFullYear()}-${text}-${textday}`);
 
         dt.setDate(dt.getDate() + 2);
         textday = `${dt.getDate()}`;
-        if (textday.length == 1) {
+        if (textday.length === 1) {
             textday = `0${textday}`;
         }
         text = `${new Date(dt).getMonth() + 1}`;
-        if (text.length == 1) {
+        if (text.length === 1) {
             text = `0${text}`;
         }
         day.push(`${dt.getFullYear()}-${text}-${textday}`);
-        console.log("dayyyyyyyyYYYY>>>>>>>>>>>>>>>>>>>", day)
         setTodayDate(day);
     }, [date])
     let changeFormat = (dt) => {
         const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
         let textday = `${new Date(dt).getDate()}`;
-        if (textday.length == 1) {
+        if (textday.length === 1) {
             textday = `0${textday}`;
         }
         return `${textday}-${monthNames[new Date(dt).getMonth()]}-${new Date(dt).getFullYear()}`;
     }
     let datCompare = (hd, td) => {
-        var hd = new Date(hd);
-        var td = new Date(td);
-        if (hd.getTime() < td.getTime()) {
-            return false;
-        } else {
-            return true;
-        }
+        const hatchDate = new Date(hd);
+        const targetDate = new Date(td);
+        return hatchDate.getTime() >= targetDate.getTime();
     }
     let datCompareSame = (hd, td) => {
         //  console.log(hd, td)
-        var hd = new Date(hd);
-        var td = new Date(td);
-        if (hd.getTime() == td.getTime()) {
-            return true;
-        } else {
-            return false;
-        }
+        const hatchDate = new Date(hd);
+        const targetDate = new Date(td);
+        return hatchDate.getTime() === targetDate.getTime();
     }
     //For flock details
     useEffect(() => {
         let url = `${apiPath}flocksDetail/${flockid}/`;
-        config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
-        axios.get(url, config).then((res) => {
+        // U: OLD: config.headers['Authorization'] was mutated before each request.
+        axios.get(url, getAuthConfig()).then((res) => {
             setFlockDetails(res.data.results);
             //console.log(res.data.results);
             //setAddData(addData.current_bird_count=res.data.results.actual_birds);
         }).catch((err) => {
-            if (err.response.status === 401) {
-                localStorage.clear();
-                navigate("/login")
-            }
+            handleUnauthorized(err, navigate);
         });
-    }, [])
+    }, [flockid, navigate])
     //For daily data
     useEffect(() => {
         //For total feed
         let url = `${apiPath}quantity/?date=${date}&flock_public_id=${flockid}`; //console.log(url);
-        config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
-        axios.get(url, config).then((res1) => {
-            setOldValues({ ...oldValues, initial_total_feed: res1.data.results.quantity });
+        const authConfig = getAuthConfig();
+        axios.get(url, authConfig).then((res1) => {
+            const initialQuantity = res1.data.results.quantity;
+            setOldValues((current) => ({ ...current, initial_total_feed: initialQuantity }));
             //setAddData({...addData,feed_stock:res.data.results.quantity,total_feed:0});
 
             url = `${apiPath}dailyData/?flock_public_id=${flockid}&date=${date}`;
-            axios.get(url, config).then((res) => {
+            axios.get(url, authConfig).then((res) => {
+                const results = res.data.results;
+                const dailyData = results.daily_data;
+                const yesterdayData = results.yesterday_daily_data;
                 // console.log(res.data.results.yesterday_daily_data.mort, "nkjnj");
-                if (res.data.results.number_of_days === 1 && res.data.results.daily_data.current_bird_count === undefined) {
+                if (results.number_of_days === 1 && dailyData.current_bird_count === undefined) {
                     setUpdation(false);
-                    setAddData({ ...addData, type: 'Save', feed_stock: res1.data.results.quantity });
-                    setOldValues({ ...oldValues, feed_stock: res1.data.results.quantity });
+                    setAddData((current) => ({ ...current, type: 'Save', feed_stock: initialQuantity }));
+                    setOldValues((current) => ({ ...current, feed_stock: initialQuantity }));
                     // console.log("first day first time");
-                } else if (res.data.results.daily_data.current_bird_count === undefined) {
+                } else if (dailyData.current_bird_count === undefined) {
                     // console.log("first time");
                     setUpdation(false);
                     // setAddData({ ...addData, type: 'Save', cooling: false, heating: false, medicine: false, seek: false, darkness_time_public_id: 0, feed_availability_public_id: 0, mortality: null, feed_intake: null, average_bird_weight: null, mortalityPer: res.data.results.yesterday_daily_data.total_mort, current_bird_count: res.data.results.yesterday_daily_data.current_bird_count, feed_stock: res1.data.results.quantity - res.data.results.yesterday_daily_data.total_feed, total_feed: res.data.results.yesterday_daily_data.total_feed, avg_feed_per_bird: res.data.results.yesterday_daily_data.average_feed, total_fcr: res.data.results.yesterday_daily_data.total_fcr, fcr: res.data.results.yesterday_daily_data.fcr, mort: res.data.results.yesterday_daily_data.mort });
 
 //MV-23-6-25- 17-10 added cum_mort and total_mortality_percentage
-                    setAddData({ ...addData, type: 'Save', cooling: false, heating: false, medicine: false, seek: false, darkness_time_public_id: 0, feed_availability_public_id: 0, mortality: null, feed_intake: null, average_bird_weight: null, mortalityPer: res.data.results.yesterday_daily_data.total_mort, current_bird_count: res.data.results.yesterday_daily_data.current_bird_count, feed_stock: res1.data.results.quantity - res.data.results.yesterday_daily_data.total_feed, total_feed: res.data.results.yesterday_daily_data.total_feed, avg_feed_per_bird: res.data.results.yesterday_daily_data.average_feed, total_fcr: res.data.results.yesterday_daily_data.total_fcr, fcr: res.data.results.yesterday_daily_data.fcr, mort: res.data.results.yesterday_daily_data.mort ,cum_mort: res.data.results.yesterday_daily_data.cum_mort ,total_mortality_percentage: res.data.results.yesterday_daily_data.total_mortality_percentage  });
+                    setAddData((current) => ({ ...current, type: 'Save', cooling: false, heating: false, medicine: false, seek: false, darkness_time_public_id: 0, feed_availability_public_id: 0, mortality: null, feed_intake: null, average_bird_weight: null, mortalityPer: yesterdayData.total_mort, current_bird_count: yesterdayData.current_bird_count, feed_stock: initialQuantity - yesterdayData.total_feed, total_feed: yesterdayData.total_feed, avg_feed_per_bird: yesterdayData.average_feed, total_fcr: yesterdayData.total_fcr, fcr: yesterdayData.fcr, mort: yesterdayData.mort, cum_mort: yesterdayData.cum_mort, total_mortality_percentage: yesterdayData.total_mortality_percentage }));
 //MV-23-6-25- 17-10 change end
 
-                    setOldValues({ ...oldValues, current_bird_count: res.data.results.yesterday_daily_data.current_bird_count, feed_stock: res1.data.results.quantity - res.data.results.yesterday_daily_data.total_feed, total_feed: res.data.results.yesterday_daily_data.total_feed })
+                    setOldValues((current) => ({ ...current, current_bird_count: yesterdayData.current_bird_count, feed_stock: initialQuantity - yesterdayData.total_feed, total_feed: yesterdayData.total_feed }))
                 } else {
                     //console.log("updation");
-                    setDailyDataPublicID(res.data.results.daily_data.public_id);
+                    setDailyDataPublicID(dailyData.public_id);
                     setUpdation(true);
                     // setAddData({ ...addData, type: 'Update', cooling: res.data.results.daily_data.cooling, heating: res.data.results.daily_data.heating, medicine: res.data.results.daily_data.medicine, seek: res.data.results.daily_data.seek, darkness_time_public_id: res.data.results.daily_data.darkness_time_public_id, feed_availability_public_id: res.data.results.daily_data.feed_availability_public_id, mortality: res.data.results.daily_data.mortality, feed_intake: res.data.results.daily_data.feed_intake, average_bird_weight: res.data.results.daily_data.average_bird_weight, mort: res.data.results.daily_data.mort, mortalityPer: res.data.results.daily_data.total_mort, current_bird_count: res.data.results.daily_data.current_bird_count, feed_stock: res1.data.results.quantity - res.data.results.daily_data.total_feed, total_feed: res.data.results.daily_data.total_feed, avg_feed_per_bird: res.data.results.daily_data.average_feed, total_fcr: res.data.results.daily_data.total_fcr, cum_mort: res.data.results.daily_data.cum_mort, fcr: res.data.results.daily_data.fcr, total_mortality_percentage: res.data.results.daily_data.total_mortality_percentage });
 
 //MV-23-6-25- 17-10 added cum_mort & total_mortality_percentage
-                    setAddData({ ...addData, type: 'Update', cooling: res.data.results.daily_data.cooling, heating: res.data.results.daily_data.heating, medicine: res.data.results.daily_data.medicine, seek: res.data.results.daily_data.seek, darkness_time_public_id: res.data.results.daily_data.darkness_time_public_id, feed_availability_public_id: res.data.results.daily_data.feed_availability_public_id, mortality: res.data.results.daily_data.mortality, feed_intake: res.data.results.daily_data.feed_intake, average_bird_weight: res.data.results.daily_data.average_bird_weight, mort: res.data.results.daily_data.mort, mortalityPer: res.data.results.daily_data.total_mort, current_bird_count: res.data.results.daily_data.current_bird_count, feed_stock: res1.data.results.quantity - res.data.results.daily_data.total_feed, total_feed: res.data.results.daily_data.total_feed, avg_feed_per_bird: res.data.results.daily_data.average_feed, total_fcr: res.data.results.daily_data.total_fcr, cum_mort: res.data.results.daily_data.cum_mort, fcr: res.data.results.daily_data.fcr, total_mortality_percentage: res.data.results.daily_data.total_mortality_percentage });
+                    setAddData((current) => ({ ...current, type: 'Update', cooling: dailyData.cooling, heating: dailyData.heating, medicine: dailyData.medicine, seek: dailyData.seek, darkness_time_public_id: dailyData.darkness_time_public_id, feed_availability_public_id: dailyData.feed_availability_public_id, mortality: dailyData.mortality, feed_intake: dailyData.feed_intake, average_bird_weight: dailyData.average_bird_weight, mort: dailyData.mort, mortalityPer: dailyData.total_mort, current_bird_count: dailyData.current_bird_count, feed_stock: initialQuantity - dailyData.total_feed, total_feed: dailyData.total_feed, avg_feed_per_bird: dailyData.average_feed, total_fcr: dailyData.total_fcr, cum_mort: dailyData.cum_mort, fcr: dailyData.fcr, total_mortality_percentage: dailyData.total_mortality_percentage }));
 //MV-23-6-25- 17-10 change end
 
-                    if (res.data.results.yesterday_daily_data.current_bird_count === undefined) {
-                        setOldValues({ ...oldValues, feed_stock: res1.data.results.quantity });
+                    if (yesterdayData.current_bird_count === undefined) {
+                        setOldValues((current) => ({ ...current, feed_stock: initialQuantity }));
                     } else {
-                        setOldValues({ ...oldValues, current_bird_count: res.data.results.yesterday_daily_data.current_bird_count, feed_stock: res1.data.results.quantity - res.data.results.yesterday_daily_data.total_feed, total_feed: res.data.results.yesterday_daily_data.total_feed })
+                        setOldValues((current) => ({ ...current, current_bird_count: yesterdayData.current_bird_count, feed_stock: initialQuantity - yesterdayData.total_feed, total_feed: yesterdayData.total_feed }))
                     }
-                    if (res.data.results.daily_data.flock_vaccination.length > 0) {
-                        let midvar = [];
-                        res.data.results.daily_data.flock_vaccination.map((item) => {
-                            midvar.push({ public_id: item.public_id, vaccine_public_id: item.vaccine_public_id, status: item.status });
-                        });
+                    if (dailyData.flock_vaccination.length > 0) {
+                        const midvar = dailyData.flock_vaccination.map((item) => ({ public_id: item.public_id, vaccine_public_id: item.vaccine_public_id, status: item.status }));
                         setFormValues(midvar);
                     }
                 }
-                setDaysCount(res.data.results.number_of_days);
+                setDaysCount(results.number_of_days);
 
             }).catch((err) => {
-                if (err.response.status === 401) {
-                    localStorage.clear();
-                    navigate("/login")
-                }
+                handleUnauthorized(err, navigate);
             });
         }).catch((err) => {
-            if (err.response.status === 401) {
-                localStorage.clear();
-                navigate("/login")
-            }
+            handleUnauthorized(err, navigate);
         });
         //For total feed
-    }, [date])
+    }, [date, flockid, navigate])
     useEffect(() => {
         let url = `${apiPath}vaccines/`;
-        config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
-        axios.get(url, config).then((res) => {
+        axios.get(url, getAuthConfig()).then((res) => {
             setVaccines(res.data.results.vaccines_list);
         }).catch((err) => {
-            if (err.response.status === 401) {
-                localStorage.clear();
-                navigate("/login")
-            }
+            handleUnauthorized(err, navigate);
         });
-    }, [])
+    }, [navigate])
     useEffect(() => {
         let url = `${apiPath}dailyDataLastDate/${flockid}/`;
-        config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
-        axios.get(url, config).then((res) => {
+        axios.get(url, getAuthConfig()).then((res) => {
             setLastInsertDate(res.data.results.last_date);
         }).catch((err) => {
             setLastInsertDate(null);
-            if (err.response.status === 401) {
-                localStorage.clear();
-                navigate("/login")
-            }
+            handleUnauthorized(err, navigate);
         });
-    }, [date])
+    }, [date, flockid, navigate])
     //For Select Darkness Time
     useEffect(() => {
         let url = `${apiPath}darknessTime/`;
-        config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
-        axios.get(url, config).then((res) => {
+        axios.get(url, getAuthConfig()).then((res) => {
             setDarkNess(res.data.results.darkness_time_list);
         }).catch((err) => {
-            if (err.response.status === 401) {
-                localStorage.clear();
-                navigate("/login")
-            }
+            handleUnauthorized(err, navigate);
         });
-    }, [])
+    }, [navigate])
     //Select Feed Availability Time
     useEffect(() => {
         let url = `${apiPath}feedAvailability/`;
-        config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
-        axios.get(url, config).then((res) => {
+        axios.get(url, getAuthConfig()).then((res) => {
             setFeedAvaibility(res.data.results.feed_availability_list);
             // console.log()
         }).catch((err) => {
-            if (err.response.status === 401) {
-                localStorage.clear();
-                navigate("/login")
-            }
+            handleUnauthorized(err, navigate);
         });
-    }, [])
+    }, [navigate])
     let mortalityData = (e) => {
         let midData = 0;
-        if (oldValues.current_bird_count == null) { midData = flockDetails.actual_birds; } else { midData = oldValues.current_bird_count; }
-        if (e.target.value != null && e.target.value != '' && e.target.value >= 0) {
+        if (oldValues.current_bird_count === null) { midData = flockDetails.actual_birds; } else { midData = oldValues.current_bird_count; }
+        if (e.target.value !== null && e.target.value !== '' && e.target.value >= 0) {
             if (e.target.value <= midData - 1) {
                 setMortalityError('');
                 let current = 0;
-                if (oldValues.current_bird_count == null) {
+                if (oldValues.current_bird_count === null) {
                     current = flockDetails.actual_birds - e.target.value;
                 } else {
                     current = oldValues.current_bird_count - e.target.value;
                 }
                 let url = `${apiPath}dailyDataMortality/?current_bird_count=${current}&actual_birds=${flockDetails.actual_birds}`;
-                config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
-                axios.get(url, config).then((res) => {
+                axios.get(url, getAuthConfig()).then((res) => {
                     setAddData({ ...addData, current_bird_count: current, mortality: e.target.value, mortalityCount: res.data.results.total_mort_value, mortalityPer: res.data.results.total_mort_percent });
                 }).catch((err) => {
                     setAddData({ ...addData, mortality: e.target.value });
-                    if (err.response.status === 401) {
-                        localStorage.clear();
-                        navigate("/login")
-                    }
+                    handleUnauthorized(err, navigate);
                 });
             } else {
                 setAddData({ ...addData, mortality: e.target.value });
@@ -499,21 +445,17 @@ const DaywiseData = () => {
     }
     let feedData = (e) => {
         let midData = 0;
-        if (oldValues.feed_stock == 0) { midData = oldValues.initial_total_feed; } else { midData = oldValues.feed_stock; }
-        if (e.target.value != '' && e.target.value > 0) {
+        if (oldValues.feed_stock === 0) { midData = oldValues.initial_total_feed; } else { midData = oldValues.feed_stock; }
+        if (e.target.value !== '' && e.target.value > 0) {
             if (e.target.value <= midData) {
                 setFeedintakeError('');
                 let url = `${apiPath}dailyDataAvgFeed/?current_bird_count=${addData.current_bird_count}&date=${date}&feed_intake=${e.target.value}&flock_public_id=${flockid}`;
-                config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
-                axios.get(url, config).then((res) => {
+                axios.get(url, getAuthConfig()).then((res) => {
                     // console.log(url); console.log(res.data.results);
                     setAddData({ ...addData, feed_intake: e.target.value, avg_feed_per_bird: res.data.results.avg_feed_per_bird, total_feed: Number(oldValues.total_feed) + Number(e.target.value), feed_stock: oldValues.feed_stock - e.target.value });
                 }).catch((err) => {
                     setAddData({ ...addData, feed_intake: e.target.value });
-                    if (err.response.status === 401) {
-                        localStorage.clear();
-                        navigate("/login")
-                    }
+                    handleUnauthorized(err, navigate);
                 });
             } else {
                 setAddData({ ...addData, feed_intake: e.target.value });
@@ -528,15 +470,11 @@ const DaywiseData = () => {
         if (e.target.value > 0) {
             setAverageBirdError('')
             let url = `${apiPath}dailyDataFCR/?date=${date}&flock_public_id=${flockid}&average_feed=${addData.avg_feed_per_bird}&average_bird_weight=${e.target.value}`;
-            config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
-            axios.get(url, config).then((res) => {
+            axios.get(url, getAuthConfig()).then((res) => {
                 setAddData({ ...addData, average_bird_weight: e.target.value, fcr: res.data.results.fcr, total_fcr: res.data.results.total_fcr })
             }).catch((err) => {
                 setAddData({ ...addData, average_bird_weight: e.target.value });
-                if (err.response.status === 401) {
-                    localStorage.clear();
-                    navigate("/login")
-                }
+                handleUnauthorized(err, navigate);
             });
         }
 
@@ -558,7 +496,7 @@ const DaywiseData = () => {
                 </Modal.Header>
                 <Modal.Body>
                     <Alert color="success">
-                        {(updation == true) ? `Daily data successfully updated` : `Daily data successfully added`}
+                        {(updation === true) ? `Daily data successfully updated` : `Daily data successfully added`}
                     </Alert>
                     <Spinner animation="border" variant="success" style={{ 'marginLeft': '45%' }} />
                 </Modal.Body>
@@ -575,7 +513,7 @@ const DaywiseData = () => {
                             <Col sm="12" md='12' lg={{ offset: 2, size: 8 }}>
                                 <div className={contentArea}>
                                     <div className='gridmargin'>
-                                        {(err != '') && <Alert color="danger">{err}</Alert>}
+                                        {(err !== '') && <Alert color="danger">{err}</Alert>}
                                         <Row className="mt-0 mb-6 ml-4">
                                             {datCompare(flockDetails.hatch_date, todayDate[3]) ? null :
                                                 <Col sm="6" md="4" lg="4" className="mt-6">
@@ -635,7 +573,7 @@ const DaywiseData = () => {
                                                                 {/* <Alert color="secondary" style={{ color: '#000' }}>{addData.current_bird_count == null ? flockDetails.actual_birds : addData.current_bird_count}</Alert> */}
 
 {/* MV-23-6-25- 17-10 0 displayed when null count */}
-                                                                <Alert color="secondary" style={{ color: '#000' }}>{addData.current_bird_count == null ? 0 : addData.current_bird_count}</Alert>
+                                                                <Alert color="secondary" style={{ color: '#000' }}>{addData.current_bird_count === null ? 0 : addData.current_bird_count}</Alert>
 {/* MV-23-6-25- 17-10 change end */}
 
                                                             </Col>
@@ -652,7 +590,7 @@ const DaywiseData = () => {
                                                             </Col>
                                                             <Col sm="6" md="4" lg="4">
                                                                 <Label for="flockname" className="font-bold">Feed Stock(Kgs)</Label>
-                                                                <Alert color="danger" style={{ color: '#000' }}>{addData.feed_stock == null ? oldValues.initial_total_feed : addData.feed_stock}</Alert>
+                                                                <Alert color="danger" style={{ color: '#000' }}>{addData.feed_stock === null ? oldValues.initial_total_feed : addData.feed_stock}</Alert>
                                                             </Col>
                                                         </Row>
                                                         <Row>
@@ -682,12 +620,13 @@ const DaywiseData = () => {
                                                                         index ? <Label>&nbsp;</Label>
                                                                             : <Label for="exampleSelect">Vaccination Today?</Label>
                                                                     }
-                                                                    <Input id="exampleSelect" name="vaccine_public_id" type="select" onChange={e => handleChange(index, e)}>
-                                                                        <option value="" selected={true}>Select Vaccination</option>
+                                                                    {/* U: OLD: option-level selected props mixed strings and numbers; React expects select value/defaultValue. */}
+                                                                    <Input id="exampleSelect" name="vaccine_public_id" type="select" value={element.vaccine_public_id || ""} onChange={e => handleChange(index, e)}>
+                                                                        <option value="">Select Vaccination</option>
                                                                         {
                                                                             vaccines.map((item) => {
                                                                                 return (
-                                                                                    <option selected={element.vaccine_public_id == item.public_id} key={item.public_id} value={item.public_id}>{item.full_name}</option>
+                                                                                    <option key={item.public_id} value={item.public_id}>{item.full_name}</option>
                                                                                 )
                                                                             })
                                                                         }
@@ -695,18 +634,18 @@ const DaywiseData = () => {
                                                                 </Col>
                                                                 <Col sm="6" md="4" lg="4">
                                                                     <Label for="exampleSelect">&nbsp;</Label>
-                                                                    <Input id="exampleSelect" name="status" type="select" onChange={e => handleChange(index, e)}>
-                                                                        <option value='' selected={true}>Select Status</option>
-                                                                        <option selected={element.status == 'Start'} value='Start'>Started</option>
-                                                                        <option selected={element.status == 'Continue'} value='Continue'>Continue</option>
-                                                                        <option selected={element.status == 'Complete'} value='Complete'>Completed</option>
+                                                                    <Input id="exampleSelect" name="status" type="select" value={element.status || ""} onChange={e => handleChange(index, e)}>
+                                                                        <option value=''>Select Status</option>
+                                                                        <option value='Start'>Started</option>
+                                                                        <option value='Continue'>Continue</option>
+                                                                        <option value='Complete'>Completed</option>
                                                                     </Input>
                                                                 </Col>
                                                                 <Col sm="6" md="4" lg="4"><Label>&nbsp;</Label><br />
                                                                     {
                                                                         index ?
                                                                             <Button className="btn" color="danger" type="button" onClick={() => removeFormFields(index, element.public_id)}>- Remove</Button>
-                                                                            : element.status != "" ? <Button className="btn" color="success" type="button" onClick={() => addFormFields()} >+ Add More</Button> : <Button className="btn" color="success" type="button" onClick={() => alert('Please select vaccination and status')}>+ Add More</Button>
+                                                                            : element.status !== "" ? <Button className="btn" color="success" type="button" onClick={() => addFormFields()} >+ Add More</Button> : <Button className="btn" color="success" type="button" onClick={() => alert('Please select vaccination and status')}>+ Add More</Button>
                                                                     }
                                                                 </Col>
                                                             </Row>
@@ -738,12 +677,12 @@ const DaywiseData = () => {
                                                         <Row>
                                                             <Col sm="6" md="6" lg="6">
                                                                 <Label for="darkness">Darkness Time</Label>
-                                                                <Input id="darkness" name="darkness" type="select" onChange={(e) => { (setAddData({ ...addData, darkness_time_public_id: e.target.value })) }}>
-                                                                    <option value="0" selected={true}>Select Darkness Time</option>
+                                                                <Input id="darkness" name="darkness" type="select" value={addData.darkness_time_public_id || "0"} onChange={(e) => { (setAddData({ ...addData, darkness_time_public_id: e.target.value })) }}>
+                                                                    <option value="0">Select Darkness Time</option>
                                                                     {
                                                                         darkNess.map((item) => {
                                                                             return (
-                                                                                <option selected={addData.darkness_time_public_id == item.public_id} key={item.public_id} value={item.public_id}>{item.name}</option>
+                                                                                <option key={item.public_id} value={item.public_id}>{item.name}</option>
                                                                             )
                                                                         })
                                                                     }
@@ -752,12 +691,12 @@ const DaywiseData = () => {
                                                             </Col>
                                                             <Col sm="6" md="6" lg="6">
                                                                 <Label for="feedavailability">Feed Availability Time</Label>
-                                                                <Input id="feedavailability" name="feedavailability" type="select" onChange={(e) => { (setAddData({ ...addData, feed_availability_public_id: e.target.value })) }}>
-                                                                    <option value="0" selected={true}>Select Feed Availability Time</option>
+                                                                <Input id="feedavailability" name="feedavailability" type="select" value={addData.feed_availability_public_id || "0"} onChange={(e) => { (setAddData({ ...addData, feed_availability_public_id: e.target.value })) }}>
+                                                                    <option value="0">Select Feed Availability Time</option>
                                                                     {
                                                                         feedAvaibility.map((item) => {
                                                                             return (
-                                                                                <option selected={addData.feed_availability_public_id == item.public_id} key={item.public_id} value={item.public_id}>{item.name}</option>
+                                                                                <option key={item.public_id} value={item.public_id}>{item.name}</option>
                                                                             )
                                                                         })
                                                                     }
