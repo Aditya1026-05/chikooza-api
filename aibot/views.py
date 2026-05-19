@@ -4,6 +4,7 @@ from rest_framework.response import Response
 from rest_framework import viewsets, status
 from oauth2_provider.contrib.rest_framework import OAuth2Authentication
 from .services import SQLAgentService, AISQLService
+from .modern_services import ChikoozaModernAgentService
 from .preprocessing import QueryPreprocessor
 from .log_utils import ChatLogHandler
 from .models import AIChatLog
@@ -48,8 +49,12 @@ class AIChatViewSet(viewsets.ViewSet):
                 'query_id': query_id
             }
 
+            # U: OLD services kept for reference/rollback:
             # service = SQLAgentService(user=request.user)
-            service = AISQLService(user=request.user)
+            # service = AISQLService(user=request.user)
+            # U: NEW service ports the cloned BizBot routing/isolation approach
+            # U: into Chikooza and uses request.user as the only tenant source.
+            service = ChikoozaModernAgentService(user=request.user)
             result = service.query(query)
             
             self._log_interaction(request, result)
@@ -61,6 +66,7 @@ class AIChatViewSet(viewsets.ViewSet):
                         "error": result["message"],
                         "details": result.get("details"),
                         "suggestion": result.get("suggestion"),
+                        "route": result.get("route"),
                         "query_id": query_id
                     },
                     status=status.HTTP_400_BAD_REQUEST
@@ -70,6 +76,9 @@ class AIChatViewSet(viewsets.ViewSet):
                 {
                     "status": "success",
                     "data": result["data"],
+                    "answer": result.get("answer", result.get("message")),
+                    "route": result.get("route"),
+                    "rows": result.get("rows"),
                     "query": result["query"],
                     "query_id": query_id
                 },
