@@ -1,5 +1,7 @@
-import React, { Suspense } from "react";
-import ReactDOM from "react-dom";
+import { Suspense } from "react";
+// U: OLD: import ReactDOM from "react-dom";
+// U: NEW: React 19 uses the concurrent root API from react-dom/client.
+import { createRoot } from "react-dom/client";
 import "./assets/scss/style.scss";
 import "bootstrap-icons/font/bootstrap-icons.css";
 import App from "./App";
@@ -14,12 +16,12 @@ import "primeicons/primeicons.css";
 // U: OLD: PrimeFlex utilities were imported globally but are not used by the current UI.
 // import "primeflex/primeflex.css";
 
-ReactDOM.render(
+const rootElement = document.getElementById("root");
+
+createRoot(rootElement).render(
   <Suspense fallback={<Loader />}>
     <BrowserRouter>
       <App />
     </BrowserRouter>
-  </Suspense>,
-
-  document.getElementById("root")
+  </Suspense>
 );
