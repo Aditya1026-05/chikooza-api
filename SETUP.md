@@ -224,11 +224,17 @@ DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1,0.0.0.0,.herokuapp.com
 CHIKOOZA_CORS_ALLOW_ALL=True
 CHIKOOZA_API_BASE_URL=http://127.0.0.1:8002/
 CHIKOOZA_FIXED_OTP=123456
+CHIKOOZA_PUBLIC_CHAT_PROVIDER=auto
 GROQ_API_KEY=
+GROQ_MODEL=llama-3.1-8b-instant
 ```
 
 `GROQ_API_KEY` must stay in local `.env` or deployment secrets only. Do not commit
 the real key; `.env.example` intentionally keeps it blank.
+
+`CHIKOOZA_PUBLIC_CHAT_PROVIDER=auto` means the public website chatbot uses Groq
+when `GROQ_API_KEY` is configured, otherwise it can fall back to Ollama or the
+deterministic local product answer.
 
 `CHIKOOZA_FIXED_OTP=123456` is only for local MVP testing. In production, remove
 that variable so OTPs are generated randomly.
@@ -244,6 +250,21 @@ setup, run migrations as-is:
 ```bash
 python manage.py migrate
 ```
+
+#### 3. Understand SQL data versus RAG data
+
+Farmer/customer records are stored in SQL tables through Django models. The main
+business tables are `farms`, `flocks_flock`, `purchase_purchase`,
+`dailydata_dailydata`, and `sales_sales`.
+
+The authenticated `/ai/` endpoint answers private farmer-data questions through
+tenant-safe SQL views: `ai_purchase_data_view`, `ai_dailydata_data_view`, and
+`ai_sale_data_view`. Those views expose `owner_id`, and the active AI service
+must filter by the logged-in user before executing a query.
+
+The public `/chat/` site assistant is not allowed to access private farmer data.
+The legacy RAG mode uses general poultry PDF documents and FAISS files under
+`chatbot/data/`, not per-farmer records.
 
 
 ## Running the Development Server

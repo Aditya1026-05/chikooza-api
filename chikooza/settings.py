@@ -13,10 +13,14 @@ import os
 from pathlib import Path
 
 import dj_database_url
+import environ
 from corsheaders.defaults import default_headers
 from django.core.exceptions import ImproperlyConfigured
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+# U: OLD: local `.env` values were documented but not loaded by Django.
+# U: NEW: load `.env` once at startup; real deployment environment variables still win.
+environ.Env.read_env(BASE_DIR / ".env", overwrite=False)
 
 
 def _env_bool(name, default=False):

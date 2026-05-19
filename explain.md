@@ -10,10 +10,42 @@ The backend is a Django API. It stores users, farms, flocks, purchases, daily fl
 
 The frontend is a React app. It gives screens for registration, login, farm management, flock management, purchases, daily data, sales, reports, and chatbot UI.
 
-The project has two Git repositories:
+The project is being maintained as one working repository/branch for handover:
 
-- Backend repository: the main folder.
-- Frontend repository: `chikooza-ui/`.
+- Backend source: the main folder.
+- Frontend source: `chikooza-ui/`.
+
+## How Farmer Data Is Stored And Used By AI
+
+Farmer/customer data is stored in normal SQL database tables through Django models.
+
+Important examples:
+
+- `users`: login/profile user records.
+- `farms`: farm records, linked to the owner user.
+- `flocks_flock`: flock records, linked to both owner user and farm.
+- `purchase_purchase`: purchase/cost records, linked to owner user and flock.
+- `dailydata_dailydata`: daily flock records, linked to owner user and flock.
+- `sales_sales`: sale/lifting records, linked to flock.
+
+For private farmer-data AI questions, the active `/ai/` endpoint does not read a
+shared RAG vector database. It uses Text-to-SQL style logic over SQL views:
+
+- `ai_purchase_data_view`
+- `ai_dailydata_data_view`
+- `ai_sale_data_view`
+
+Those AI views expose `owner_id`. The active AI service validates that every SQL
+query includes the authenticated user filter before execution. In simple words:
+when farmer A asks a question, the AI must query only rows where
+`owner_id = farmer_a_user_id`.
+
+RAG is different. The current `chatbot/` RAG feature uses static poultry PDF
+documents from `chatbot/data/processed_documents/` and FAISS files in
+`chatbot/data/`. That RAG data is general poultry knowledge, not private farmer
+data. If we later add farmer-specific RAG, it should either build per-user
+indexes/namespaces or retrieve SQL records through authenticated, user-scoped
+queries before embedding/answering.
 
 ## How To Read The Backend
 
@@ -232,10 +264,10 @@ Endpoint:
 What it does:
 
 - Uses an SQL-style agent.
-- Reads from `ai_farm_data_view`.
+- Reads from tenant-safe SQL views such as `ai_purchase_data_view`, `ai_dailydata_data_view`, and `ai_sale_data_view`.
 - Tries to answer questions about farm/flock/sales/purchase data.
 
-This is related to Text-to-SQL work, but it should be reviewed carefully before production use.
+This is related to Text-to-SQL work. The active implementation validates that the generated SQL is read-only and filtered to the authenticated user.
 
 ### `templates/`
 
@@ -249,7 +281,11 @@ It is used for PDF generation.
 
 ### `data/`
 
-This contains AI/RAG data.
+This older root folder is not the active chatbot data path.
+
+The active RAG data path is:
+
+- `chatbot/data/`
 
 It includes:
 

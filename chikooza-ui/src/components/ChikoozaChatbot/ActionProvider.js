@@ -27,7 +27,10 @@ class ActionProvider {
       const res = await fetch(getChatApiUrl(), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: message.trim() })
+        // U: OLD: the public website widget called the legacy RAG assistant by default.
+        // U: NEW: route homepage visitors to the public product assistant; authenticated
+        // U: farmer-data chat stays separate behind /ai/.
+        body: JSON.stringify({ query: message.trim(), mode: 'site' })
       });
 
       const data = await res.json().catch(() => ({}));
