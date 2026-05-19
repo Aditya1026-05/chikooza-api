@@ -5,9 +5,9 @@ import traceback
 
 from django.contrib.auth.models import User
 
-import pytz
 import requests
 from django.conf import settings
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import BasePermission
@@ -261,9 +261,10 @@ def build_otp_response_payload(otp, mobile_number):
 
 
 def otp_delete_after_five_minutes(otp_object):
-    if otp_object.created_at < datetime.datetime.now(
-        pytz.timezone("UTC")
-    ) - datetime.timedelta(minutes=5):
+    # U: OLD: datetime.datetime.now(pytz.timezone("UTC")) forced a pytz-aware value.
+    # U: NEW: timezone.now() follows Django USE_TZ and avoids naive/aware comparison bugs.
+    expiry_cutoff = timezone.now() - datetime.timedelta(minutes=5)
+    if otp_object.created_at < expiry_cutoff:
         otp_object.delete()
         return True
     else:
