@@ -18,6 +18,24 @@ from sales.serializers import AddSalesSerializer, GetSalesSerializer, GetSalesLi
 from sales.services import AddSalesService, UpdateSalesService
 
 
+def _flock_queryset_for_request(request):
+    """
+    U: Scope flock records to the authenticated farmer unless an admin explicitly requests data.
+    """
+    if getattr(request.user, "is_superuser", False):
+        return Flock.objects.all()
+    return Flock.objects.filter(user=request.user.users)
+
+
+def _sales_queryset_for_request(request):
+    """
+    U: Scope sales records through the authenticated farmer's flocks.
+    """
+    if getattr(request.user, "is_superuser", False):
+        return Sales.objects.all()
+    return Sales.objects.filter(flock__user=request.user.users)
+
+
 # Create your views here.
 class SalesView(viewsets.ViewSet):
     """
@@ -44,7 +62,8 @@ class SalesView(viewsets.ViewSet):
             if serializer.is_valid(raise_exception=True):
                 serializer_data = serializer.validated_data
                 validate_url_value(serializer_data.get('flock')['public_id'], 'FLOCK_ID')
-                flock = Flock.objects.get(public_id=serializer_data.get('flock')['public_id'])
+                # U: OLD: Flock.objects.get(public_id=...) allowed creating sales under another farmer's flock.
+                flock = _flock_queryset_for_request(request).get(public_id=serializer_data.get('flock')['public_id'])
                 if DailyData.objects.filter(flock=flock).exists():
                     daily_data = DailyData.objects.filter(flock=flock).last()
                     data = daily_data.current_bird_count
@@ -67,7 +86,8 @@ class SalesView(viewsets.ViewSet):
     @classmethod
     def retrieve(cls, request, pk):
         try:
-            sales = Sales.objects.get(public_id=pk)
+            # U: OLD: Sales.objects.get(public_id=pk)
+            sales = _sales_queryset_for_request(request).get(public_id=pk)
             return get_detail(
                 "Sales Detail",
                 GetSalesSerializer(sales).data,
@@ -84,9 +104,9 @@ class SalesView(viewsets.ViewSet):
             serializer = GetSalesListSerializer(data=request.GET)
             if serializer.is_valid(raise_exception=True):
                 serializer_data = serializer.validated_data
-                sales = Sales.objects.filter(
-                    flock__public_id=serializer_data.get('flock')['public_id']
-                )
+                # U: OLD: listing used only flock_public_id, so another farmer's sales were visible.
+                flock = _flock_queryset_for_request(request).get(public_id=serializer_data.get('flock')['public_id'])
+                sales = _sales_queryset_for_request(request).filter(flock=flock)
                 return list_response(
                     "Sales List.",
                     sales.count(),
@@ -102,7 +122,8 @@ class SalesView(viewsets.ViewSet):
     @classmethod
     def partial_update(cls, request, pk):
         try:
-            sales = Sales.objects.get(public_id=pk)
+            # U: OLD: Sales.objects.get(public_id=pk)
+            sales = _sales_queryset_for_request(request).get(public_id=pk)
             serializer = UpdateSalesSerializer(data=request.data)
             if serializer.is_valid(raise_exception=True):
                 serializer_data = serializer.validated_data
@@ -147,12 +168,14 @@ class GraphView(viewsets.ViewSet):
     def retrieve(cls, request, pk):
         try:
             if pk == '1':
-                flocks = Flock.objects.filter(user=request.user)
+                # U: OLD: Flock.objects.filter(user=request.user) used the OAuth user wrapper and skipped tenant scoping.
+                flocks = _flock_queryset_for_request(request)
                 for res in flocks:
                     if DailyData.objects.filter(flock=res).count() > 5:
                         flock = res
             else:
-                flock = Flock.objects.get(public_id=pk)
+                # U: OLD: Flock.objects.get(public_id=pk)
+                flock = _flock_queryset_for_request(request).get(public_id=pk)
             week_no = []
             mortality = []
             current_bird_count = []
