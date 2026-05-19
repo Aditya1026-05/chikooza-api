@@ -3,7 +3,10 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import viewsets, status
 from oauth2_provider.contrib.rest_framework import OAuth2Authentication
-from .services import SQLAgentService, AISQLService
+# U: OLD: from .services import SQLAgentService, AISQLService
+# U: NEW: keep legacy services in aibot/services.py, but do not import them into
+# U: the active endpoint because that unnecessarily loads the old LangChain stack.
+# from .services import SQLAgentService, AISQLService
 from .modern_services import ChikoozaModernAgentService
 from .preprocessing import QueryPreprocessor
 from .log_utils import ChatLogHandler
