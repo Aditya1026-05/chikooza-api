@@ -1,4 +1,4 @@
-import { Alert, Row, Col, Table, Card, CardTitle, CardBody, Button, Form, FormGroup, Label, Input, FormText, Nav, NavItem } from "reactstrap";
+import { Alert, Row, Col, Card, CardTitle, CardBody, Button, Form, FormGroup, Label } from "reactstrap";
 import '../../assets/css/header.css';
 import { Link } from "react-router-dom";
 import { useState } from "react";
@@ -12,7 +12,6 @@ const ForgetPassword = () => {
   const navigate = useNavigate();
   let [addData, setAddData] = useState({ username: '', mobile: '', password: '', cpassword: '', otp: '', usernameerr: '', mobileerr: '', otperr: '', passworderr: '', cpassworderr: '' });
   let [loading, setLoading] = useState(false);
-  let [otp, setOtp] = useState('');
   let [err, setErr] = useState('');
   const [step, setStep] = useState(true);
   const [show, setShow] = useState(false);
@@ -21,7 +20,9 @@ const ForgetPassword = () => {
     setLoading(true);
     e.preventDefault();
     if (addData.username.trim() === '') {
-      setAddData(addData.usernameerr = 'Username is required');
+      // U: Replaced direct state mutation with an immutable state update.
+      // setAddData(addData.usernameerr = 'Username is required');
+      setAddData({ ...addData, usernameerr: 'Username is required' });
     }
     if ((addData.mobile === '') || (addData.mobile.length !== 10)) {
       setAddData({ ...addData, mobileerr: 'Mobile number is required or invalid' });
@@ -35,7 +36,7 @@ const ForgetPassword = () => {
       axios.post(url, user, config).then((res) => {
         setStep(false);
       }).catch((err) => {
-        setErr(err.response.data.error);
+        setErr(err.response?.data?.error || 'Unable to send OTP. Please try again.');
       });
     }
     setLoading(false);
@@ -44,10 +45,14 @@ const ForgetPassword = () => {
     setLoading(true);
     e.preventDefault();
     if (addData.otp.trim() === '' || addData.otp.length > 6) {
-      setAddData(addData.otperr = 'OTP is required');
+      // U: Replaced direct state mutation with an immutable state update.
+      // setAddData(addData.otperr = 'OTP is required');
+      setAddData({ ...addData, otperr: 'OTP is required' });
     }
     if (addData.password.trim() === '') {
-      setAddData(addData.passworderr = 'Password is required');
+      // U: Replaced direct state mutation with an immutable state update.
+      // setAddData(addData.passworderr = 'Password is required');
+      setAddData({ ...addData, passworderr: 'Password is required' });
     }
     if (addData.cpassword.trim() === '' || addData.cpassword !== addData.password) {
       setAddData({ ...addData, cpassworderr: 'Password and Confirm Password does not match' });
@@ -63,9 +68,9 @@ const ForgetPassword = () => {
       let url = `${apiPath}users/forgetPassword/`;
       axios.post(url, user, config).then((res) => {
         setShow(true);
-        const myTimeout = setTimeout(successMsg, 3000);
+        setTimeout(successMsg, 3000);
       }).catch((err) => {
-        setErr(err.response.data.error);
+        setErr(err.response?.data?.error || 'Unable to reset password. Please try again.');
         console.log(err);
       });
     }
@@ -98,7 +103,7 @@ const ForgetPassword = () => {
         setAddData({ ...addData, password: e.target.value, passworderr: '' });
       }
     } else if (e.target.name === 'cpassword') {
-      if (e.target.value.trim() === '' || e.target.value != addData.password) {
+      if (e.target.value.trim() === '' || e.target.value !== addData.password) {
         setAddData({ ...addData, cpassword: e.target.value, cpassworderr: 'Password and Confirm Password does not match' });
       } else {
         setAddData({ ...addData, cpassword: e.target.value, cpassworderr: '' });
@@ -132,7 +137,7 @@ const ForgetPassword = () => {
               <Col sm="12" md={{ offset: 2, size: 8 }}>
                 <div className={contentArea}>
                   <div className='gridmargin'>
-                    {(err != '') && <Alert color="danger">{err}</Alert>}
+                    {(err !== '') && <Alert color="danger">{err}</Alert>}
                     {step ?
                       <Form onSubmit={save}>
                         <FormGroup>

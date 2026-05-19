@@ -1,7 +1,7 @@
-import { Alert, Row, Col, Table, Card, CardTitle, CardBody, Button, Form ,FormGroup ,Label ,Input ,FormText, Nav, NavItem } from "reactstrap";
+import { Alert, Row, Col, Card, CardTitle, CardBody, Button, Form, FormGroup, Label } from "reactstrap";
 import '../../assets/css/header.css';
 import { Link } from "react-router-dom";
-import { useState, useSyncExternalStore } from "react";
+import { useState } from "react";
 import { FaUserCircle, FaMailBulk, FaMobile, FaUser, FaLock} from "react-icons/fa";
 import { contentArea, apiPath, config } from "../../Constants";
 import Modal from 'react-bootstrap/Modal';
@@ -29,7 +29,6 @@ const Register = () => {
   let [msg, setMsg] = useState(1);
   let [resend, setResend] = useState(1);
   let [minute, setMinute] = useState(59);
-  let mid = 59;
   let save = (e) => {
     setLoading(true);
     e.preventDefault();
@@ -79,7 +78,7 @@ const Register = () => {
           }
         },1000);
       }).catch((err)=>{
-        setErr(err.response.data.message);
+        setErr(err.response?.data?.message || 'Unable to send OTP. Please try again.');
       });
     }
     setLoading(false);
@@ -110,7 +109,7 @@ const Register = () => {
         }
       },1000);
     }).catch((err)=>{
-      setOtpErr(err.response.data.message);
+      setOtpErr(err.response?.data?.message || 'Unable to resend OTP. Please try again.');
     });
   }
 
@@ -169,7 +168,7 @@ const Register = () => {
     }
   }
   let otpVerify = () => {
-    if(otp.trim() === '' || otp.length != 6 || isNaN(otp)){
+    if(otp.trim() === '' || otp.length !== 6 || isNaN(otp)){
       setOtpErr('OTP is required or invalid');
     }else{
       setOtpErr(false);
@@ -185,9 +184,9 @@ const Register = () => {
       let url = `${apiPath}users/signUp/`;
       axios.post(url, user, config).then((res)=>{
         setMsg(0)
-        const myTimeout = setTimeout(successMsg, 3000);
+        setTimeout(successMsg, 3000);
       }).catch((err)=>{
-        setOtpErr(err.response.data.error);
+        setOtpErr(err.response?.data?.error || 'OTP verification failed. Please try again.');
         setShow(true);
       });
     }
@@ -251,7 +250,7 @@ const Register = () => {
               <Col sm="12" md={{offset: 2,size: 8}}>
                 <div className={contentArea}>
                   <div className='gridmargin'>
-                  {(err != '') && <Alert color="danger">{err}</Alert>}
+                  {(err !== '') && <Alert color="danger">{err}</Alert>}
                    <Form onSubmit={save}>
                       <FormGroup>
                         <Label for="exampleName">Name</Label>

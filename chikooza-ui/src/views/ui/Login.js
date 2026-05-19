@@ -1,4 +1,4 @@
-import { Alert, Row, Col, Table, Card, CardTitle, CardBody, Button, Form ,FormGroup ,Label ,Input ,FormText, Nav, NavItem } from "reactstrap";
+import { Alert, Row, Col, Card, CardTitle, CardBody, Button, Form, FormGroup, Label } from "reactstrap";
 import '../../assets/css/header.css';
 import { Link } from "react-router-dom";
 import { useState } from "react";
@@ -38,10 +38,10 @@ const Login = () => {
         navigate("/member");
       }).catch((err)=>{
         // console.log(err)
-        if(err.response.data === undefined){
+        if(err.response?.data === undefined){
           setError('Network error. Please try again');
         }else{
-          setError(err.response.data.error);
+          setError(err.response.data?.error || 'Login failed. Please try again.');
         }
         setLoading(false);
       });
@@ -84,7 +84,7 @@ const Login = () => {
               <Col sm="12" md={{offset: 2,size: 8}}>
                 <div className={contentArea}>
                   <div className='gridmargin'>
-                  {(error != '') && <Alert color="danger">{error}</Alert>}
+                  {(error !== '') && <Alert color="danger">{error}</Alert>}
                     <Form  onSubmit={LoginChecked}>
                       <FormGroup>
                         <Label for="exampleEmail">Username</Label>

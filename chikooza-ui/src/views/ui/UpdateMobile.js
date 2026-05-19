@@ -1,9 +1,8 @@
-import { Alert, Row, Col, Table, Card, CardTitle, CardBody, Button, Form, FormGroup, Label, Input, FormText, Nav, NavItem } from "reactstrap";
+import { Alert, Row, Col, Card, CardTitle, CardBody, Button, Form, FormGroup, Label } from "reactstrap";
 import '../../assets/css/header.css';
-import { Link } from "react-router-dom";
 import { useState } from "react";
 import { FaPhoneAlt } from "react-icons/fa";
-import { contentArea, apiPath, config } from "../../Constants";
+import { contentArea, apiPath, getAuthConfig, handleUnauthorized } from "../../Constants";
 import Modal from 'react-bootstrap/Modal';
 import { FaMobile } from "react-icons/fa";
 import axios from 'axios';
@@ -39,18 +38,21 @@ const UpdateMobile = () => {
         mobile_number: mobile
       };
       let url = `${apiPath}users/sendOtpForUpdateMobile/`;
-      config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
-      axios.post(url, user, config).then((res) => {
+      // U: Replaced shared config mutation with per-request auth headers from getAuthConfig().
+      // config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
+      axios.post(url, user, getAuthConfig()).then((res) => {
         setShow(true);
         setLoading(false)
       }).catch((err) => {
-        setLoading(true)
-        setErr(err.response.data.error);
+        // U: Failed requests should leave loading state instead of keeping the button busy.
+        setLoading(false)
+        setErr(err.response?.data?.error || 'Unable to send OTP. Please try again.');
+        handleUnauthorized(err, navigate);
       });
     }
   }
   let otpVerify = () => {
-    if (otp.trim() === '' || otp.length != 6 || isNaN(otp)) {
+    if (otp.trim() === '' || otp.length !== 6 || isNaN(otp)) {
       setOtpErr('OTP is required or invalid');
     } else {
       setOtpErr(false);
@@ -59,13 +61,15 @@ const UpdateMobile = () => {
         otp: otp
       };
       let url = `${apiPath}users/updateMobile/${localStorage.getItem('publicid')}/`;
-      config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
-      axios.patch(url, user, config).then((res) => {
+      // U: Replaced shared config mutation with per-request auth headers from getAuthConfig().
+      // config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
+      axios.patch(url, user, getAuthConfig()).then((res) => {
         setMsg(0)
-        const myTimeout = setTimeout(successMsg, 3000);
+        setTimeout(successMsg, 3000);
       }).catch((err) => {
-        setOtpErr(err.response.data.error);
+        setOtpErr(err.response?.data?.error || 'Unable to update mobile number. Please try again.');
         setShow(true);
+        handleUnauthorized(err, navigate);
       });
     }
   }
@@ -117,7 +121,7 @@ const UpdateMobile = () => {
               <Col sm="12" md={{ offset: 2, size: 8 }}>
                 <div className={contentArea}>
                   <div className='gridmargin'>
-                    {(err != '') && <Alert color="danger">{err}</Alert>}
+                    {(err !== '') && <Alert color="danger">{err}</Alert>}
                     <Form onSubmit={change}>
                       <FormGroup>
                         <Label for="examplePassword">New Mobile No.</Label>
