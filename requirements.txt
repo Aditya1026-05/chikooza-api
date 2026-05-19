@@ -1,19 +1,33 @@
-amqp==5.1.1
+# U: OLD: amqp==5.1.1
+# U: NEW: Celery is not configured or imported by this project; keep broker deps out until a worker exists.
+# amqp==5.1.1
 anyio==3.6.1
 # U: OLD: asgiref==3.5.2
 # U: NEW: Django 5.2 requires the modern ASGI support package.
 asgiref==3.11.1
-billiard==3.6.4.0
-celery==5.2.7
+# U: OLD: billiard==3.6.4.0
+# U: NEW: unused Celery process-pool dependency; comment out with the unused Celery stack.
+# billiard==3.6.4.0
+# U: OLD: celery==5.2.7
+# U: NEW: no Celery app/tasks/worker are wired in this repo, so do not install unused worker runtime.
+# celery==5.2.7
 # U: OLD: certifi==2022.6.15
 # U: NEW: refresh HTTP trust-store/runtime dependencies as a low-risk backend hygiene step.
 certifi==2026.4.22
 # U: OLD: charset-normalizer==2.0.12
 charset-normalizer==3.4.7
-click==8.1.3
-click-didyoumean==0.3.0
-click-plugins==1.1.1
-click-repl==0.2.0
+# U: OLD: click==8.1.3
+# U: NEW: not directly imported by project code; direct pin removed so real dependents resolve it.
+# click==8.1.3
+# U: OLD: click-didyoumean==0.3.0
+# U: NEW: Celery helper dependency is unnecessary while Celery is not used.
+# click-didyoumean==0.3.0
+# U: OLD: click-plugins==1.1.1
+# U: NEW: Celery helper dependency is unnecessary while Celery is not used.
+# click-plugins==1.1.1
+# U: OLD: click-repl==0.2.0
+# U: NEW: Celery helper dependency is unnecessary while Celery is not used.
+# click-repl==0.2.0
 # U: OLD: dj-database-url==0.5.0
 # U: NEW: maintained database URL parser used directly in chikooza/settings.py.
 dj-database-url==3.1.2
@@ -55,7 +69,9 @@ httpcore==1.0.9
 httpx==0.28.1
 # U: OLD: idna==3.3
 idna==3.15
-kombu==5.2.4
+# U: OLD: kombu==5.2.4
+# U: NEW: unused Celery messaging dependency; comment out with the unused Celery stack.
+# kombu==5.2.4
 # U: OLD: oauthlib==3.2.0
 # U: NEW: required by django-oauth-toolkit 3.2.
 oauthlib==3.3.1
