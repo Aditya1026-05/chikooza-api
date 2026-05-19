@@ -149,6 +149,11 @@ const Header = () => {
               <DropdownItem className="linkheader"><Link to="/flocksummary" className="link">Flock Summary</Link></DropdownItem>
             </DropdownMenu>
           </UncontrolledDropdown>
+          <NavItem>
+            <Link to="/chatbot" className="linkheader linkheader-cta">
+              Farmer AI
+            </Link>
+          </NavItem>
         </Nav>
         <Dropdown isOpen={dropdownOpen} toggle={toggle}>
           <DropdownToggle color="transparent">

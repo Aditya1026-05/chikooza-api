@@ -18,6 +18,10 @@ The project is being maintained as one working repository/branch for handover:
 ## How Farmer Data Is Stored And Used By AI
 
 Farmer/customer data is stored in normal SQL database tables through Django models.
+The database engine depends on setup:
+
+- Local/default setup uses SQLite at `db1.sqlite3`.
+- If `DATABASE_URL` is configured, Django uses that database instead. The intended shared/production setup is PostgreSQL, for example `postgres://...`.
 
 Important examples:
 
@@ -42,8 +46,8 @@ when farmer A asks a question, the AI must query only rows where
 
 RAG is different. The current `chatbot/` RAG feature uses static poultry PDF
 documents from `chatbot/data/processed_documents/` and FAISS files in
-`chatbot/data/`. That RAG data is general poultry knowledge, not private farmer
-data. If we later add farmer-specific RAG, it should either build per-user
+`chatbot/data/`. The important RAG files are `index.faiss` and `index.pkl`.
+That RAG data is general poultry knowledge, not private farmer data. If we later add farmer-specific RAG, it should either build per-user
 indexes/namespaces or retrieve SQL records through authenticated, user-scoped
 queries before embedding/answering.
 
@@ -235,13 +239,21 @@ Sales affect bird counts and profit/loss summaries.
 
 ### `chatbot/`
 
-This is the existing basic RAG chatbot API.
+This app now has two public `/chat/` modes.
 
 Endpoint:
 
 - `/chat/`
 
-What it does:
+Public site mode:
+
+- The homepage widget sends `mode: "site"`.
+- It answers general questions about what Chikooza does.
+- It can use Groq when `GROQ_API_KEY` is configured.
+- It can fall back to Ollama or a deterministic local product answer.
+- It does not access private farmer data.
+
+Legacy RAG mode:
 
 - Loads a FAISS vector index from `data/`.
 - Uses sentence transformer embeddings.
@@ -266,6 +278,7 @@ What it does:
 - Uses an SQL-style agent.
 - Reads from tenant-safe SQL views such as `ai_purchase_data_view`, `ai_dailydata_data_view`, and `ai_sale_data_view`.
 - Tries to answer questions about farm/flock/sales/purchase data.
+- The logged-in frontend `/chatbot` page now calls this endpoint with the farmer's bearer token.
 
 This is related to Text-to-SQL work. The active implementation validates that the generated SQL is read-only and filtered to the authenticated user.
 

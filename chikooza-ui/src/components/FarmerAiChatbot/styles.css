@@ -1,0 +1,261 @@
+.farmer-ai-page {
+  min-height: calc(100vh - 92px);
+  background:
+    radial-gradient(circle at 12% 8%, rgba(228, 182, 93, 0.22), transparent 28%),
+    linear-gradient(135deg, #f7f1e2 0%, #edf7e9 56%, #f8eadc 100%);
+  padding: clamp(1rem, 4vw, 3rem);
+}
+
+.farmer-ai-shell {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.85fr) minmax(320px, 1.4fr);
+  gap: clamp(1rem, 3vw, 2rem);
+  max-width: 1180px;
+  margin: 0 auto;
+}
+
+.farmer-ai-panel,
+.farmer-ai-chat,
+.farmer-ai-empty {
+  border: 1px solid rgba(23, 79, 63, 0.14);
+  background: rgba(255, 252, 245, 0.86);
+  box-shadow: 0 24px 70px rgba(23, 79, 63, 0.14);
+}
+
+.farmer-ai-panel,
+.farmer-ai-empty {
+  border-radius: 2rem;
+  padding: clamp(1.5rem, 4vw, 2.5rem);
+}
+
+.farmer-ai-panel h1,
+.farmer-ai-empty h1 {
+  color: #17211d;
+  font-size: clamp(2.2rem, 4vw, 4.2rem);
+  font-weight: 900;
+  letter-spacing: -0.07em;
+  line-height: 0.95;
+  margin: 1rem 0;
+}
+
+.farmer-ai-panel p,
+.farmer-ai-empty p,
+.farmer-ai-guardrail span {
+  color: #607069;
+  line-height: 1.7;
+}
+
+.farmer-ai-kicker {
+  display: inline-flex;
+  align-items: center;
+  color: #174f3f;
+  background: rgba(47, 140, 98, 0.12);
+  border: 1px solid rgba(47, 140, 98, 0.2);
+  border-radius: 999px;
+  padding: 0.45rem 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.farmer-ai-guardrail {
+  display: grid;
+  gap: 0.4rem;
+  margin-top: 1.5rem;
+  border-radius: 1.25rem;
+  background: #174f3f;
+  color: #fff;
+  padding: 1rem;
+}
+
+.farmer-ai-guardrail strong,
+.farmer-ai-chat-header strong {
+  display: block;
+}
+
+.farmer-ai-guardrail span {
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.farmer-ai-chat {
+  border-radius: 2rem;
+  overflow: hidden;
+  display: grid;
+  grid-template-rows: auto minmax(360px, 1fr) auto auto;
+  min-height: 720px;
+}
+
+.farmer-ai-chat-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: center;
+  background: #174f3f;
+  color: #fff;
+  padding: 1rem 1.25rem;
+}
+
+.farmer-ai-chat-header span {
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 0.8rem;
+}
+
+.farmer-ai-status {
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 999px;
+  padding: 0.4rem 0.65rem;
+}
+
+.farmer-ai-messages {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  overflow-y: auto;
+  padding: 1.25rem;
+  background:
+    linear-gradient(rgba(255, 252, 245, 0.9), rgba(255, 252, 245, 0.9)),
+    radial-gradient(circle at 100% 0%, rgba(47, 140, 98, 0.18), transparent 28%);
+}
+
+.farmer-ai-message {
+  max-width: min(78%, 620px);
+  border-radius: 1.15rem;
+  padding: 0.9rem 1rem;
+}
+
+.farmer-ai-message p {
+  margin: 0;
+  line-height: 1.6;
+}
+
+.farmer-ai-message small {
+  display: block;
+  margin-top: 0.5rem;
+  opacity: 0.7;
+}
+
+.farmer-ai-message-bot {
+  align-self: flex-start;
+  background: #ffffff;
+  color: #17211d;
+  border: 1px solid rgba(23, 79, 63, 0.12);
+}
+
+.farmer-ai-message-user {
+  align-self: flex-end;
+  background: #174f3f;
+  color: #ffffff;
+}
+
+.farmer-ai-examples {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  border-top: 1px solid rgba(23, 79, 63, 0.1);
+  padding: 0.9rem 1rem;
+}
+
+.farmer-ai-examples button {
+  border: 1px solid rgba(23, 79, 63, 0.18);
+  border-radius: 999px;
+  background: rgba(47, 140, 98, 0.1);
+  color: #174f3f;
+  font-weight: 700;
+  padding: 0.45rem 0.7rem;
+}
+
+.farmer-ai-form {
+  display: grid;
+  gap: 0.55rem;
+  background: #ffffff;
+  border-top: 1px solid rgba(23, 79, 63, 0.1);
+  padding: 1rem;
+}
+
+.farmer-ai-form label {
+  color: #174f3f;
+  font-weight: 800;
+}
+
+.farmer-ai-form div {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-end;
+}
+
+.farmer-ai-form textarea {
+  flex: 1;
+  border: 1px solid rgba(23, 79, 63, 0.18);
+  border-radius: 1rem;
+  color: #17211d;
+  min-height: 58px;
+  outline: none;
+  padding: 0.85rem 1rem;
+  resize: vertical;
+}
+
+.farmer-ai-form textarea:focus {
+  border-color: #2f8c62;
+  box-shadow: 0 0 0 4px rgba(47, 140, 98, 0.12);
+}
+
+.farmer-ai-form .btn {
+  background: #174f3f;
+  border-color: #174f3f;
+  border-radius: 999px;
+  font-weight: 800;
+  padding: 0.8rem 1.15rem;
+  white-space: nowrap;
+}
+
+.farmer-ai-empty {
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+.farmer-ai-login-link {
+  display: inline-flex;
+  border-radius: 999px;
+  background: #174f3f;
+  color: #fff;
+  font-weight: 800;
+  margin-top: 1rem;
+  padding: 0.85rem 1.15rem;
+  text-decoration: none;
+}
+
+@media (max-width: 900px) {
+  .farmer-ai-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .farmer-ai-chat {
+    min-height: 640px;
+  }
+}
+
+@media (max-width: 560px) {
+  .farmer-ai-page {
+    padding: 0.75rem;
+  }
+
+  .farmer-ai-panel,
+  .farmer-ai-chat,
+  .farmer-ai-empty {
+    border-radius: 1.35rem;
+  }
+
+  .farmer-ai-chat {
+    min-height: 76vh;
+  }
+
+  .farmer-ai-message {
+    max-width: 92%;
+  }
+
+  .farmer-ai-form div {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}

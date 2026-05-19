@@ -257,6 +257,10 @@ Farmer/customer records are stored in SQL tables through Django models. The main
 business tables are `farms`, `flocks_flock`, `purchase_purchase`,
 `dailydata_dailydata`, and `sales_sales`.
 
+By default, local setup uses SQLite at `db1.sqlite3`. If `DATABASE_URL` is set,
+Django uses that database instead; use a PostgreSQL URL for a shared or
+production-like setup.
+
 The authenticated `/ai/` endpoint answers private farmer-data questions through
 tenant-safe SQL views: `ai_purchase_data_view`, `ai_dailydata_data_view`, and
 `ai_sale_data_view`. Those views expose `owner_id`, and the active AI service
@@ -264,7 +268,13 @@ must filter by the logged-in user before executing a query.
 
 The public `/chat/` site assistant is not allowed to access private farmer data.
 The legacy RAG mode uses general poultry PDF documents and FAISS files under
-`chatbot/data/`, not per-farmer records.
+`chatbot/data/`, especially `index.faiss` and `index.pkl`, not per-farmer
+records.
+
+Frontend routing mirrors that separation:
+
+- Public homepage widget: `/chat/` with `mode: "site"`.
+- Logged-in farmer AI page: `/chatbot`, which calls authenticated `/ai/`.
 
 
 ## Running the Development Server
