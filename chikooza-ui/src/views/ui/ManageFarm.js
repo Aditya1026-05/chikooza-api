@@ -1,6 +1,6 @@
 import { Spinner, Alert, Row, Col, Card, CardTitle, CardBody, FormGroup, Label, Input, Button, Form } from "reactstrap";
 import '../../assets/css/header.css';
-import { contentArea, apiPath, config } from "../../Constants";
+import { contentArea, apiPath, config, getAuthConfig, handleUnauthorized } from "../../Constants";
 import { FaMapMarkerAlt } from "react-icons/fa";
 import { useState, useEffect } from "react";
 import axios from 'axios';
@@ -12,11 +12,12 @@ const ManageFarm = () => {
   const navigate = useNavigate();
   const [show, setShow] = useState(false);
   const [quardinatesModel, setQuardinatesModel] = useState(false);
-  let [quardinates, setQuardinates] = useState({ latitude: null, longitude: null, quardinates: null });
+  // U: The coordinate value is persisted in addData.lat_long; the local value itself was unused.
+  let [, setQuardinates] = useState({ latitude: null, longitude: null, quardinates: null });
   let areaLocation = () => {
     navigator.geolocation.getCurrentPosition(function (position) {
       setQuardinates({ latitude: position.coords.latitude.toFixed(3), longitude: position.coords.longitude.toFixed(3), quardinates: `${position.coords.latitude.toFixed(3)},${position.coords.longitude.toFixed(3)}` });
-      //setCoordinatesError('');
+      setCoordinatesError('');
       setAddData({ ...addData, lat_long: `${position.coords.latitude.toFixed(3)},${position.coords.longitude.toFixed(3)}` });
       setQuardinatesModel(false)
     });
@@ -45,58 +46,50 @@ const ManageFarm = () => {
       setState(res.data.results);
     }).catch((err) => {
       //setState(res.data.results);
-      if (err.response.status === 401) {
-        localStorage.clear();
-        navigate("/login")
-      }
+      handleUnauthorized(err, navigate);
     });
-  }, [])
+  }, [navigate])
   useEffect(() => {
     let url = `${apiPath}country/`;
     axios.get(url, config).then((res) => {
       setCountry(res.data.results);
     }).catch((err) => {
       //setCountry(res.data.results);
-      if (err.response.status === 401) {
-        localStorage.clear();
-        navigate("/login")
-      }
+      handleUnauthorized(err, navigate);
     });
-  }, [])
+  }, [navigate])
 
   useEffect(() => {
     let url = `${apiPath}farm/`;
-    config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
-    axios.get(url, config).then((res) => {
-      if (res.data.results.length == 0) {
+    // U: Replaced shared config mutation with per-request auth headers from getAuthConfig().
+    // config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
+    axios.get(url, getAuthConfig()).then((res) => {
+      if (res.data.results.length === 0) {
         setFarm([{ public_id: 0, name: 'No farm available' }]);
       } else {
         setFarm(res.data.results);
       }
     }).catch((err) => {
       setFarm([{ public_id: 0, name: 'No farm available' }]);
-      if (err.response.status === 401) {
-        localStorage.clear();
-        navigate("/login")
-      }
+      handleUnauthorized(err, navigate);
     });
-  }, [])
+  }, [navigate])
 
   let save = (e) => {
     e.preventDefault();
     //console.log(e.target[4].value);
     //console.log(e.target[5].value);
     setLoading(false);
-    if (addData.country_public_id == 0) { setCountryError('Please select country'); error = 1; } else { setCountryError(''); }
-    if (addData.state_public_id == 0) { setStateError('Please select state'); error = 1; } else { setStateError(''); }
-    if (addData.name.trim() == '') { setFarmnameError('Please enter name'); error = 1; } else { setFarmnameError(''); }
-    if (addData.address.trim() == '') { setAddressError('Please enter address'); error = 1; } else { setAddressError(''); }
-    if (addData.pin.trim() == '' || addData.pin.trim() < 1) { setPincodeError('Please enter pincode'); error = 1; } else { setPincodeError(''); }
+    if (String(addData.country_public_id) === "0") { setCountryError('Please select country'); error = 1; } else { setCountryError(''); }
+    if (String(addData.state_public_id) === "0") { setStateError('Please select state'); error = 1; } else { setStateError(''); }
+    if (addData.name.trim() === '') { setFarmnameError('Please enter name'); error = 1; } else { setFarmnameError(''); }
+    if (addData.address.trim() === '') { setAddressError('Please enter address'); error = 1; } else { setAddressError(''); }
+    if (addData.pin.trim() === '' || addData.pin.trim() < 1) { setPincodeError('Please enter pincode'); error = 1; } else { setPincodeError(''); }
     //if(addData.lat_long.trim() == ''){setCoordinatesError('Please enter coordinates');error = 1;}
-    if (addData.shed_count == '' || addData.shed_count < 1) { setNumberofshedsError('Please enter no of sheds'); error = 1; } else { setNumberofshedsError(''); }
-    if (addData.city.trim() == '') { setCityorvillageError('Please enter city/Village name'); error = 1; } else { setCityorvillageError(''); }
-    if (e.target[0].value.trim() != '' && e.target[1].value.trim() != '' && e.target[2].value.trim() != '' && e.target[3].value != '' && e.target[6].value != '')
-      if (error == 0) {
+    if (addData.shed_count === '' || addData.shed_count < 1) { setNumberofshedsError('Please enter no of sheds'); error = 1; } else { setNumberofshedsError(''); }
+    if (addData.city.trim() === '') { setCityorvillageError('Please enter city/Village name'); error = 1; } else { setCityorvillageError(''); }
+    if (e.target[0].value.trim() !== '' && e.target[1].value.trim() !== '' && e.target[2].value.trim() !== '' && e.target[3].value !== '' && e.target[6].value !== '')
+      if (error === 0) {
         setLoading(true);
         let farmData = {
           name: addData.name,
@@ -109,20 +102,18 @@ const ManageFarm = () => {
           shed_count: addData.shed_count,
         };
         let url = `${apiPath}farm/${addData.public_id}/`;
+        // U: Replaced shared config mutation with per-request auth headers from getAuthConfig().
         // config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
-        axios.patch(url, farmData, config).then((res) => {
+        axios.patch(url, farmData, getAuthConfig()).then((res) => {
           //setErr('Farm Updated successfully');
           setShow(true);
           setLoading(false)
           setTimeout((() => {
             setShow(false);
-            let newArray = farm.slice();
-            let obj = newArray.find((o, i) => {
-              if (o.public_id === addData.public_id) {
-                newArray[i] = { name: addData.name, public_id: addData.public_id };
-                return true; // stop searching
-              }
-            });
+            // U: Replaced find side effects with map so the callback always returns a value.
+            setFarm((currentFarm) => currentFarm.map((item) => (
+              item.public_id === addData.public_id ? { ...item, name: addData.name } : item
+            )));
             setAddData({ ...addData, name: "", address: "", city: "", state_public_id: "", country_public_id: "", pin: "", lat_long: "", shed_count: "" })
             setShowForm(false)
             window.location.reload();
@@ -131,32 +122,29 @@ const ManageFarm = () => {
         }).catch((err) => {
           setLoading(false)
           setErr('Something went wrong. Please try again');
-          if (err.response.status === 401) {
-            localStorage.clear();
-            navigate("/login")
-          }
+          handleUnauthorized(err, navigate);
         });
       }
   }
   let countryChange = (e) => {
     setAddData({ ...addData, country_public_id: e.target.value });
-    e.target.value.trim() == 0 ? setCountryError('Please select country') : setCountryError('');
+    e.target.value.trim() === "0" ? setCountryError('Please select country') : setCountryError('');
   }
   let stateChange = (e) => {
     setAddData({ ...addData, state_public_id: e.target.value });
-    e.target.value.trim() == 0 ? setStateError('Please select state') : setStateError('');
+    e.target.value.trim() === "0" ? setStateError('Please select state') : setStateError('');
   }
   let farmnameChange = (e) => {
     setAddData({ ...addData, name: e.target.value });
-    e.target.value.trim() == '' ? setFarmnameError('Please enter name') : setFarmnameError('');
+    e.target.value.trim() === '' ? setFarmnameError('Please enter name') : setFarmnameError('');
   }
   let addressChange = (e) => {
     setAddData({ ...addData, address: e.target.value });
-    e.target.value.trim() == '' ? setAddressError('Please enter address') : setAddressError('');
+    e.target.value.trim() === '' ? setAddressError('Please enter address') : setAddressError('');
   }
   let pincodeChange = (e) => {
     setAddData({ ...addData, pin: e.target.value });
-    e.target.value.trim() == '' || e.target.value.trim() < 1 ? setPincodeError('Please enter pincode') : setPincodeError('');
+    e.target.value.trim() === '' || e.target.value.trim() < 1 ? setPincodeError('Please enter pincode') : setPincodeError('');
   }
   // let coordinatesChange = (e) => {
   //   setAddData({...addData,lat_long:e.target.value});
@@ -164,24 +152,22 @@ const ManageFarm = () => {
   // }
   let numberofshedsChange = (e) => {
     setAddData({ ...addData, shed_count: e.target.value });
-    e.target.value.trim() == '' || e.target.value.trim() < 1 ? setNumberofshedsError('Please enter no of sheds') : setNumberofshedsError('');
+    e.target.value.trim() === '' || e.target.value.trim() < 1 ? setNumberofshedsError('Please enter no of sheds') : setNumberofshedsError('');
   }
   let cityorvillageChange = (e) => {
     setAddData({ ...addData, city: e.target.value });
-    e.target.value.trim() == '' ? setCityorvillageError('Please enter city/Village name') : setCityorvillageError('');
+    e.target.value.trim() === '' ? setCityorvillageError('Please enter city/Village name') : setCityorvillageError('');
   }
   let displayForm = (e) => {
-    if (e.target.value != 0) {
+    if (e.target.value !== "0") {
       let url = `${apiPath}farm/${e.target.value}/`;
-      config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
-      axios.get(url, config).then((res) => {
+      // U: Replaced shared config mutation with per-request auth headers from getAuthConfig().
+      // config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
+      axios.get(url, getAuthConfig()).then((res) => {
         setAddData(res.data.results);
       }).catch((err) => {
         //setFarm(res.data.results);
-        if (err.response.status === 401) {
-          localStorage.clear();
-          navigate("/login")
-        }
+        handleUnauthorized(err, navigate);
       });
       setShowForm(true);
     } else {
@@ -228,11 +214,11 @@ const ManageFarm = () => {
                 <Col sm="12" md={{ offset: 2, size: 8 }}>
                   <div className={contentArea}>
                     <div className='gridmargin'>
-                      {(err != '') && <Alert color="danger">{err}</Alert>}
+                      {(err !== '') && <Alert color="danger">{err}</Alert>}
                       <FormGroup>
                         <Label for="exampleSelect">Farm Name</Label>
-                        <Input onChange={displayForm} id="farmSelect" defaultValue={'Select Farm'} name="farm" type="select">
-                          <option disabled defaultValue={-1}>Select Farm</option>
+                        <Input onChange={displayForm} id="farmSelect" defaultValue="0" name="farm" type="select">
+                          <option value="0">Select Farm</option>
                           {
                             farm.map(item =>
                               <option key={item.public_id} value={item.public_id}>{item.name}</option>
@@ -279,9 +265,7 @@ const ManageFarm = () => {
                               {
                                 country.map(item => {
                                   return (
-                                    <>
-                                      <option selected={item.public_id == addData.country_public_id} key={item.public_id} value={item.public_id}>{item.name}</option>
-                                    </>
+                                    <option key={item.public_id} value={item.public_id}>{item.name}</option>
                                   )
                                 }
                                 )
@@ -296,9 +280,7 @@ const ManageFarm = () => {
                               {
                                 state.map(item => {
                                   return (
-                                    <>
-                                      <option selected={item.public_id == addData.state_public_id} key={item.public_id} value={item.public_id}>{item.name}</option>
-                                    </>
+                                    <option key={item.public_id} value={item.public_id}>{item.name}</option>
                                   )
                                 }
                                 )
