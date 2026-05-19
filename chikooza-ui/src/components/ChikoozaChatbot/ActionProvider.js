@@ -1,6 +1,11 @@
 // MV-2025-07-05-<4>  STARTS
 import { apiPath } from '../../Constants';
 
+const getChatApiUrl = () => {
+  const baseUrl = apiPath || '/';
+  return `${baseUrl.replace(/\/?$/, '/')}chat/`;
+};
+
 class ActionProvider {
   constructor(createChatBotMessage, setStateFunc) {
     this.createChatBotMessage = createChatBotMessage;
@@ -8,25 +13,36 @@ class ActionProvider {
   }
 
   handleUserMessage = async (message) => {
-    // Show loading message
+    if (!message?.trim()) {
+      this.updateChatbotState(this.createChatBotMessage("Please type a question first."));
+      return;
+    }
+
     const loadingMessage = this.createChatBotMessage("Thinking...");
     this.updateChatbotState(loadingMessage);
 
     try {
-      // Send to backend and get response
       // OLD: const res = await fetch('https://local.api.chuza.com:8001/chat/', {
-      // NEW: Use the same environment-driven API base URL as the rest of the UI.
-      const res = await fetch(`${apiPath}chat/`, {
+      // U: NEW: build the URL from REACT_APP_API_BASE_URL and tolerate missing trailing slashes.
+      const res = await fetch(getChatApiUrl(), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: message })
+        body: JSON.stringify({ query: message.trim() })
       });
-      const data = await res.json();
-      const botMessage = this.createChatBotMessage(data.response || data.message || "No response received");
-      this.updateChatbotState(botMessage);
 
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || data.message || "Chatbot request failed.");
+      }
+
+      const botMessage = this.createChatBotMessage(data.response || data.message || "No response received.");
+      this.updateChatbotState(botMessage);
     } catch (error) {
-      const errorMessage = this.createChatBotMessage("Sorry, I couldn't get a response");
+      // U: OLD: every backend error displayed the same generic message.
+      // U: NEW: show safe backend validation errors, while still hiding technical details.
+      const errorMessage = this.createChatBotMessage(
+        error.message || "Sorry, I couldn't get a response."
+      );
       this.updateChatbotState(errorMessage);
     }
   };

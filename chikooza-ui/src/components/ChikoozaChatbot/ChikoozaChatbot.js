@@ -11,7 +11,7 @@ import './styles.css'; // Import your chatbot styles
  * ChikoozaChatbot Component
  * A customizable chatbot interface for the Chikooza application
  */
-const ChikoozaChatbot = ({ defaultOpen = false }) => {
+const ChikoozaChatbot = ({ defaultOpen = false, alwaysVisible = true }) => {
   const [showChatbot, setShowChatbot] = useState(defaultOpen);
 
   const toggleChatbot = () => {
@@ -19,7 +19,7 @@ const ChikoozaChatbot = ({ defaultOpen = false }) => {
   };
 
   return (
-    <div className="chikooza-chatbot-container">
+    <div className="chikooza-chatbot-container" hidden={!alwaysVisible && !showChatbot}>
       {showChatbot && (
         <div className="chatbot-wrapper">
           <Chatbot
@@ -31,24 +31,27 @@ const ChikoozaChatbot = ({ defaultOpen = false }) => {
       )}
 
       <button
-  className="chatbot-toggle-button"
-  onClick={toggleChatbot}
-  aria-label={showChatbot ? 'Close chatbot' : 'Open chatbot'}
->
-  {showChatbot ? '×' : '💭'}
-</button>
-{!showChatbot && (
-  <div className="chatbot-label">
-    <span>Chat with</span>
-    <span>Chikbot</span>
-  </div>
-)}
+        type="button"
+        className="chatbot-toggle-button"
+        onClick={toggleChatbot}
+        aria-expanded={showChatbot}
+        aria-label={showChatbot ? 'Close chatbot' : 'Open chatbot'}
+      >
+        {showChatbot ? '×' : '💭'}
+      </button>
+      {!showChatbot && (
+        <div className="chatbot-label">
+          <span>Chat with</span>
+          <span>Chikbot</span>
+        </div>
+      )}
     </div>
   );
 };
 
 ChikoozaChatbot.propTypes = {
-  defaultOpen: PropTypes.bool
+  defaultOpen: PropTypes.bool,
+  alwaysVisible: PropTypes.bool
 };
 
 export default ChikoozaChatbot;
