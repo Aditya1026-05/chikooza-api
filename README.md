@@ -1,88 +1,63 @@
-# chikooza_backend
+# Chikooza Monorepo
 
+U: OLD: this file was the default GitLab repository template.
+U: NEW: this repo now documents the actual Chikooza backend + frontend setup.
 
+Chikooza is a poultry farm operations MVP with:
 
-## Getting started
+- Django REST backend for auth, farms, flocks, purchases, daily data, sales, PDFs, admin, chatbot, and authenticated AI data queries.
+- React/Vite frontend in `chikooza-ui/`.
+- Local SQLite by default, with deployment database support through `DATABASE_URL`.
+- Existing RAG chatbot at `/chat/` and authenticated tenant-safe AI endpoint at `/ai/`.
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+## Current Branch
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+Use `correct-version` for the current working branch:
 
-## Add your files
-
-- [ ] [Create](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#create-a-file) or [upload](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#upload-a-file) files
-- [ ] [Add files using the command line](https://docs.gitlab.com/ee/gitlab-basics/add-file.html#add-a-file-using-the-command-line) or push an existing Git repository with the following command:
-
+```bash
+git checkout correct-version
+git pull origin correct-version
 ```
-cd existing_repo
-git remote add origin http://192.168.1.2:81/chikooza/chikooza_backend.git
-git branch -M main
-git push -uf origin main
-```
 
-## Integrate with your tools
+## Backend
 
-- [ ] [Set up project integrations](http://192.168.1.2:81/chikooza/chikooza_backend/-/settings/integrations)
-
-## Collaborate with your team
-
-- [ ] [Invite team members and collaborators](https://docs.gitlab.com/ee/user/project/members/)
-- [ ] [Create a new merge request](https://docs.gitlab.com/ee/user/project/merge_requests/creating_merge_requests.html)
-- [ ] [Automatically close issues from merge requests](https://docs.gitlab.com/ee/user/project/issues/managing_issues.html#closing-issues-automatically)
-- [ ] [Enable merge request approvals](https://docs.gitlab.com/ee/user/project/merge_requests/approvals/)
-- [ ] [Automatically merge when pipeline succeeds](https://docs.gitlab.com/ee/user/project/merge_requests/merge_when_pipeline_succeeds.html)
-
-## Test and Deploy
-
-Use the built-in continuous integration in GitLab.
-
-- [ ] [Get started with GitLab CI/CD](https://docs.gitlab.com/ee/ci/quick_start/index.html)
-- [ ] [Analyze your code for known vulnerabilities with Static Application Security Testing(SAST)](https://docs.gitlab.com/ee/user/application_security/sast/)
-- [ ] [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/ee/topics/autodevops/requirements.html)
-- [ ] [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/ee/user/clusters/agent/)
-- [ ] [Set up protected environments](https://docs.gitlab.com/ee/ci/environments/protected_environments.html)
-
-***
-
-# Setup
-Install python 10.3
-
-###############Create enviromanet  out side repo directory ############
-apt install python3.10-dev python3.10-venv
-
-python3.10 -m venv env
-
-###############Active enviroment###########
-
-. env/bin/activate
-
-###############Go to the repo directory and run setup##################
-
-cd chikooza-api
-
+```bash
+python3 -m venv venv
+source venv/bin/activate
 pip install -r requirements.txt
+cp .env.example .env
+python manage.py migrate
+python manage.py runserver 8002
+```
 
-############## If getting any error install this all packages ############
+Local API URL: `http://127.0.0.1:8002/`
 
-sudo apt-get install python3.10-dev libmysqlclient-dev
+Admin URL: `http://127.0.0.1:8002/admin/`
 
-sudo apt-get install libpq5
+For local MVP testing, `.env.example` keeps `CHIKOOZA_FIXED_OTP=123456`. Remove that variable outside local testing.
 
-sudo apt-get install libpq-dev
+## Frontend
 
-sudo apt install libgraphviz-dev
+```bash
+cd chikooza-ui
+npm install
+cp .env.example .env
+npm run dev
+```
 
-sudo pip install pygraphviz
+Vite usually serves the UI at `http://localhost:5173/`.
 
-sudo apt install build-essential
+## Verification
 
-sudo apt-get install libpq-dev
+```bash
+venv/bin/python manage.py check
+venv/bin/python manage.py test
+cd chikooza-ui && npm run build
+cd chikooza-ui && npm audit --omit=dev
+```
 
-pip install gevent
+## Notes
 
-##############Run Setup ############
-
-python manage.py runserver
-
-          or
-python manage.py runserver 0.0.0.0:8000
+- Do not commit real secrets. Keep `GROQ_API_KEY`, `DJANGO_SECRET_KEY`, database credentials, and deployment keys in local `.env` or deployment secrets only.
+- The old code is preserved where replaced, using `U:` comments to mark old/new behavior.
+- The PDF template content still needs a product-specific update; the renderer dependency stack is modernized.

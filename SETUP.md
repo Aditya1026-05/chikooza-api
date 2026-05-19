@@ -22,7 +22,7 @@ Before starting, ensure you have:
 2. Internet connection for downloading packages
 3. Basic command line knowledge
 4. Git connection with your system
-5. Access to the repositories for chikooza-api
+5. Access to the `chikooza-api` repository. The frontend now lives inside this same repo at `chikooza-ui/`.
 
 
 ## Git Repository Operations
@@ -35,7 +35,7 @@ git clone https://github.com/RadianceVA/chikooza-api.git
 #### Step 2: Navigate to Repository
 
 ```
-cd path/to/chikooza
+cd chikooza-api
 ```
 #### Step 3: Check Repository Status
 
@@ -46,12 +46,11 @@ git status
 #### Step 4: Branch Operations
 
 
-```
-git checkout fix_flock_api
-```
-```
-# Pull latest changes from current branch
-git pull origin fix_flock_api
+```bash
+# U: OLD: git checkout fix_flock_api
+# U: NEW: current modernization branch used for local setup and review.
+git checkout correct-version
+git pull origin correct-version
 ```
 #### Step 5: Verify Branch Switch
 
@@ -66,7 +65,7 @@ git branch
 
 1. Download Python:
     1. Visit python.org
-    2. Download Python 3.8 or higher (recommended: Python 3.9+)
+    2. Download Python 3.11 or higher
 2. Install Python:
      1. Run the downloaded installer
      2. ✅ Check "Add Python to PATH"
@@ -196,19 +195,12 @@ chikooza_user;
 **3. Update settings.py:**
 
 
- Add in settings.py:
+ U: OLD: the guide suggested editing `settings.py` manually.
 
-```
-DATABASES = {
-    'default': {
-    'ENGINE': 'django.db.backends.postgresql',
-    'NAME': 'chikooza_db',
-    'USER': 'chikooza_user',
-    'PASSWORD': 'your_password',
-    'HOST': 'localhost',
-    'PORT': '5432',
-    }
-}
+ U: NEW: keep settings code unchanged and configure PostgreSQL through `.env`:
+
+```bash
+DATABASE_URL=postgres://chikooza_user:your_password@localhost:5432/chikooza_db
 ```
 
 
@@ -241,17 +233,17 @@ the real key; `.env.example` intentionally keeps it blank.
 `CHIKOOZA_FIXED_OTP=123456` is only for local MVP testing. In production, remove
 that variable so OTPs are generated randomly.
 
-#### 2. Delete the existing Database:
+#### 2. Do not manually edit migrations for normal setup
 
+U: OLD: the handoff guide asked developers to delete database files and comment
+sales migration operations manually.
+
+U: NEW: this branch already contains the migration/setup fixes. For normal local
+setup, run migrations as-is:
+
+```bash
+python manage.py migrate
 ```
-del db.sqlite
-```
-#### 3. Comment the contents of operations in the files:
-
-
-1. sales/migrations/0004_auto_20221130_
-2. sales/migrations/0006_auto_20221201_
-3. sales/migrations/0007_sales_buyer_email
 
 
 ## Running the Development Server
@@ -259,7 +251,6 @@ del db.sqlite
 #### Step 1: Apply Database Migrations after the changes
 
 ```
-python manage.py makemigrations
 python manage.py migrate
 ```
 #### Step 2: Create Superuser (Optional but Recommended)
@@ -288,7 +279,7 @@ Once the server is running, you should see output like:
 ```
 System check identified no issues (0 silenced).
 June 10, 2025 - 10:30:
-Django version 4.1.3, using settings 'chikooza.settings'
+Django version 5.2.x, using settings 'chikooza.settings'
 Starting development server at http://127.0.0.1:8002/
 Quit the server with CTRL-C.
 ```

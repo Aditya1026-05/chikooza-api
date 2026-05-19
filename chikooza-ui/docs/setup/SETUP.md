@@ -76,13 +76,15 @@ ________________________________________________________________________
 
 ### Step 1: Clone the Repository
 
-```
-git clone https://github.com/RadianceVA/chikooza-ui.git
+```bash
+# U: OLD: git clone https://github.com/RadianceVA/chikooza-ui.git
+# U: NEW: frontend source is kept inside the backend monorepo.
+git clone https://github.com/RadianceVA/chikooza-api.git
 ```
 ### Step 2: Navigate to Repository
 
-```
-cd path/to/chikooza
+```bash
+cd chikooza-api/chikooza-ui
 ```
 ### Step 3: Check Repository Status
 
@@ -93,12 +95,11 @@ git status
 
 ### Step 4: Branch Operations
 
-```
-git checkout fixing-frontend
-```
-```
-# Pull latest changes from current branch
-git pull origin fixing-frontend
+```bash
+# U: OLD: git checkout fixing-frontend
+# U: NEW: current frontend source is on the monorepo branch.
+git checkout correct-version
+git pull origin correct-version
 ```
 ### Step 5: Verify Branch Switch
 

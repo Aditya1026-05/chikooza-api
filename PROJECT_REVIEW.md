@@ -5,17 +5,17 @@ This note captures the current understanding of the repo after first local setup
 ## Local Status
 
 - Backend: Django API runs locally on `http://127.0.0.1:8002/`.
-- UI: React app runs locally on `http://127.0.0.1:3000/`.
+- UI: React/Vite app usually runs locally on `http://localhost:5173/`.
 - Database: local SQLite file is `db1.sqlite3`.
-- Chatbot: basic existing chatbot wiring is preserved. Full generated answers require local Ollama plus `llama3.2:3b`; without Ollama, `/chat/` now returns a retrieval-only fallback instead of a 500 error.
+- Chatbot: existing RAG wiring is preserved and upgraded to the current LangChain package split. Full generated answers require local Ollama plus the configured model; without Ollama, `/chat/` returns a retrieval-only fallback instead of a 500 error.
 
 ## Verified
 
 - `venv/bin/python manage.py check` passes.
 - `venv/bin/python manage.py migrate --plan` reports no pending migrations.
-- `venv/bin/python manage.py test` runs successfully, but there are zero backend tests.
+- `venv/bin/python manage.py test` runs successfully with the current backend test suite.
 - `npm run build` succeeds for the UI.
-- The UI build tool has been migrated from CRA/react-scripts to Vite; no frontend test runner is configured yet.
+- The UI build tool has been migrated from CRA/react-scripts to Vite and React 19; no frontend test runner is configured yet.
 - `/chat/` returns `200 OK` with retrieved context fallback when Ollama is not installed/running.
 - API smoke test works for OTP creation, signup, and login.
 
@@ -57,7 +57,7 @@ This note captures the current understanding of the repo after first local setup
 
 ## Fixes Applied
 
-- Backend dependencies were pinned/updated enough to install on Python 3.11 and pass Django checks.
+- Backend dependencies were upgraded to the current Django 5.2 / DRF 3.17 stack and pass checks/tests.
 - OLD sales migrations that duplicated columns already present in `sales/migrations/0001_initial.py` were commented and replaced with no-op migration operations.
 - OLD eager chatbot service startup was commented/replaced with lazy loading so Django can start without initializing local RAG/Ollama on import.
 - OLD hardcoded backend `HOSTNAME = "http://127.0.0.1:8001/"` was commented/replaced with `CHIKOOZA_API_BASE_URL`, defaulting to `http://127.0.0.1:8002/`.
@@ -72,6 +72,7 @@ This note captures the current understanding of the repo after first local setup
 - Added missing UI dependency `react-chatbot-kit`.
 - OLD UI chatbot fetch URL `https://local.api.chuza.com:8001/chat/` was commented/replaced with `${apiPath}chat/`.
 - OLD chatbot behavior returned a 500 when Ollama was unavailable; new behavior keeps the endpoint usable with a retrieval-only fallback and explicit Ollama setup guidance.
+- U: OLD frontend used a blue generic admin theme; global SCSS now uses a poultry/agriculture palette and modern typography.
 
 ## Good Things
 
@@ -83,14 +84,14 @@ This note captures the current understanding of the repo after first local setup
 
 ## Risks And Bad Things
 
-- Very little automated testing exists. Both backend and UI currently have zero tests.
+- Backend tests now cover core tenant-isolation and auth/helper behavior. The UI still has no configured test runner.
 - Many frontend warnings show unused imports, weak equality checks, missing hook dependencies, and array callback mistakes.
 - UI still mutates a shared `config` object in many older files; new touched screens now use a fresh authenticated config helper.
 - Backend settings are safer than before, but deployment still needs real `DJANGO_SECRET_KEY`, `DJANGO_DEBUG=False`, exact allowed hosts, exact CORS origins, HTTPS/security headers, and deployment testing.
 - Migrations are inconsistent in `sales`; no-op migration patches make local setup work but should be cleaned properly later.
 - The backend depends on local/slow AI services in `chatbot` and `aibot`; `chatbot` now has graceful failure, while `aibot` still needs the same level of review.
-- `aibot/services.py` uses pattern matching plus LangChain SQL agent behavior and contains risky parsing/formatting logic that should be reviewed before production use.
-- The UI still uses React 17, but CRA/react-scripts has been replaced with Vite to reduce dependency risk. React 19 remains a separate migration because some UI libraries still need compatibility review.
+- Active `/ai/` now uses `aibot/modern_services.py` for deterministic tenant-safe Text-to-SQL. Legacy LangChain services are kept for reference but are no longer imported by the active view.
+- The UI now uses React 19 and Vite. Deeper UI QA on every screen is still needed because the app has no frontend tests.
 - Generated UI `build/` artifacts are tracked; this creates noisy diffs after every build.
 
 ## Recommended Next Steps
