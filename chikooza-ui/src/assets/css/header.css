@@ -477,6 +477,19 @@ input[type=number]::-webkit-inner-spin-button,
   box-shadow: 0 10px 24px rgba(15, 23, 42, 0.14) !important;
 }
 
+.btn-transparent {
+  background: transparent;
+  border-color: transparent;
+  color: inherit;
+}
+
+.btn-transparent:hover,
+.btn-transparent:focus {
+  background: rgba(15, 61, 46, 0.08);
+  border-color: transparent;
+  color: inherit;
+}
+
 .chikooza-banner-title {
   position: relative;
   z-index: 1;
