@@ -20,7 +20,7 @@ import '../assets/css/header.css';
 import { useEffect } from "react";
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { apiPath, config } from "../Constants";
+import { apiPath, getAuthConfig } from "../Constants";
 import { FaAngleDown } from "react-icons/fa";
 
 const Header = () => {
@@ -42,8 +42,9 @@ const Header = () => {
   }, [navigate])
   let logout = () => {
     let url = `${apiPath}users/logout/`;
-    config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
-    axios.get(url, config).then((res) => {
+    // U: Replaced shared config mutation with per-request auth headers from getAuthConfig().
+    // config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
+    axios.get(url, getAuthConfig()).then((res) => {
       localStorage.clear();
       navigate("/login");
     }).catch((err) => {

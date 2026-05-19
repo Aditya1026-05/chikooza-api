@@ -2,7 +2,7 @@ import { Alert, Row, Col, Card, CardTitle, CardBody, Button, Form, FormGroup, La
 import '../../assets/css/header.css';
 import { useState } from "react";
 import { FaLock } from "react-icons/fa";
-import { contentArea, apiPath, config } from "../../Constants";
+import { contentArea, apiPath, getAuthConfig, handleUnauthorized } from "../../Constants";
 import axios from 'axios';
 import { useNavigate } from "react-router-dom";
 import Modal from 'react-bootstrap/Modal';
@@ -17,17 +17,22 @@ const ChangePassword = () => {
   let [show, setShow] = useState(false)
 
   let change = (e) => {
-    console.log("adsfgh");
     e.preventDefault();
     setLoading(false)
     if (addData.currentpassword === '') {
-      setaddDataError(addDataError.currentpassword = 'Current password is required');
-    } console.log(addData.currentpassword.length);
+      // U: Replaced direct error-state mutation with an immutable update.
+      // setaddDataError(addDataError.currentpassword = 'Current password is required');
+      setaddDataError({ ...addDataError, currentpassword: 'Current password is required' });
+    }
     if (addData.currentpassword.length > 30) {
-      setaddDataError(addDataError.currentpassword = "Ensure this field has no more than 30 characters");
+      // U: Replaced direct error-state mutation with an immutable update.
+      // setaddDataError(addDataError.currentpassword = "Ensure this field has no more than 30 characters");
+      setaddDataError({ ...addDataError, currentpassword: "Ensure this field has no more than 30 characters" });
     }
     if (addData.npassword === '') {
-      setaddDataError(addDataError.npassword = 'New password is required');
+      // U: Replaced direct error-state mutation with an immutable update.
+      // setaddDataError(addDataError.npassword = 'New password is required');
+      setaddDataError({ ...addDataError, npassword: 'New password is required' });
     }
     if ((addData.cpassword === '') || (addData.npassword !== addData.cpassword)) {
       setaddDataError({ ...addDataError, cpassword: 'Confirm password is required or password and confirm Password does not match' });
@@ -41,25 +46,21 @@ const ChangePassword = () => {
         confirm_new_password: addData.cpassword
       };
       let url = `${apiPath}users/changePassword/`;
-      config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
-      axios.post(url, user, config).then((res) => {
+      // U: Replaced shared config mutation with per-request auth headers from getAuthConfig().
+      // config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
+      axios.post(url, user, getAuthConfig()).then((res) => {
         setErr(res.data.message);
         setLoading(false)
         setShow(true)
         setTimeout(successMsg, 3000);
-        console.log("res");
       }).catch((err) => {
-        console.log("err");
-        setErr(err.response.data.error);
-        if ((err.response.data.confirm_new_password ? true : false) || (err.response.data.current_password ? true : false) || (err.response.data.new_password ? true : false)) {
+        setErr(err.response?.data?.error || 'Unable to change password. Please try again.');
+        if ((err.response?.data?.confirm_new_password ? true : false) || (err.response?.data?.current_password ? true : false) || (err.response?.data?.new_password ? true : false)) {
           setErr("White space may not be expected.")
         }
 
-        console.log(err);
-        if (err.response.status === 401) {
-          localStorage.clear();
-          navigate("/login")
-        } setLoading(false)
+        handleUnauthorized(err, navigate);
+        setLoading(false)
       });
     }
   }
@@ -84,7 +85,6 @@ const ChangePassword = () => {
       setaddDataError({ ...addDataError, npassword: 'New password is required' });
     } else {
       setaddDataError({ ...addDataError, npassword: '' });
-      setAddData({ ...addData, currentpassword: e.target.value });
     }
     setAddData({ ...addData, npassword: e.target.value });
   }
