@@ -12,7 +12,8 @@ import { Row, Col, Button } from "reactstrap";
 // import Image7 from "../../assets/frontimages/bg.jpg";
 // import Image8 from "../../assets/frontimages/bg1.jpg";
 import Image9 from "../../assets/frontimages/bg2.jpg";
-import Marquee from "react-fast-marquee";
+// U: OLD: import Marquee from "react-fast-marquee";
+// U: NEW: use a CSS marquee so the home page does not depend on an old React-only package.
 import CarousalHome from "./CarousalHome"
 
 // MV-2025-07-05-<9>  STARTS
@@ -73,11 +74,12 @@ const Home = () => {
       </div>
     </Row>
     <Row className="chikooza-gallery-band g-0">
-      <Marquee pauseOnHover gradient gradientColor="rgb(247, 241, 226)">
-        <div>
+      <div className="chikooza-marquee" aria-label="Poultry farm gallery">
+        <div className="chikooza-marquee-track">
           <img src={Image9} className="chikooza-marquee-image" alt="Poultry farm environment" />
+          <img src={Image9} className="chikooza-marquee-image" alt="" aria-hidden="true" />
         </div>
-      </Marquee>
+      </div>
     </Row>
 {/* MV-2025-07-05-<9>  STARTS */}
     <ChikoozaChatbot alwaysVisible={true} defaultOpen={false} />

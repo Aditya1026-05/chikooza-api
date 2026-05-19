@@ -4,11 +4,21 @@ import { contentArea, apiPath, getAuthConfig, handleUnauthorized } from "../../C
 import { useState, useEffect } from "react";
 import axios from 'axios';
 import Accordion from 'react-bootstrap/Accordion';
-import Moment from 'react-moment';
+// U: OLD: import Moment from 'react-moment';
+// U: NEW: use the existing moment dependency directly to avoid the abandoned React wrapper.
 import Modal from 'react-bootstrap/Modal';
 import Spinner from 'react-bootstrap/Spinner';
 import { useNavigate } from 'react-router-dom';
 import moment from "moment";
+
+const getFlockAgeInDays = (hatchDate) => {
+    if (!hatchDate) {
+        return "";
+    }
+
+    const age = moment().diff(moment(hatchDate), "days");
+    return Number.isFinite(age) ? Math.max(age, 0) : "";
+};
 
 const FlockSale = () => {
     let [show, setShow] = useState(false);
@@ -262,6 +272,7 @@ const FlockSale = () => {
     }
     var hatchdate = moment();
     var currentDate = hatchdate.format('YYYY-MM-DD');
+    const flockAgeInDays = getFlockAgeInDays(flock.hatch_date);
     return (
         <Row>
             <Modal show={show} backdrop="static" keyboard={false} >
@@ -555,7 +566,8 @@ const FlockSale = () => {
                                                         <Col>
                                                             <Label for="flockname" className="font-bold">Age</Label>
                                                             <Alert color="danger" className="shadow-4">
-                                                                <Moment diff={flock.hatch_date} unit="days">{new Date()}</Moment></Alert>
+                                                                {/* U: OLD: <Moment diff={flock.hatch_date} unit="days">{new Date()}</Moment> */}
+                                                                {flockAgeInDays}</Alert>
                                                         </Col>
 
                                                     </Row>

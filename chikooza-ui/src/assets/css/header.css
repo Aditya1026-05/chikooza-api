@@ -434,6 +434,49 @@ input[type=number]::-webkit-inner-spin-button,
   background: var(--ck-cream);
 }
 
+/* U: OLD: PrimeFlex supplied these small utility classes globally. */
+/* U: NEW: keep the existing markup stable with a local compatibility layer instead of importing all PrimeFlex CSS. */
+.flex {
+  display: flex !important;
+}
+
+.grid {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.font-bold {
+  font-weight: 700 !important;
+}
+
+.font-medium {
+  font-weight: 500 !important;
+}
+
+.text-sm {
+  font-size: 0.875rem !important;
+}
+
+.text-500 {
+  color: #6b7280 !important;
+}
+
+.ml-5 {
+  margin-left: 1.25rem !important;
+}
+
+.mr-5 {
+  margin-right: 1.25rem !important;
+}
+
+.mr-8 {
+  margin-right: 3rem !important;
+}
+
+.shadow-4 {
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.14) !important;
+}
+
 .chikooza-banner-title {
   position: relative;
   z-index: 1;
@@ -462,6 +505,39 @@ input[type=number]::-webkit-inner-spin-button,
   border-radius: 2rem;
   margin: 3rem 1rem;
   box-shadow: var(--ck-shadow);
+}
+
+.chikooza-marquee {
+  overflow: hidden;
+  width: 100%;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+}
+
+.chikooza-marquee-track {
+  display: flex;
+  width: max-content;
+  animation: chikooza-marquee-scroll 28s linear infinite;
+}
+
+.chikooza-marquee:hover .chikooza-marquee-track {
+  animation-play-state: paused;
+}
+
+@keyframes chikooza-marquee-scroll {
+  from {
+    transform: translateX(0);
+  }
+
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chikooza-marquee-track {
+    animation: none;
+  }
 }
 
 @media (max-width: 767px) {
