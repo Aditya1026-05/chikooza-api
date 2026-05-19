@@ -37,7 +37,9 @@ const Header = () => {
     if (localStorage.getItem('token') === null) {
       navigate("/login")
     }
-  }, [])
+  // U: OLD dependency list was empty and triggered React hook warnings.
+  // U: NEW includes navigate so the auth redirect effect follows React hook rules.
+  }, [navigate])
   let logout = () => {
     let url = `${apiPath}users/logout/`;
     config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
@@ -53,7 +55,7 @@ const Header = () => {
   //   document.getElementById("sidebarArea").classList.toggle("showSidebar");
   // };
   return (
-    <Navbar color="white" light expand="md" className="fix-header">
+    <Navbar light expand="md" className="fix-header chikooza-public-header">
       <div className="d-flex align-items-center">
         <div className="d-lg-block d-none me-5 pe-3">
           <img src={logo} width='156' height='35' alt="user" />
@@ -71,9 +73,9 @@ const Header = () => {
       </div>
       <div className="hstack gap-2">
         <Button
-          color="danger"
+          color="success"
           size="sm"
-          className="d-sm-block d-md-none"
+          className="d-sm-block d-md-none chikooza-menu-button"
           onClick={Handletoggle}
         >
           {isOpen ? (

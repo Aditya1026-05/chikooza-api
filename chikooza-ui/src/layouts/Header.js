@@ -8,7 +8,6 @@ import {
   NavbarBrand,
   Button,
 } from "reactstrap";
-import { useEffect, useState } from "react";
 import logo from "../assets/images/logos/chikooza_logo.svg";
 import logoMobile from "../assets/images/logos/chikooza_logo_mobile.png";
 import '../assets/css/header.css';
@@ -16,7 +15,9 @@ import '../assets/css/header.css';
 const Header = () => {
   // const navigate = useNavigate();
   const [isOpen, setIsOpen] = React.useState(false);
-  const [user, SetUser] = useState(localStorage.getItem('token') !== null ? false : true)
+  // U: OLD: const [user, SetUser] = useState(localStorage.getItem('token') !== null ? false : true)
+  // U: NEW: derive auth state directly; no unused setter and no stale header state.
+  const isGuest = localStorage.getItem('token') === null;
   // const [dropdownOpen, setDropdownOpen] = React.useState(false);
 
   // const toggle = () => setDropdownOpen((prevState) => !prevState);
@@ -26,13 +27,8 @@ const Header = () => {
   // const showMobilemenu = () => {
   //   document.getElementById("sidebarArea").classList.toggle("showSidebar");
   // };
-  useEffect(() => {
-    // if(localStorage.getItem('token')!==null){
-    //   navigate("/member")
-    // }
-  }, [])
   return (
-    <Navbar color="white" light expand="md" className="fix-header">
+    <Navbar light expand="md" className="fix-header chikooza-public-header">
       <div className="d-flex align-items-center">
         <div className="d-lg-block d-none me-5 pe-3">
           <img src={logo} width='156' height='35' alt="user" />
@@ -50,9 +46,9 @@ const Header = () => {
       </div>
       <div className="hstack gap-2">
         <Button
-          color="danger"
+          color="success"
           size="sm"
-          className="d-sm-block d-md-none"
+          className="d-sm-block d-md-none chikooza-menu-button"
           onClick={Handletoggle}
         >
           {isOpen ? (
@@ -75,15 +71,15 @@ const Header = () => {
               About Us
             </Link>
           </NavItem>
-          {user === true ?
+          {isGuest ?
             <>
               <NavItem>
-                <Link to="/login" className="linkheader">
+                <Link to="/login" className="linkheader linkheader-cta">
                   Farmer Login
                 </Link>
               </NavItem>
               <NavItem>
-                <Link to="/register" className="linkheader">
+                <Link to="/register" className="linkheader linkheader-secondary">
                   Register
                 </Link>
               </NavItem>

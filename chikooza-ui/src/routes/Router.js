@@ -11,7 +11,8 @@ const HeaderLayout = lazy(() => import("../layouts/HeaderLayout.js"));
 
 //Original Pages
 const Login = lazy(() => import("../views/ui/Login.js"));
-const ChikoozaChatbot = lazy(() => import('../components/ChikoozaChatbot/ChikoozaChatbot'));
+// U: OLD unused route-level import caused a build warning; chatbot is mounted inside Home/Chatbot pages.
+// const ChikoozaChatbot = lazy(() => import('../components/ChikoozaChatbot/ChikoozaChatbot'));
 const Register = lazy(() => import("../views/ui/Register.js"));
 const Member = lazy(() => import("../views/ui/Member.js"));
 const AddFlock = lazy(() => import("../views/ui/Addflock.js"));

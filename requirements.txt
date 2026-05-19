@@ -3,8 +3,11 @@ anyio==3.6.1
 asgiref==3.5.2
 billiard==3.6.4.0
 celery==5.2.7
-certifi==2022.6.15
-charset-normalizer==2.0.12
+# U: OLD: certifi==2022.6.15
+# U: NEW: refresh HTTP trust-store/runtime dependencies as a low-risk backend hygiene step.
+certifi==2026.4.22
+# U: OLD: charset-normalizer==2.0.12
+charset-normalizer==3.4.7
 click==8.1.3
 click-didyoumean==0.3.0
 click-plugins==1.1.1
@@ -22,7 +25,9 @@ django-sms==0.5.0
 # OLD: djangorestframework==3.11.0
 # NEW: Django 4.1 removed django.conf.urls.url, so DRF must be Django-4-compatible.
 djangorestframework==3.14.0
-gunicorn==20.1.0
+# U: OLD: gunicorn==20.1.0
+# U: NEW: current deployment server version from PyPI audit.
+gunicorn==26.0.0
 # OLD: h11==0.12.0
 # NEW: httpx 0.28 uses httpcore 1.x, which requires h11 0.16+.
 h11==0.16.0
@@ -31,7 +36,8 @@ heroku==0.1.4
 # NEW: Pin httpcore so fresh installs resolve consistently with httpx 0.28.
 httpcore==1.0.9
 httpx==0.28.1
-idna==3.3
+# U: OLD: idna==3.3
+idna==3.15
 kombu==5.2.4
 oauthlib==3.2.0
 onesignal-sdk==2.0.0
@@ -46,14 +52,23 @@ Pillow==10.4.0
 prompt-toolkit==3.0.29
 python-dateutil==1.5
 pytz==2022.1
-requests==2.28.1
-urllib3==1.26.9
-whitenoise==6.2.0
-psycopg2==2.9.3
-psycopg2-binary==2.8.6
-isort==5.10.1
-flake8==4.0.1
-black==22.6.0
+# U: OLD: requests==2.28.1
+requests==2.34.2
+# U: OLD: urllib3==1.26.9
+urllib3==2.7.0
+# U: OLD: whitenoise==6.2.0
+whitenoise==6.12.0
+# U: OLD: psycopg2==2.9.3
+# U: NEW: keep only psycopg2-binary for local/dev installs to avoid duplicate driver packages.
+# psycopg2==2.9.3
+# U: OLD: psycopg2-binary==2.8.6
+psycopg2-binary==2.9.12
+# U: OLD: isort==5.10.1
+isort==8.0.1
+# U: OLD: flake8==4.0.1
+flake8==7.3.0
+# U: OLD: black==22.6.0
+black==26.5.1
 
 #MV-2025-07-04-<1>  STARTS
 # OLD: AI packages below were mostly unpinned, which allowed incompatible LangChain 1.x packages.

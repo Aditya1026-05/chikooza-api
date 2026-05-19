@@ -1,17 +1,64 @@
 .gridmargin {
   margin:25px 25px 25px 25px;
 }
+:root {
+  --ck-forest: #174f3f;
+  --ck-leaf: #2f8c62;
+  --ck-mint: #d9f1df;
+  --ck-cream: #f7f1e2;
+  --ck-wheat: #e4b65d;
+  --ck-coral: #c94f3d;
+  --ck-ink: #17211d;
+  --ck-muted: #607069;
+  --ck-card: rgba(255, 252, 245, 0.86);
+  --ck-shadow: 0 24px 70px rgba(23, 79, 63, 0.16);
+}
+
+.chikooza-public-header {
+  background: rgba(247, 241, 226, 0.92) !important;
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+  border-bottom: 1px solid rgba(23, 79, 63, 0.12);
+  box-shadow: 0 10px 35px rgba(23, 33, 29, 0.08);
+  padding: 0.75rem clamp(1rem, 3vw, 2.5rem);
+}
+
+.chikooza-menu-button {
+  background: var(--ck-forest) !important;
+  border-color: var(--ck-forest) !important;
+  border-radius: 999px;
+}
+
 .linkheader {
   padding-right: 0;
   padding-left: 0;
   display: block;
   padding: 0.5rem 1rem;
   text-decoration: none;
-  color: #1e2a35;
+  color: var(--ck-ink);
+  border-radius: 999px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  transition: color 160ms ease, background-color 160ms ease, transform 160ms ease;
 }
 .linkheader:hover {
-  color: #30c39e;
-  background-color: #EFCACB;
+  color: var(--ck-forest);
+  background-color: rgba(47, 140, 98, 0.12);
+  transform: translateY(-1px);
+}
+.linkheader-cta {
+  background: var(--ck-forest);
+  color: #ffffff;
+  margin-left: 0.25rem;
+  box-shadow: 0 10px 24px rgba(23, 79, 63, 0.22);
+}
+.linkheader-cta:hover {
+  color: #ffffff;
+  background: #103a2e;
+}
+.linkheader-secondary {
+  border: 1px solid rgba(23, 79, 63, 0.2);
+  color: var(--ck-forest);
 }
 .link {
   padding-right: 0;
@@ -148,13 +195,27 @@
 
 
 .index_banner{
-  background-image: url("../frontimages/bg.jpg");
+  background-image:
+    linear-gradient(120deg, rgba(23, 79, 63, 0.9), rgba(23, 79, 63, 0.55)),
+    url("../frontimages/bg.jpg");
   background-size: cover;
   background-repeat: no-repeat;
   background-position: center;
-  padding-top: 13rem;
-  padding-bottom: 9rem;
+  padding-top: 10rem;
+  padding-bottom: 8rem;
   width: 100%;
+  position: relative;
+  overflow: hidden;
+}
+.index_banner:before {
+  content: "";
+  position: absolute;
+  inset: 12% auto auto 8%;
+  width: 170px;
+  height: 170px;
+  border-radius: 50%;
+  background: rgba(228, 182, 93, 0.25);
+  filter: blur(4px);
 }
 .carousel-indicators [data-bs-target] {
   border-radius: 50%;
@@ -217,3 +278,226 @@ input[type=number]::-webkit-inner-spin-button,
     -webkit-appearance: none;
     margin: 0;
   }
+
+.chikooza-hero {
+  min-height: 76vh;
+  background:
+    radial-gradient(circle at 12% 18%, rgba(228, 182, 93, 0.26), transparent 28%),
+    radial-gradient(circle at 88% 8%, rgba(47, 140, 98, 0.18), transparent 26%),
+    linear-gradient(135deg, var(--ck-cream) 0%, #eef7e9 52%, #f9eadc 100%);
+  padding: clamp(2rem, 5vw, 5rem);
+  position: relative;
+  overflow: hidden;
+}
+
+.chikooza-hero:after {
+  content: "";
+  position: absolute;
+  right: -120px;
+  bottom: -160px;
+  width: 420px;
+  height: 420px;
+  border-radius: 44% 56% 52% 48%;
+  background: rgba(23, 79, 63, 0.12);
+  transform: rotate(-14deg);
+}
+
+.chikooza-hero-copy,
+.chikooza-hero-media {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+}
+
+.chikooza-hero-panel {
+  max-width: 680px;
+  padding: clamp(1rem, 3vw, 2rem);
+}
+
+.chikooza-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--ck-forest);
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(23, 79, 63, 0.14);
+  border-radius: 999px;
+  padding: 0.45rem 0.8rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.11em;
+  font-size: 0.76rem;
+}
+
+.chikooza-eyebrow:before {
+  content: "";
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 50%;
+  background: var(--ck-leaf);
+  box-shadow: 0 0 0 6px rgba(47, 140, 98, 0.15);
+}
+
+.chikooza-hero-title {
+  color: var(--ck-ink);
+  font-size: clamp(2.75rem, 6vw, 5.8rem);
+  line-height: 0.92;
+  letter-spacing: -0.075em;
+  font-weight: 900;
+  margin: 1.35rem 0 1rem;
+}
+
+.chikooza-hero-subtitle {
+  color: var(--ck-muted);
+  font-size: clamp(1rem, 1.7vw, 1.28rem);
+  line-height: 1.7;
+  max-width: 580px;
+}
+
+.chikooza-hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.85rem;
+  margin: 2rem 0;
+}
+
+.chikooza-primary-action,
+.chikooza-banner-action {
+  background: var(--ck-forest) !important;
+  border-color: var(--ck-forest) !important;
+  color: #ffffff !important;
+  border-radius: 999px !important;
+  padding: 0.85rem 1.35rem !important;
+  font-weight: 800 !important;
+  box-shadow: 0 18px 35px rgba(23, 79, 63, 0.22);
+}
+
+.chikooza-secondary-action {
+  color: var(--ck-forest) !important;
+  border-color: rgba(23, 79, 63, 0.28) !important;
+  background: rgba(255, 255, 255, 0.55) !important;
+  border-radius: 999px !important;
+  padding: 0.85rem 1.35rem !important;
+  font-weight: 800 !important;
+}
+
+.chikooza-metrics-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.85rem;
+  max-width: 620px;
+}
+
+.chikooza-metrics-strip div {
+  background: var(--ck-card);
+  border: 1px solid rgba(23, 79, 63, 0.12);
+  border-radius: 1.35rem;
+  padding: 1rem;
+  box-shadow: 0 14px 35px rgba(23, 33, 29, 0.08);
+}
+
+.chikooza-metrics-strip strong,
+.chikooza-metrics-strip span {
+  display: block;
+}
+
+.chikooza-metrics-strip strong {
+  color: var(--ck-forest);
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+.chikooza-metrics-strip span {
+  color: var(--ck-muted);
+  font-size: 0.82rem;
+  margin-top: 0.4rem;
+}
+
+.chikooza-carousel-shell {
+  width: min(100%, 680px);
+  margin: 0 auto;
+  background: rgba(255, 255, 255, 0.52);
+  border: 1px solid rgba(23, 79, 63, 0.14);
+  border-radius: 2.25rem;
+  padding: clamp(0.7rem, 1.5vw, 1.2rem);
+  box-shadow: var(--ck-shadow);
+  transform: rotate(1deg);
+}
+
+.chikooza-carousel-shell img {
+  border-radius: 1.65rem;
+}
+
+.chikooza-welcome-section,
+.chikooza-gallery-band {
+  background: var(--ck-cream);
+}
+
+.chikooza-banner-title {
+  position: relative;
+  z-index: 1;
+  color: #ffffff;
+  text-align: center;
+  font-size: clamp(2.4rem, 5vw, 5rem);
+  font-weight: 900;
+  letter-spacing: -0.055em;
+  text-transform: capitalize;
+}
+
+.chikooza-banner-copy {
+  position: relative;
+  z-index: 1;
+  color: rgba(255, 255, 255, 0.86);
+  text-align: center;
+  max-width: 640px;
+  margin: 1rem auto 0;
+  font-size: clamp(1rem, 1.6vw, 1.2rem);
+}
+
+.chikooza-marquee-image {
+  height: 420px;
+  width: min(92vw, 920px);
+  object-fit: cover;
+  border-radius: 2rem;
+  margin: 3rem 1rem;
+  box-shadow: var(--ck-shadow);
+}
+
+@media (max-width: 767px) {
+  .chikooza-public-header {
+    padding: 0.65rem 1rem;
+  }
+
+  .chikooza-hero {
+    min-height: auto;
+    padding: 2rem 1rem 2.5rem;
+  }
+
+  .chikooza-hero-panel {
+    padding: 0;
+  }
+
+  .chikooza-hero-title {
+    font-size: clamp(2.5rem, 15vw, 4.2rem);
+  }
+
+  .chikooza-metrics-strip {
+    grid-template-columns: 1fr;
+  }
+
+  .chikooza-carousel-shell {
+    margin-top: 1.5rem;
+    transform: none;
+    border-radius: 1.5rem;
+  }
+
+  .index_banner {
+    padding: 6rem 1rem;
+  }
+
+  .chikooza-marquee-image {
+    height: 260px;
+    border-radius: 1.35rem;
+  }
+}
