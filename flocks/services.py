@@ -17,7 +17,9 @@ class AddFlockService(services.Service):
     def process(self):
         data = self.data.get("data")
         user = self.data.get("user")
-        farm = Farm.objects.get(public_id=data.get("farm_public_id"))
+        # U: OLD: Farm.objects.get(public_id=...) allowed creating a flock under another farmer's farm.
+        # U: NEW: resolve the farm through the authenticated farmer.
+        farm = Farm.objects.get(public_id=data.get("farm_public_id"), user=user)
         integration = data.get("integration")
         if integration:
             integrator = Integrator.objects.get(

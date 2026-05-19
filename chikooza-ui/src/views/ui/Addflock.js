@@ -1,6 +1,6 @@
 import { Alert, Row, Col, Card, CardTitle, CardBody, Button, Form, FormGroup, Label, Input } from "reactstrap";
 import '../../assets/css/header.css';
-import { contentArea, apiPath, config } from "../../Constants";
+import { contentArea, apiPath, getAuthConfig, handleUnauthorized } from "../../Constants";
 import Accordion from 'react-bootstrap/Accordion'
 import { useState, useEffect } from "react";
 import axios from 'axios';
@@ -22,48 +22,37 @@ const AddFlock = () => {
 
     useEffect(() => {
         let url = `${apiPath}farm/`;
-        config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
-        axios.get(url, config).then((res) => {
-            console.log("farms list-----", res.data.results)
+        // U: OLD: config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
+        axios.get(url, getAuthConfig()).then((res) => {
             if (res.data.results.length === 0) {
                 setFarms([{ public_id: 0, name: 'No farm available' }]);
             } else {
                 setFarms(res.data.results);
             }
         }).catch((err) => {
-            console.log(err)
             setFarms([{ public_id: 0, name: 'No farm available' }]);
-            if (err.response.status === 401) {
-                localStorage.clear();
-                navigate("/login")
-            }
+            handleUnauthorized(err, navigate);
         });
-    }, [])
+    }, [navigate])
     useEffect(() => {
         let url = `${apiPath}breeds/`;
-        config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
-        axios.get(url, config).then((res) => {
+        // U: OLD: config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
+        axios.get(url, getAuthConfig()).then((res) => {
             setBreeds(res.data.results);
         }).catch((err) => {
-            if (err.response.status === 401) {
-                localStorage.clear();
-                navigate("/login")
-            }
+            handleUnauthorized(err, navigate);
         });
-    }, [])
+    }, [navigate])
     useEffect(() => {
         let url = `${apiPath}integrators/`;
-        config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
-        axios.get(url, config).then((res) => {
+        // U: OLD: config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
+        axios.get(url, getAuthConfig()).then((res) => {
             setIntgcom(res.data.results);
         }).catch((err) => {
             //setIntgcom(res.data.results);
-            if (err.response.status === 401) {
-                localStorage.clear();
-                navigate("/login")
-            }
+            handleUnauthorized(err, navigate);
         });
-    }, [])
+    }, [navigate])
     let [addData, setAddData] = useState({
         hatch_date: '',
         flock_size: null,
@@ -100,26 +89,26 @@ const AddFlock = () => {
         e.preventDefault();
         setLoading(false);
         let error = 0;
-        if (addData.farm_public_id === 0 || addData.farm_public_id == null) { setFarm_public_iderr('Please select farm'); error = 1; } else { setFarm_public_iderr(''); }
+        if (addData.farm_public_id === 0 || addData.farm_public_id === "0" || addData.farm_public_id === null) { setFarm_public_iderr('Please select farm'); error = 1; } else { setFarm_public_iderr(''); }
         if (addData.hatch_date.trim() === '') { setHatch_dateerr('Hatch date is required'); error = 1; } else { setHatch_dateerr(''); }
         if (addData.flock_name.trim() === '') { setFlock_nameerr('Flock name is required'); error = 1; } else { setFlock_nameerr(''); }
-        if (addData.flock_size <= 0 || addData.flock_size == null) { setFlock_sizeerr('Flock size is required'); error = 1; } else { setFlock_sizeerr(''); }
-        if (addData.actual_birds <= 0 || addData.actual_birds == null) { setActual_birdserr('Flock Actual birds count is required'); error = 1; } else { setActual_birdserr(''); }
-        if (addData.breed_public_id === 0 || addData.breed_public_id == null) { setBreed_public_iderr('Please select Breed'); error = 1; } else { setBreed_public_iderr(''); }
+        if (Number(addData.flock_size) <= 0 || addData.flock_size === null) { setFlock_sizeerr('Flock size is required'); error = 1; } else { setFlock_sizeerr(''); }
+        if (Number(addData.actual_birds) <= 0 || addData.actual_birds === null) { setActual_birdserr('Flock Actual birds count is required'); error = 1; } else { setActual_birdserr(''); }
+        if (addData.breed_public_id === 0 || addData.breed_public_id === "0" || addData.breed_public_id === null) { setBreed_public_iderr('Please select Breed'); error = 1; } else { setBreed_public_iderr(''); }
         if (addData.hatchery_name.trim() === '') { setHatchery_nameerr('Hatchery name is required'); error = 1; } else { setHatchery_nameerr(''); }
-        if (addData.chick_weight <= 0 || addData.flock_size == null) { setChick_weighterr('Day one weight is required'); error = 1; } else { setChick_weighterr(''); }
-        if (addData.ec_shed === 0 || addData.ec_shed == null) { setEc_shederr('Please select ec shed'); error = 1; } else { setEc_shederr(''); }
-        if (addData.feed_sys === 0 || addData.feed_sys == null) { setFeed_syserr('Please select feed system'); error = 1; } else { setFeed_syserr(''); }
-        if (addData.drinking_sys === 0 || addData.drinking_sys == null) { setDrinking_syserr('Please select Drinking System'); error = 1; } else { setDrinking_syserr(''); }
-        if (addData.integration === 0 || addData.integration == null) {
+        if (Number(addData.chick_weight) <= 0 || addData.flock_size === null) { setChick_weighterr('Day one weight is required'); error = 1; } else { setChick_weighterr(''); }
+        if (addData.ec_shed === 0 || addData.ec_shed === "0" || addData.ec_shed === null) { setEc_shederr('Please select ec shed'); error = 1; } else { setEc_shederr(''); }
+        if (addData.feed_sys === 0 || addData.feed_sys === "0" || addData.feed_sys === null) { setFeed_syserr('Please select feed system'); error = 1; } else { setFeed_syserr(''); }
+        if (addData.drinking_sys === 0 || addData.drinking_sys === "0" || addData.drinking_sys === null) { setDrinking_syserr('Please select Drinking System'); error = 1; } else { setDrinking_syserr(''); }
+        if (addData.integration === 0 || addData.integration === "0" || addData.integration === null) {
             setIntegrationerr('Please select integration'); error = 1;
-            if (addData.chick_cost <= 0 || addData.chick_cost == null) { setChick_costerr('Chicks Cost is required'); error = 1; } else { setChick_costerr(''); }
+            if (Number(addData.chick_cost) <= 0 || addData.chick_cost === null) { setChick_costerr('Chicks Cost is required'); error = 1; } else { setChick_costerr(''); }
         } else {
             setIntegrationerr('');
-            if (addData.integration == 1) {
-                if (addData.integrator_public_id == 0 || addData.integrator_public_id == null) { setIntegrator_public_iderr('Please select Drinking System'); error = 1; } else { setIntegrator_public_iderr(''); }
-            } else if (addData.integration == 2) {
-                if (addData.chick_cost <= 0 || addData.chick_cost == null) { setChick_costerr('Chicks Cost is required'); error = 1; } else { setChick_costerr(''); }
+            if (String(addData.integration) === "1") {
+                if (addData.integrator_public_id === 0 || addData.integrator_public_id === "0" || addData.integrator_public_id === null) { setIntegrator_public_iderr('Please select Drinking System'); error = 1; } else { setIntegrator_public_iderr(''); }
+            } else if (String(addData.integration) === "2") {
+                if (Number(addData.chick_cost) <= 0 || addData.chick_cost === null) { setChick_costerr('Chicks Cost is required'); error = 1; } else { setChick_costerr(''); }
             }
         }
         if (error === 0) {
@@ -131,11 +120,8 @@ const AddFlock = () => {
             //     addData.integration = false;
             //     //addData.integrator_public_id=1;
             // }
-            if (addData.ec_shed === 1) {
-                addData.ec_shed = true;
-            } else {
-                addData.ec_shed = false;
-            }
+            // U: OLD: save() mutated addData.ec_shed and treated boolean true as false.
+            const ecShed = addData.ec_shed === true || addData.ec_shed === "true" || addData.ec_shed === 1 || addData.ec_shed === "1";
             let flock = {
                 hatch_date: addData.hatch_date,
                 flock_size: addData.flock_size,
@@ -147,12 +133,12 @@ const AddFlock = () => {
                 // integration: addData.integration,
                 // integrator_public_id: addData.integrator_public_id,
                 // chick_cost: addData.chick_cost,
-                ec_shed: addData.ec_shed,
+                ec_shed: ecShed,
                 feed_sys: addData.feed_sys,
                 drinking_sys: addData.drinking_sys,
                 farm_public_id: addData.farm_public_id
             };
-            if (addData.integration == 1) {
+            if (String(addData.integration) === "1") {
                 flock.integration = true;
                 flock.integrator_public_id = addData.integrator_public_id;
             } else {
@@ -160,35 +146,31 @@ const AddFlock = () => {
                 flock.chick_cost = addData.chick_cost;
             }
             let url = `${apiPath}flocks/`;
-            config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
-            axios.post(url, flock, config).then((res) => {
-                console.log(res)
+            // U: OLD: config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
+            axios.post(url, flock, getAuthConfig()).then(() => {
                 //setErr('Form created successfully');
                 setShow(true);
                 setLoading(false);
                 setTimeout(successMsg, 3000);
             }).catch((err) => {
-                console.log(err)
-                setErr(err.response.data.message);
-                if (err.response.status === 401) {
-                    localStorage.clear();
-                    navigate("/login")
-                }
+                setErr(err?.response?.data?.message || 'Something went wrong. Please try again');
+                handleUnauthorized(err, navigate);
             });
         }
     }
     let changeFarm = (e) => {
         setAddData({ ...addData, farm_public_id: e.target.value });
-        e.target.value === 0 ? setFarm_public_iderr('Please select farm') : setFarm_public_iderr('');
+        // U: OLD: e.target.value === 0 compared a string to a number.
+        e.target.value === "0" ? setFarm_public_iderr('Please select farm') : setFarm_public_iderr('');
     }
     let changeBreed = (e) => {
         setAddData({ ...addData, breed_public_id: e.target.value });
-        e.target.value === 0 ? setBreed_public_iderr('Please select Breed') : setBreed_public_iderr('');
+        e.target.value === "0" ? setBreed_public_iderr('Please select Breed') : setBreed_public_iderr('');
     }
     let changeIntrigation = (e) => {
         setAddData({ ...addData, integration: e.target.value });
-        e.target.value == 0 ? setIntegrationerr('Please select integration') : setIntegrationerr('');
-        if (e.target.value == 1) {
+        e.target.value === "0" ? setIntegrationerr('Please select integration') : setIntegrationerr('');
+        if (e.target.value === "1") {
             setIntegration(1)
         } else {
             setIntegration(2)
@@ -200,7 +182,7 @@ const AddFlock = () => {
     }
     let changeHatchery = (e) => {
         setAddData({ ...addData, hatchery_name: e.target.value });
-        e.target.value === 0 ? setHatchery_nameerr('Hatchery name is required') : setHatchery_nameerr('');
+        e.target.value.trim() === '' ? setHatchery_nameerr('Hatchery name is required') : setHatchery_nameerr('');
     }
     let changeDayoneweight = (e) => {
         setAddData({ ...addData, chick_weight: e.target.value });
@@ -220,19 +202,19 @@ const AddFlock = () => {
 
     let changeDrinkingsys = (e) => {
         setAddData({ ...addData, drinking_sys: e.target.value });
-        e.target.value === 0 ? setDrinking_syserr('Please select Drinking System') : setDrinking_syserr('');
+        e.target.value === "0" ? setDrinking_syserr('Please select Drinking System') : setDrinking_syserr('');
     }
     let changeFeedsys = (e) => {
         setAddData({ ...addData, feed_sys: e.target.value });
-        e.target.value === 0 ? setFeed_syserr('Please select feed system') : setFeed_syserr('');
+        e.target.value === "0" ? setFeed_syserr('Please select feed system') : setFeed_syserr('');
     }
     let changeFlockname = (e) => {
         setAddData({ ...addData, flock_name: e.target.value });
-        e.target.value === 0 ? setFlock_nameerr('Flock name is required') : setFlock_nameerr('');
+        e.target.value.trim() === '' ? setFlock_nameerr('Flock name is required') : setFlock_nameerr('');
     }
     let changeHatchdate = (e) => {
         setAddData({ ...addData, hatch_date: e.target.value });
-        e.target.value === 0 ? setHatch_dateerr('Hatch date is required') : setHatch_dateerr('');
+        e.target.value === '' ? setHatch_dateerr('Hatch date is required') : setHatch_dateerr('');
     }
     let changeFlocksize = (e) => {
         setAddData({ ...addData, flock_size: e.target.value });
@@ -241,7 +223,7 @@ const AddFlock = () => {
     let changeIntco = (e) => {
         if (integration === 1) {
             setAddData({ ...addData, integrator_public_id: e.target.value });
-            e.target.value === 0 ? setIntegrator_public_iderr('Please select Intrigation company') : setIntegrator_public_iderr('');
+            e.target.value === "0" ? setIntegrator_public_iderr('Please select Intrigation company') : setIntegrator_public_iderr('');
         }
     }
     function successMsg() {
@@ -295,8 +277,8 @@ const AddFlock = () => {
                                             <FormGroup>
                                                 <Label for="farmselect">Select Farm</Label>
                                                 <div className="input-group">
-                                                    <Input onChange={changeFarm} id="farmSelect" defaultValue={'Select Farm'} name="farm" type="select">
-                                                        <option disabled defaultValue={-1}>Select Farm</option>
+                                                    <Input onChange={changeFarm} id="farmSelect" defaultValue="0" name="farm" type="select">
+                                                        <option value="0" disabled>Select Farm</option>
                                                         {
                                                             farms.map((item) => {
                                                                 return (
@@ -377,10 +359,11 @@ const AddFlock = () => {
                                                                     <option value={2}>No</option>
                                                                 </Input>
                                                             </div>
-                                                            <small className="text-danger"></small>
+                                                            {/* U: OLD: integrationerr state was set but never rendered. */}
+                                                            <small className="text-danger">{integrationerr}</small>
                                                         </FormGroup>
                                                         {
-                                                            (integration == 1) ?
+                                                            (integration === 1) ?
                                                                 <FormGroup>
                                                                     <Label for="flockname">Int Co.?</Label>
                                                                     <div className="input-group">

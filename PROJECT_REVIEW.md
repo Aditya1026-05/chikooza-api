@@ -64,6 +64,7 @@ This note captures the current understanding of the repo after first local setup
 - U: OLD hardcoded `SECRET_KEY`, duplicated `DEBUG=True`, wildcard `ALLOWED_HOSTS`, and always-open CORS were replaced with environment-driven settings and safer local defaults.
 - U: OLD `corsheaders.middleware.CorsMiddleware` order was replaced with the recommended high middleware position before `CommonMiddleware`.
 - U: OLD purchase retrieve/list/update/create logic trusted public IDs without farmer ownership checks; purchase operations are now scoped to the authenticated farmer and covered by tenant-isolation tests.
+- U: OLD flock create/update/summary logic trusted public IDs without farmer ownership checks; flock writes and summaries are now scoped to the authenticated farmer and covered by tenant-isolation tests.
 - Added backend `.env.example`.
 - Added UI `.env.example` so `REACT_APP_API_BASE_URL` and `REACT_APP_TEMPLATE_BASE_URL` are explicit.
 - Added missing UI dependency `react-chatbot-kit`.
