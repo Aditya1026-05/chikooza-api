@@ -12,7 +12,7 @@ https://docs.djangoproject.com/en/4.0/ref/settings/
 import os
 from pathlib import Path
 
-import django_heroku
+import dj_database_url
 from corsheaders.defaults import default_headers
 from django.core.exceptions import ImproperlyConfigured
 
@@ -97,6 +97,9 @@ CHIKOOZA_FIXED_OTP = os.environ.get("CHIKOOZA_FIXED_OTP")
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    # U: OLD: django_heroku.settings(locals()) injected WhiteNoise implicitly at the end of settings.
+    # U: NEW: configure WhiteNoise directly so deployment behavior is explicit and Django-5-ready.
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     # U: OLD: corsheaders.middleware.CorsMiddleware was placed after Django auth/CSRF middleware.
     # U: NEW: django-cors-headers recommends placing it as high as possible before CommonMiddleware.
     "corsheaders.middleware.CorsMiddleware",
@@ -144,6 +147,16 @@ DATABASES = {
     }
 }
 
+# U: OLD: django_heroku.settings(locals()) silently rewrote DATABASES from DATABASE_URL.
+# U: NEW: use maintained dj-database-url directly and keep SQLite as the local default.
+DATABASE_URL = os.environ.get("DATABASE_URL")
+if DATABASE_URL:
+    DATABASES["default"] = dj_database_url.parse(
+        DATABASE_URL,
+        conn_max_age=600,
+        ssl_require=not DEBUG,
+    )
+
 # Password validation
 # https://docs.djangoproject.com/en/4.0/ref/settings/#auth-password-validators
 
@@ -173,6 +186,20 @@ STATIC_URL = "/static/"
 STATIC_ROOT = os.path.join(BASE_DIR, "static")
 MEDIA_ROOT = os.path.join(BASE_DIR, "media")
 MEDIA_URL = "/media/"
+# U: OLD: django_heroku.settings(locals()) added deployment static/proxy settings implicitly.
+# U: NEW: configure WhiteNoise and reverse-proxy HTTPS handling directly.
+# U: OLD: STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
+# U: NEW: Django 5 uses STORAGES for file and static asset backends.
+# STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
+STORAGES = {
+    "default": {
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+    },
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+    },
+}
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.0/ref/settings/#default-auto-field
 
@@ -190,7 +217,9 @@ OAUTH2_PROVIDER = {
     "ACCESS_TOKEN_GENERATOR": "common.token_generator.generate_token",
 }
 
-django_heroku.settings(locals())
+# U: OLD: django_heroku.settings(locals())
+# U: NEW: database, static file, and proxy settings are configured explicitly above.
+# django_heroku.settings(locals())
 
 try:
     from .local_settings import *
