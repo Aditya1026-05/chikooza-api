@@ -1,21 +1,16 @@
 
-import { Link } from "react-router-dom";
-import { Row, Col, Table, Card, CardTitle, CardBody, Form, FormGroup, Label, Input, CardHeader, Button } from "reactstrap";
+import { Row, Col, Table, Card, CardTitle, CardBody, Form, FormGroup, Label, Input } from "reactstrap";
 import '../../assets/css/header.css';
-import { contentArea, apiPath, config } from "../../Constants";
+import { contentArea, apiPath, getAuthConfig, handleUnauthorized } from "../../Constants";
 import { useState, useEffect } from "react";
 import axios from 'axios';
 // import '../ui/custom.css'
-import EditSale from "./EditSale";
 import { useNavigate } from "react-router-dom";
 
 const ViewSale = () => {
-    let [transdata, setTransData] = useState({});
-    let [edit, setEdit] = useState(false);
     const [showFlock, setShowFlock] = useState(false);
     const [showForm, setShowForm] = useState(false);
     let [flocks, setFlocks] = useState([]);
-    let [flock, setFlock] = useState([]);
     let [farms, setFarms] = useState([]);
     let [salelist, setSaleList] = useState([]);
     const save = (e) => {
@@ -24,8 +19,9 @@ const ViewSale = () => {
     let navigate = useNavigate()
     useEffect(() => {
         let url = `${apiPath}farm/`;
-        config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
-        axios.get(url, config).then((res) => {
+        // U: Replaced shared config mutation with per-request auth headers from getAuthConfig().
+        // config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
+        axios.get(url, getAuthConfig()).then((res) => {
             if (res.data.results.length === 0) {
                 setFarms([{ public_id: 0, name: 'No farm available' }]);
             } else {
@@ -33,16 +29,20 @@ const ViewSale = () => {
             }
         }).catch((err) => {
             setFarms([{ public_id: 0, name: 'No farm available' }]);
+            handleUnauthorized(err, navigate);
         });
-    }, [])
+    }, [navigate])
     let changeFarm = (e) => {
-        if (e.target.value === 0) {
+        setSaleList([]);
+        setShowForm(false);
+        if (e.target.value === "0") {
             setShowFlock(false)
             setFlocks([]);
         } else {
             let url = `${apiPath}flocks/${e.target.value}/`;
-            config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
-            axios.get(url, config).then((res) => {
+            // U: Replaced shared config mutation with per-request auth headers from getAuthConfig().
+            // config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
+            axios.get(url, getAuthConfig()).then((res) => {
                 if (res.data.results.total_records === 0) {
                     setFlocks([{ flock_public_id: 0, flock_name: 'No flock available' }]);
                 } else {
@@ -52,41 +52,38 @@ const ViewSale = () => {
                 setShowFlock(true)
             }).catch((err) => {
                 //setFormError('No Flock available.');
-                if (err.response.status === 401) {
-                    localStorage.clear();
-                    navigate("/login")
-                }
+                handleUnauthorized(err, navigate);
             });
         }
     }
-    let changeFlock = (e) => {
-        if (e.target.value === 0) {
-            setShowForm(false)
-        } else {
-            const user = flocks.find(u => u.flock_public_id === e.target.value);
-            setShowForm(true)
-            setFlock(user)
-        }
-    }
-    const getDailyDataList = () => {
-        let url = `${apiPath}sales/?flock_public_id=${flock.flock_public_id}`
-        const config = {
-            headers: {
-                "Authorization": `Bearer ${localStorage.getItem('token')}`
-            }
-        };
-        axios.get(url, config)
+    const getSalesList = (flockPublicId) => {
+        let url = `${apiPath}sales/?flock_public_id=${flockPublicId}`
+        axios.get(url, getAuthConfig())
             .then(res => {
                 setSaleList(res.data.results.sales_list)
                 // console.log(res.data.results.sales_list)
             }
             ).catch(err => {
                 console.log(err)
-                if (err.response.status === 401) {
-                    localStorage.clear();
-                    navigate("/login")
-                }
+                handleUnauthorized(err, navigate);
             })
+    }
+    let changeFlock = (e) => {
+        const flockPublicId = e.target.value;
+        if (flockPublicId === "0") {
+            setShowForm(false)
+            setSaleList([]);
+        } else {
+            const user = flocks.find(u => String(u.flock_public_id) === flockPublicId);
+            if (!user) {
+                setShowForm(false);
+                setSaleList([]);
+                return;
+            }
+            setShowForm(true)
+            // U: Replaced render-time API call with an explicit load after flock selection.
+            getSalesList(flockPublicId)
+        }
     }
     return (
         <Row>
@@ -108,8 +105,8 @@ const ViewSale = () => {
                                             <FormGroup>
                                                 <Label for="farmselect" className="font_family_sub fs-4">Select Farm</Label>
                                                 <div className="input-group">
-                                                    <Input onChange={changeFarm} id="farmSelect" name="farm" type="select" className='font_family_content fs-5' >
-                                                        <option selected value={0} className='font_family_content fs-5'>Select Farm</option>
+                                                    <Input onChange={changeFarm} id="farmSelect" name="farm" type="select" className='font_family_content fs-5' defaultValue="0" >
+                                                        <option value="0" className='font_family_content fs-5'>Select Farm</option>
                                                         {
                                                             farms.map((item) => {
                                                                 return (
@@ -125,8 +122,8 @@ const ViewSale = () => {
                                                 <FormGroup>
                                                     <Label for="farmselect" className="font_family_sub fs-4">Select Flock</Label>
                                                     <div className="input-group">
-                                                        <Input onChange={changeFlock} onClick={getDailyDataList()} id="flockSelect" name="flock" type="select" className='font_family_content fs-5'>
-                                                            <option selected={true} value={0} className='font_family_content fs-5'>Select Flocks</option>
+                                                        <Input onChange={changeFlock} id="flockSelect" name="flock" type="select" className='font_family_content fs-5' defaultValue="0">
+                                                            <option value="0" className='font_family_content fs-5'>Select Flocks</option>
                                                             {
                                                                 flocks.map((item) => {
                                                                     return (

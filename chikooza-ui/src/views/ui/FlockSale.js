@@ -1,6 +1,6 @@
-import { Row, Col, Table, Card, CardTitle, CardBody, Alert, Button, Form, FormGroup, Label, Input, FormText, Nav, NavItem } from "reactstrap";
+import { Row, Col, Card, CardTitle, CardBody, Alert, Button, Form, FormGroup, Label, Input } from "reactstrap";
 import '../../assets/css/header.css';
-import { contentArea, apiPath, config } from "../../Constants";
+import { contentArea, apiPath, getAuthConfig, handleUnauthorized } from "../../Constants";
 import { useState, useEffect } from "react";
 import axios from 'axios';
 import Accordion from 'react-bootstrap/Accordion';
@@ -33,7 +33,7 @@ const FlockSale = () => {
     });
     let [error, setError] = useState({});
     let [totalChickCount, setTotalChickCount] = useState(0);
-    let [err, setErr] = useState('');
+    let [submitError, setSubmitError] = useState('');
     let [loading, setLoading] = useState(false);
     const navigate = useNavigate();
 
@@ -44,13 +44,14 @@ const FlockSale = () => {
         setLoading(false)
         e.preventDefault();
         let error = { status: 0, date: '', sellcount: '', selltwt: '', sellrate: '', sellamount: '' };
-        if (data.date == null || data.date == '') { error.date = 'Date is required.'; error.status = 1 } else { error.date = '' }
-        if (data.sellcount == null || Number(data.sellcount) < 0 || data.sellcount == '') { error.sellcount = 'Lifting Count is required.'; error.status = 1 } else { error.sellcount = '' }
-        if (data.selltwt == null || Number(data.selltwt) < 0 || data.selltwt == '') { error.selltwt = 'Total weight is required.'; error.status = 1 } else { error.selltwt = '' }
-        if (data.sellrate == null || Number(data.sellrate) < 0 || data.sellrate == '') { error.sellrate = 'Rate is required.'; error.status = 1 } else { error.sellrate = '' }
+        if (data.date === null || data.date === '') { error.date = 'Date is required.'; error.status = 1 } else { error.date = '' }
+        if (data.sellcount === null || Number(data.sellcount) < 0 || data.sellcount === '') { error.sellcount = 'Lifting Count is required.'; error.status = 1 } else { error.sellcount = '' }
+        if (data.selltwt === null || Number(data.selltwt) < 0 || data.selltwt === '') { error.selltwt = 'Total weight is required.'; error.status = 1 } else { error.selltwt = '' }
+        if (data.sellrate === null || Number(data.sellrate) < 0 || data.sellrate === '') { error.sellrate = 'Rate is required.'; error.status = 1 } else { error.sellrate = '' }
         setError({ ...error, date: error.date, sellcount: error.sellcount, selltwt: error.selltwt, sellrate: error.sellrate, sellamount: error.sellamount });
-        if (error.status == 0) {
+        if (error.status === 0) {
             setLoading(true)
+            setSubmitError('');
             let saleData = {
                 flock_public_id: data.flock,
                 sales_type: data.selType,
@@ -86,8 +87,9 @@ const FlockSale = () => {
                 other_taxes: dataPopUp.ot,
             };
             let url = `${apiPath}sales/`;
-            config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
-            axios.post(url, saleData, config).then((res) => {
+            // U: Replaced shared config mutation with per-request auth headers from getAuthConfig().
+            // config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
+            axios.post(url, saleData, getAuthConfig()).then((res) => {
                 setShow(true);
                 setLoading(false)
                 setTimeout(successMsg, 3000);
@@ -97,12 +99,9 @@ const FlockSale = () => {
                 setShowFlockSale(false)
             }).catch((err) => {
                 console.log(err);
-                setErr('Something went wrong. Please try again');
+                setSubmitError('Something went wrong. Please try again');
                 setLoading(false);
-                if (err.response.status === 401) {
-                    localStorage.clear();
-                    navigate("/login")
-                }
+                handleUnauthorized(err, navigate);
             });
             // feed_rate:
             // feed_quantity:
@@ -127,23 +126,21 @@ const FlockSale = () => {
     }
     useEffect(() => {
         let url = `${apiPath}farm/`;
-        config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
-        axios.get(url, config).then((res) => {
-            if (res.data.results.length == 0) {
+        // U: Replaced shared config mutation with per-request auth headers from getAuthConfig().
+        // config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
+        axios.get(url, getAuthConfig()).then((res) => {
+            if (res.data.results.length === 0) {
                 setFarms([{ public_id: 0, name: 'No farm available' }]);
             } else {
                 setFarms(res.data.results);
             }
         }).catch((err) => {
             setFarms([{ public_id: 0, name: 'No farm available' }]);
-            if (err.response.status === 401) {
-                localStorage.clear();
-                navigate("/login")
-            }
+            handleUnauthorized(err, navigate);
         });
-    }, [])
+    }, [navigate])
     let changeFarm = (e) => {
-        if (e.target.value == 0) {
+        if (e.target.value === "0") {
             setFlocks([]);
             setFlock([]);
             setShowForm(false);
@@ -154,9 +151,10 @@ const FlockSale = () => {
             setError({});
         } else {
             let url = `${apiPath}flocks/${e.target.value}/`;
-            config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
-            axios.get(url, config).then((res) => {
-                if (res.data.results.total_records == 0) {
+            // U: Replaced shared config mutation with per-request auth headers from getAuthConfig().
+            // config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
+            axios.get(url, getAuthConfig()).then((res) => {
+                if (res.data.results.total_records === 0) {
                     setFlocks([{ flock_public_id: 0, flock_name: 'No flock available' }]);
                 } else {
                     //setData({...data,farm:e.target.value,flock:null,seltype:null});
@@ -171,31 +169,31 @@ const FlockSale = () => {
                 setError({});
             }).catch((err) => {
                 //setFormError('No Flock available.');
-                if (err.response.status === 401) {
-                    localStorage.clear();
-                    navigate("/login")
-                }
+                handleUnauthorized(err, navigate);
             });
         }
     }
     let changeFlock = (e) => {
-        if (e.target.value == 0) {
+        if (e.target.value === "0") {
             setShowForm(false);
             setShowFlockSale(false);
             setShowButton(false);
             setData({ flock: null, selType: null, date: '', sellcount: '', selltwt: '', sellrate: '', sellamount: '' });
             setError({});
         } else {
-            const user = flocks.find(u => u.flock_public_id === e.target.value);
+            const user = flocks.find(u => String(u.flock_public_id) === e.target.value);
+            if (!user) {
+                setShowForm(false);
+                setShowFlockSale(false);
+                setShowButton(false);
+                return;
+            }
             let url = `${apiPath}dailyDataLastDate/${e.target.value}/`;
-            axios.get(url, config).then((res) => {
+            axios.get(url, getAuthConfig()).then((res) => {
                 setTotalChickCount(res.data.results.current_bird_count);
             }).catch((err) => {
                 setTotalChickCount(user.actual_birds);
-                if (err.response.status === 401) {
-                    localStorage.clear();
-                    navigate("/login")
-                }
+                handleUnauthorized(err, navigate);
             });
             setData({ ...data, farm: user.farm_public_id, flock: user.flock_public_id, date: '', sellcount: '', selltwt: '', sellrate: '', sellamount: '' });
             setFlock(user);
@@ -206,7 +204,7 @@ const FlockSale = () => {
         }
     }
     let changeFlockSale = (e) => {
-        if (e.target.value == 0) {
+        if (e.target.value === "0") {
             setShowButton(false);
             setShowForm(false);
             setData({ ...data, selType: e.target.value, date: '', sellcount: '', selltwt: '', sellrate: '', sellamount: '', sellavgweight: 0, totalCost: 0 });
@@ -214,7 +212,7 @@ const FlockSale = () => {
         } else {
             setShowButton(true);
             setShowForm(false);
-            e.target.value == "partial_lifting" ?
+            e.target.value === "partial_lifting" ?
                 setData({ ...data, selType: e.target.value, date: '', sellcount: '', selltwt: '', sellrate: '', sellamount: '', sellavgweight: 0, totalCost: 0 })
                 : setData({ ...data, selType: e.target.value, date: '', sellcount: totalChickCount, selltwt: '', sellrate: '', sellamount: '', sellavgweight: 0, totalCost: 0 })
             setError({});
@@ -223,27 +221,24 @@ const FlockSale = () => {
     let openModel = () => {
         setModelShow(true);
         let url = `${apiPath}purchase/?flock_public_id=${flock.flock_public_id}&filter=feed`;
-        axios.get(url, config).then((res) => {//console.log(res.data.results);
-            setFeed(res.data.results.purchase_list);
-            let mid = 0;
-            for (let i = 0; i < res.data.results.purchase_list.length; i++) {
-                mid = mid + res.data.results.purchase_list[0].cost
-            }
-            setDataPopUp({ ...dataPopUp, totalfeed: mid });
+        axios.get(url, getAuthConfig()).then((res) => {//console.log(res.data.results);
+            const purchaseList = res.data.results.purchase_list;
+            setFeed(purchaseList);
+            // U: Replaced repeated first-item cost addition with a real total over all feed purchases.
+            // for (let i = 0; i < res.data.results.purchase_list.length; i++) { mid = mid + res.data.results.purchase_list[0].cost }
+            const totalFeedCost = purchaseList.reduce((total, item) => total + Number(item.cost || 0), 0);
+            setDataPopUp({ ...dataPopUp, totalfeed: totalFeedCost });
         }).catch((err) => {
             //console.log('sachin',err);
-            if (err.response.status === 401) {
-                localStorage.clear();
-                navigate("/login")
-            }
+            handleUnauthorized(err, navigate);
         });
     }
     let totalWeight = (e) => {
-        if ((data.sellcount == null || Number(data.sellcount) < 0 || data.sellcount == '')) {
+        if ((data.sellcount === null || Number(data.sellcount) < 0 || data.sellcount === '')) {
             setError({ ...error, sellcount: 'Lifting count is required.' });
             setData({ ...data, selltwt: 0 });
         } else {
-            if ((data.selltwt == null || Number(data.selltwt) < 0 || data.selltwt == '')) {
+            if ((data.selltwt === null || Number(data.selltwt) < 0 || data.selltwt === '')) {
                 setError({ ...error, selltwt: 'Total weight is required.' });
                 setData({ ...data, selltwt: 0 });
             } else {
@@ -253,11 +248,11 @@ const FlockSale = () => {
         }
     }
     let totalCost = (e) => {
-        if ((data.selltwt == null || Number(data.selltwt) < 0 || data.selltwt == '')) {
+        if ((data.selltwt === null || Number(data.selltwt) < 0 || data.selltwt === '')) {
             setError({ ...error, selltwt: 'Total weight is required.' });
             setData({ ...data, selltwt: 0 });
         } else {
-            if ((data.sellrate == null || Number(data.sellrate) < 0 || data.sellrate == '')) {
+            if ((data.sellrate === null || Number(data.sellrate) < 0 || data.sellrate === '')) {
                 setError({ ...error, sellrate: 'Rate is required.' });
                 setData({ ...data, selltwt: 0 });
             } else {
@@ -491,8 +486,8 @@ const FlockSale = () => {
                                             <FormGroup>
                                                 <Label for="farmselect">Select Farm</Label>
                                                 <div className="input-group">
-                                                    <Input onChange={changeFarm} id="farmSelect" name="farm" type="select">
-                                                        <option selected value={0}>Select Farm</option>
+                                                    <Input onChange={changeFarm} id="farmSelect" name="farm" type="select" defaultValue="0">
+                                                        <option value="0">Select Farm</option>
                                                         {
                                                             farms.map((item) => {
                                                                 return (
@@ -508,8 +503,8 @@ const FlockSale = () => {
                                                 <FormGroup>
                                                     <Label for="farmselect">Select Flock</Label>
                                                     <div className="input-group">
-                                                        <Input onChange={changeFlock} id="flockSelect" name="flock" type="select">
-                                                            <option selected={true} value={0}>Select Flocks</option>
+                                                        <Input onChange={changeFlock} id="flockSelect" name="flock" type="select" defaultValue="0">
+                                                            <option value="0">Select Flocks</option>
                                                             {
                                                                 flocks.map((item) => {
                                                                     return (
@@ -526,8 +521,8 @@ const FlockSale = () => {
                                                 <FormGroup>
                                                     <Label for="farmselect">Select Sale Type</Label>
                                                     <div className="input-group">
-                                                        <Input onChange={changeFlockSale} id="saleSelect" name="sale" type="select">
-                                                            <option value="0" selected>Select Sale Type</option>
+                                                        <Input onChange={changeFlockSale} id="saleSelect" name="sale" type="select" defaultValue="0">
+                                                            <option value="0">Select Sale Type</option>
                                                             <option value="partial_lifting">Partial Lifting</option>
                                                             <option value="final_lifting">Final Lifting</option>
                                                         </Input>
@@ -572,7 +567,7 @@ const FlockSale = () => {
                                                                     <Col sm="6" md="4" lg="4">
                                                                         <Label for="flockname">Date</Label>
                                                                         <input onChange={(e) => {
-                                                                            if (e.target.value == null || e.target.value.trim() == '') {
+                                                                            if (e.target.value === null || e.target.value.trim() === '') {
                                                                                 setError({ ...error, date: 'Date is required.' }); setData({ ...data, date: e.target.value });
                                                                             } else {
                                                                                 setError({ ...error, date: '' }); setData({ ...data, date: e.target.value });
@@ -584,7 +579,7 @@ const FlockSale = () => {
                                                                         <Col sm="6" md="4" lg="4">
                                                                             <Label for="flockname">Lifting Count</Label>
                                                                             <input onBlur={totalWeight} onChange={(e) => {
-                                                                                if (e.target.value == null || Number(e.target.value) < 0 || e.target.value == '') {
+                                                                                if (e.target.value === null || Number(e.target.value) < 0 || e.target.value === '') {
                                                                                     setError({ ...error, sellcount: 'Lifting Count is required.' }); setData({ ...data, sellcount: e.target.value });
                                                                                 } else {
                                                                                     setError({ ...error, sellcount: '' }); setData({ ...data, sellcount: e.target.value });
@@ -601,7 +596,7 @@ const FlockSale = () => {
                                                                     <Col sm="6" md="4" lg="4">
                                                                         <Label for="flockname">Total Wt.</Label>
                                                                         <input onBlur={totalWeight} onChange={(e) => {
-                                                                            if (e.target.value == null || Number(e.target.value) < 0 || e.target.value == '') {
+                                                                            if (e.target.value === null || Number(e.target.value) < 0 || e.target.value === '') {
                                                                                 setError({ ...error, selltwt: 'Total weight is required.' }); setData({ ...data, selltwt: e.target.value });
                                                                             } else {
                                                                                 setError({ ...error, selltwt: '' }); setData({ ...data, selltwt: e.target.value });
@@ -619,7 +614,7 @@ const FlockSale = () => {
                                                                     <Col sm="6" md="4" lg="4">
                                                                         <Label for="flockname">Rate/kg</Label>
                                                                         <input onBlur={totalCost} onChange={(e) => {
-                                                                            if (e.target.value == null || Number(e.target.value) < 0 || e.target.value == '') {
+                                                                            if (e.target.value === null || Number(e.target.value) < 0 || e.target.value === '') {
                                                                                 setError({ ...error, sellrate: 'Rate is required.' }); setData({ ...data, sellrate: e.target.value });
                                                                             } else {
                                                                                 setError({ ...error, sellrate: '' }); setData({ ...data, sellrate: e.target.value });
@@ -652,7 +647,7 @@ const FlockSale = () => {
                                                                     <Col sm="6" md="4" lg="4">
                                                                         <Label for="flockname">Buyer Phone</Label>
                                                                         <input maxLength={10} onChange={(e) => {
-                                                                            if (e.target.value == "" || e.target.value.match(/^[0-9]*$/)) {
+                                                                            if (e.target.value === "" || e.target.value.match(/^[0-9]*$/)) {
                                                                                 setError({ ...error, phone: '' });
                                                                                 setData({ ...data, [e.target.name]: e.target.value });
                                                                             } else {
@@ -727,6 +722,7 @@ const FlockSale = () => {
                                                             <Button color="primary" type="button" onClick={openModel}>Add Integration Cost</Button>
                                                         </div>}
                                                     <div className="button-group">
+                                                        {submitError && <Alert color="danger">{submitError}</Alert>}
                                                         {loading ?
                                                             <Button className="btn" color="danger" type="submit" disabled  >
                                                                 Saving...

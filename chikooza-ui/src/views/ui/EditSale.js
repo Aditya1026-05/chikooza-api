@@ -1,7 +1,7 @@
-import { Row, Col, Table, Card, CardTitle, CardBody, Alert, Button, Form, FormGroup, Label, Input, FormText, Nav, NavItem } from "reactstrap";
+import { Row, Col, Card, CardTitle, CardBody, Alert, Button, Form, Label } from "reactstrap";
 import '../../assets/css/header.css';
 import { useState } from "react";
-import { contentArea, apiPath, config } from "../../Constants";
+import { contentArea, apiPath, getAuthConfig, handleUnauthorized } from "../../Constants";
 import Accordion from 'react-bootstrap/Accordion'
 import { Link, useLocation } from "react-router-dom";
 import axios from "axios";
@@ -13,7 +13,6 @@ import { useNavigate } from "react-router-dom";
 
 const EditSale = () => {
     let location = useLocation();
-    console.log(location);
     let [show, setShow] = useState(false);
     let [loading, setLoading] = useState(false)
     let [modelShow, setModelShow] = useState(false);
@@ -21,7 +20,6 @@ const EditSale = () => {
     let [dataPopUp, setDataPopUp] = useState({
         totalfeed: 0
     });
-    let [flock, setFlock] = useState([]);
     let [data, setData] = useState({
         date: location.state.item.date ? location.state.item.date : " ", dateerror: "",
         age: location.state.item.age ? location.state.item.age : " ", ageerror: '',
@@ -58,7 +56,6 @@ const EditSale = () => {
         lamct: location.state.item.less_amct ? location.state.item.less_amct : 0,
         ot: location.state.item.other_taxes ? location.state.item.other_taxes : 0
     });
-    console.log(data);
     let navigate = useNavigate()
     function successMsg() {
         setShow(false);
@@ -70,12 +67,13 @@ const EditSale = () => {
         e.preventDefault();
         setLoading(false)
         let err = { status: 0, buyer: "" }
-        if (data.buyer == null || data.buyer == '') { err.buyer = 'buyer is required.'; err.status = 1 } else { err.date = '' }
+        if (data.buyer === null || data.buyer === '') { err.buyer = 'buyer is required.'; err.status = 1 } else { err.date = '' }
         setData({ ...data, buyererror: err.buyer })
         if (err.status === 0) {
             setLoading(true);
             let url = `${apiPath}sales/${location.state.item.public_id}/`;
-            config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
+            // U: Replaced shared config mutation with per-request auth headers from getAuthConfig().
+            // config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
             let saleData = {
                 date: data.date,
                 lifting_count: data.lifting_count,
@@ -86,6 +84,8 @@ const EditSale = () => {
                 remarks: data.remarks,
                 buyer_phone_no: data.buyer_phone_no,
                 buyer_address: data.buyer_address,
+                // U: Included buyer_email so edits preserve the email field added to the sale form.
+                buyer_email: data.buyer_email,
                 vacc_price: data.vac,
                 med_price: data.med,
                 admin_charges: data.ach,
@@ -102,8 +102,7 @@ const EditSale = () => {
                 less_amct: data.lamct,
                 other_taxes: data.ot,
             };
-            console.log(saleData);
-            axios.patch(url, saleData, config).then((res) => {
+            axios.patch(url, saleData, getAuthConfig()).then((res) => {
                 setLoading(false); setShow(true);
                 setTimeout(successMsg, 3000);
                 setData({ ...data, })
@@ -111,33 +110,22 @@ const EditSale = () => {
             }).catch((err) => {
                 console.log(err);
                 setLoading(false);
-                if (err.response.status === 401) {
-                    localStorage.clear();
-                    navigate("/login")
-                }
+                handleUnauthorized(err, navigate);
             });
         }
     }
     let openModel = () => {
         setModelShow(true);
         let url = `${apiPath}purchase/?flock_public_id=${location.state.item.flock_public_id}&filter=feed`;
-        const config = {
-            headers: {
-                "Authorization": `Bearer ${localStorage.getItem('token')}`
-            }
-        };
-        axios.get(url, config).then((res) => {//console.log(res.data.results);
-            setFeed(res.data.results.purchase_list);
-            let mid = 0;
-            for (let i = 0; i < res.data.results.purchase_list.length; i++) {
-                mid = mid + res.data.results.purchase_list[0].cost
-            }
-            setDataPopUp({ ...dataPopUp, totalfeed: mid });
+        axios.get(url, getAuthConfig()).then((res) => {//console.log(res.data.results);
+            const purchaseList = res.data.results.purchase_list;
+            setFeed(purchaseList);
+            // U: Replaced repeated first-item cost addition with a real total over all feed purchases.
+            // for (let i = 0; i < res.data.results.purchase_list.length; i++) { mid = mid + res.data.results.purchase_list[0].cost }
+            const totalFeedCost = purchaseList.reduce((total, item) => total + Number(item.cost || 0), 0);
+            setDataPopUp({ ...dataPopUp, totalfeed: totalFeedCost });
         }).catch((err) => {//console.log('sachin',err);
-            if (err.response.status === 401) {
-                localStorage.clear();
-                navigate("/login")
-            }
+            handleUnauthorized(err, navigate);
         });
     }
     // const displayFlock = () => {
