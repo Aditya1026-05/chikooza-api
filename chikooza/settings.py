@@ -91,6 +91,10 @@ HOSTNAME = os.environ.get("CHIKOOZA_API_BASE_URL", "http://127.0.0.1:8002/")
 if not HOSTNAME.endswith("/"):
     HOSTNAME = f"{HOSTNAME}/"
 
+# U: OLD: common.utils.send_otp always returned 123456.
+# U: NEW: allow a fixed OTP for local MVP testing, while production can use random OTPs.
+CHIKOOZA_FIXED_OTP = os.environ.get("CHIKOOZA_FIXED_OTP")
+
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     # U: OLD: corsheaders.middleware.CorsMiddleware was placed after Django auth/CSRF middleware.

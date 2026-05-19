@@ -7,6 +7,7 @@ from django.contrib.auth.models import User
 
 import pytz
 import requests
+from django.conf import settings
 from rest_framework import status
 from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import BasePermission
@@ -240,8 +241,14 @@ def check_update_email_validate(email, public_id):
 
 
 def send_otp(mobile_number):
-    random.randint(100000, 999999)
-    return 123456
+    # U: OLD: random.randint(100000, 999999) was discarded and every OTP was 123456.
+    # U: NEW: keep local MVP testing easy, but do not force a fixed OTP in production.
+    fixed_otp = getattr(settings, "CHIKOOZA_FIXED_OTP", None)
+    if fixed_otp:
+        return int(fixed_otp)
+    if settings.DEBUG:
+        return 123456
+    return random.randint(100000, 999999)
 
 
 def otp_delete_after_five_minutes(otp_object):
