@@ -18,6 +18,15 @@ from purchase.serializers import (
 from purchase.services import AddPurchaseService, UpdatePurchaseService
 
 
+def _purchase_queryset_for_request(request):
+    """
+    U: Scope purchase records to the authenticated farmer unless an admin is explicitly requesting data.
+    """
+    if getattr(request.user, "is_superuser", False):
+        return Purchase.objects.all()
+    return Purchase.objects.filter(user=request.user.users)
+
+
 class PurchaseView(viewsets.ViewSet):
     """
     Class to perform crud operation for purchase.
@@ -61,7 +70,8 @@ class PurchaseView(viewsets.ViewSet):
         """
         try:
             validate_url_value(pk, "purchasePublicId")
-            purchase = Purchase.objects.get(public_id=pk)
+            # U: OLD: Purchase.objects.get(public_id=pk)
+            purchase = _purchase_queryset_for_request(request).get(public_id=pk)
             return get_detail(
                 "Purchase details",
                 GetPurchaseSerializer(purchase).data,
@@ -74,8 +84,8 @@ class PurchaseView(viewsets.ViewSet):
     def partial_update(cls, request, pk):
         try:
             validate_url_value(pk, "purchasePublicId")
-            if Purchase.objects.filter(public_id=pk).exists():
-                purchase = Purchase.objects.get(public_id=pk)
+            # U: OLD: update lookup only checked public_id and allowed cross-farmer updates.
+            purchase = _purchase_queryset_for_request(request).get(public_id=pk)
             serializer = UpdatePurchaseSerializer(data=request.data)
             if serializer.is_valid(raise_exception=True):
                 serializer_data = serializer.validated_data
@@ -95,14 +105,12 @@ class PurchaseView(viewsets.ViewSet):
     @classmethod
     def list(cls, request):
         try:
+            purchase = _purchase_queryset_for_request(request).filter(
+                flock__public_id=request.GET.get("flock_public_id")
+            )
             if request.GET.get('filter') == 'feed':
-                purchase = Purchase.objects.filter(
-                    flock__public_id=request.GET.get("flock_public_id"),type='Feed'
-                )
-            else:
-                purchase = Purchase.objects.filter(
-                    flock__public_id=request.GET.get("flock_public_id")
-                )
+                # U: OLD: list used flock_public_id only, so another farmer's flock purchases were visible.
+                purchase = purchase.filter(type='Feed')
             return list_response(
                 "Purchase List",
                 purchase.count(),
@@ -134,8 +142,10 @@ class QuantityView(viewsets.ViewSet):
         serializer = QuantitySerializer(data=request.GET)
         if serializer.is_valid(raise_exception=True):
             serializer_data = serializer.validated_data
-            purchases = Purchase.objects.filter(
+            purchases = _purchase_queryset_for_request(request).filter(
                 flock__public_id=serializer_data["flock"].get("public_id"),
+                # U: OLD: quantity summed feed by flock id only.
+                # U: NEW: use the same authenticated farmer scope as purchase list/detail.
                 type="Feed",
                 date__lte=serializer_data["date"],
             )

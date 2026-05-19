@@ -1,6 +1,8 @@
-import { Spinner, Alert, Row, Col, Table, Card, CardTitle, CardBody, Button, Form, FormGroup, Label, Input } from "reactstrap";
+// U: OLD unused Table import kept this screen noisy during builds.
+// import { Table } from "reactstrap";
+import { Spinner, Alert, Row, Col, Card, CardTitle, CardBody, Button, Form, FormGroup, Label, Input } from "reactstrap";
 import '../../assets/css/header.css';
-import { contentArea, apiPath, config } from "../../Constants";
+import { contentArea, apiPath, getAuthConfig, handleUnauthorized } from "../../Constants";
 import { useState, useEffect } from "react";
 import Accordion from 'react-bootstrap/Accordion'
 import axios from 'axios';
@@ -22,8 +24,9 @@ const ViewPurchase = () => {
     let [company_nameerr, setCompany_nameerr] = useState('');
     let [item_nameerr, setItem_nameerr] = useState('');
     let [uniterr, setUniterr] = useState('');
-    let [sizeerr, setSizeerr] = useState('');
-    let [item_typeerr, setItem_typeerr] = useState('');
+    // U: OLD: sizeerr/item_typeerr state existed but was not rendered or updated.
+    // let [sizeerr, setSizeerr] = useState('');
+    // let [item_typeerr, setItem_typeerr] = useState('');
     let [quantityerr, setQuantityerr] = useState('');
 
     const navigate = useNavigate()
@@ -31,32 +34,26 @@ const ViewPurchase = () => {
 
     useEffect(() => {
         let url = `${apiPath}flocksDetail/${flockPublicId}/`;
-        config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
-        axios.get(url, config).then((res) => {
+        // U: OLD: config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
+        axios.get(url, getAuthConfig()).then((res) => {
             setFlock({ flock_public_id: res.data.results.flock_public_id, flock_name: res.data.results.flock_name });
             setFarm({ farm_public_id: res.data.results.farm_public_id, farm_name: res.data.results.farm_name });
         }).catch((err) => {
             setFlock({ flock_public_id: 0, flock_name: 'No flock available' });
             setFarm({ farm_public_id: 0, farm_name: 'No farm available' });
-            if (err.response.status === 401) {
-                localStorage.clear();
-                navigate("/login")
-            }
+            handleUnauthorized(err, navigate);
         });
-    }, [])
+    }, [flockPublicId, navigate])
     useEffect(() => {
         let url = `${apiPath}purchase/${purchasePublicID}/`;
-        config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
-        axios.get(url, config).then((res) => {
+        // U: OLD: config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
+        axios.get(url, getAuthConfig()).then((res) => {
             setPurchase(res.data.results);
         }).catch((err) => {
             setPurchase();
-            if (err.response.status === 401) {
-                localStorage.clear();
-                navigate("/login")
-            }
+            handleUnauthorized(err, navigate);
         });
-    }, [])
+    }, [purchasePublicID, navigate])
     const save = (e) => {
         e.preventDefault();
         setLoading(true);
@@ -103,27 +100,29 @@ const ViewPurchase = () => {
             if (purchase.date === null || purchase.date === '') { setDateerr('This fields is required'); error = 1; } else { setDateerr(''); }
         }
 
-        if (error == 0) {
-            if (purchase.type == 'Other' || purchase.type == 'Labour') {
-                purchase.item_name = '0';
-                purchase.company_name = '0';
+        if (error === 0) {
+            const purchasePayload = { ...purchase };
+            // U: OLD: save() mutated purchase state directly before PATCH.
+            // U: NEW: build a request payload and leave React state immutable.
+            if (purchase.type === 'Other' || purchase.type === 'Labour') {
+                purchasePayload.item_name = '0';
+                purchasePayload.company_name = '0';
             }
             let url = `${apiPath}purchase/${purchase.public_id}/`;
-            config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
-            axios.patch(url, purchase, config).then((res) => {
+            axios.patch(url, purchasePayload, getAuthConfig()).then(() => {
                 setShow(true);
-                const myTimeout = setTimeout((() => {
+                setLoading(false);
+                setTimeout((() => {
                     setShow(false);
                 }), 3000);
             }).catch((err) => {
                 setErr('Something went wrong. Please try again');
-                if (err.response.status === 401) {
-                    localStorage.clear();
-                    navigate("/login")
-                }
+                setLoading(false);
+                handleUnauthorized(err, navigate);
             });
+        } else {
+            setLoading(false);
         }
-        setLoading(false);
     }
     let changeFeedCompany = (e) => {
         e.target.value.trim()==='' ? setCompany_nameerr('This fields is required') : setCompany_nameerr('');
@@ -168,14 +167,14 @@ const ViewPurchase = () => {
 
     let changeRemarks = (e) => {
         setPurchase({ ...purchase, remarks: e.target.value });
-        e.target.value.trim() == '' ? setRemarkserr('This fields is required') : setRemarkserr('');
+        e.target.value.trim() === '' ? setRemarkserr('This fields is required') : setRemarkserr('');
     }
     let changeFeedType = (e) => {
         setPurchase({ ...purchase, item_type: e.target.value });
     }
     let changePurchaseDate = (e) => {
         setPurchase({ ...purchase, date: e.target.value });
-        e.target.value.trim() == '' ? setDateerr('This fields is required') : setDateerr('');
+        e.target.value.trim() === '' ? setDateerr('This fields is required') : setDateerr('');
     }
     let showQuantity = (e) => {
         setPurchase({ ...purchase, quantity: e.target.value });
@@ -212,7 +211,7 @@ const ViewPurchase = () => {
                             <Col sm="12" md={{ offset: 2, size: 8 }}>
                                 <div className={contentArea}>
                                     <div className='gridmargin'>
-                                        {(err != '') && <Alert color="danger">{err}</Alert>}
+                                        {(err !== '') && <Alert color="danger">{err}</Alert>}
                                         <Form onSubmit={save}>
                                             <Label for="farmselect">Select Farm</Label>
                                             <FormGroup>
@@ -249,7 +248,7 @@ const ViewPurchase = () => {
                                                         </Row>
                                                         {/* Feed Data */}
                                                         {
-                                                            purchase.type == 'Feed' &&
+                                                            purchase.type === 'Feed' &&
                                                             <>
                                                                 <Row>
                                                                     <Col>
@@ -273,21 +272,21 @@ const ViewPurchase = () => {
                                                                     </Col>
                                                                     <Col>
                                                                         <Label for="bagsSize" className="font-bold">Bags Size</Label>
-                                                                        <Input onChange={changeBagsSize} name="bagsSize" type="select">
-                                                                            <option disabled={true} selected>Select</option>
-                                                                            <option selected={purchase.size == 50} value="50">50 KG</option>
-                                                                            <option selected={purchase.size == 100} value="100">100 KG</option>
+                                                                        <Input value={purchase.size || "0"} onChange={changeBagsSize} name="bagsSize" type="select">
+                                                                            <option value="0" disabled>Select</option>
+                                                                            <option value="50">50 KG</option>
+                                                                            <option value="100">100 KG</option>
                                                                         </Input>
                                                                     </Col>
                                                                 </Row>
                                                                 <Row>
                                                                     <Col>
                                                                         <Label for="feedType" className="font-bold">Feed Type</Label>
-                                                                        <Input onChange={changeFeedType} name="feedType" type="select">
-                                                                            <option value='0' disabled selected>Select</option>
-                                                                            <option selected={purchase.item_type == 100} value="100">Pre Starter</option>
-                                                                            <option selected={purchase.item_type == 101} value="101">Starter</option>
-                                                                            <option selected={purchase.item_type == 102} value="102">Finisher</option>
+                                                                        <Input value={purchase.item_type || "0"} onChange={changeFeedType} name="feedType" type="select">
+                                                                            <option value='0' disabled>Select</option>
+                                                                            <option value="100">Pre Starter</option>
+                                                                            <option value="101">Starter</option>
+                                                                            <option value="102">Finisher</option>
                                                                         </Input>
                                                                     </Col>
                                                                     <Col>
@@ -309,7 +308,7 @@ const ViewPurchase = () => {
 
                                                         {/* Medicine Data */}
                                                         {
-                                                            purchase.type == 'Medicine' &&
+                                                            purchase.type === 'Medicine' &&
                                                             <>
                                                                 <Row>
                                                                     <Col>
@@ -349,7 +348,7 @@ const ViewPurchase = () => {
 
                                                         {/* Vaccination Data */}
                                                         {
-                                                            purchase.type == 'Vaccination' &&
+                                                            purchase.type === 'Vaccination' &&
                                                             <>
                                                                 <Row>
                                                                     <Col>
@@ -387,9 +386,10 @@ const ViewPurchase = () => {
                                                         }
                                                         {/* Vaccination Data */}
                                                         {
-                                                            purchase.type == 'Equipment' &&
+                                                            purchase.type === 'Equipment' &&
                                                             <>
-                                                  z              {/* Equipment Data */}
+                                                                {/* U: OLD: stray "z" text was rendered before the Equipment section. */}
+                                                                {/* Equipment Data */}
                                                                 <Row>
                                                                     <Col>
                                                                         <Label for="equipmentcompany" className="font-bold flex">Equipment Company</Label>
@@ -426,7 +426,7 @@ const ViewPurchase = () => {
                                                         }
                                                         {/* Equipment Data */}
                                                         {
-                                                            purchase.type == 'Labour' &&
+                                                            purchase.type === 'Labour' &&
                                                             <>
                                                                 {/* Labour Data */}
                                                                 <Row>
@@ -448,7 +448,7 @@ const ViewPurchase = () => {
                                                         {/* Labour Data */}
                                                         {/* Other Data */}
                                                         {
-                                                            purchase.type == 'Other' &&
+                                                            purchase.type === 'Other' &&
                                                             <>
                                                                 <Row>
                                                                     <Col>

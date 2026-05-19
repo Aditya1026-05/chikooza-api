@@ -1,6 +1,6 @@
 import { Spinner, Alert, Row, Col, Card, CardTitle, CardBody, Button, Form, FormGroup, Label, Input } from "reactstrap";
 import '../../assets/css/header.css';
-import { contentArea, apiPath, config } from "../../Constants";
+import { contentArea, apiPath, getAuthConfig, handleUnauthorized } from "../../Constants";
 import { useState, useEffect } from "react";
 import Accordion from 'react-bootstrap/Accordion'
 import axios from 'axios';
@@ -15,9 +15,11 @@ const AddPurchase = () => {
     let [showFlocks, setShowFlocks] = useState(0);
     let [flocks, setFlocks] = useState([]);
     let [showForm, setShowForm] = useState(0);
-    const [showInputArea, setShowInputArea] = useState(false);
+    // U: OLD: showInputArea used boolean false plus string action codes.
+    // U: NEW: keep the select state as one consistent string value.
+    const [showInputArea, setShowInputArea] = useState("0");
     let [addData, setAddData] = useState({
-        flock_public_id: '',
+        flock_public_id: '0',
         type: '',
         date: null,
         cost: null,
@@ -43,30 +45,26 @@ const AddPurchase = () => {
 
     useEffect(() => {
         let url = `${apiPath}farm/`;
-        config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
-        axios.get(url, config).then((res) => {
+        // U: OLD: config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
+        axios.get(url, getAuthConfig()).then((res) => {
             if (res.data.results.length === 0) {
                 setFarms([{ public_id: 0, name: 'No farm available' }]);
             } else {
                 setFarms(res.data.results);
             }
         }).catch((err) => {
-            console.log(err)
             setFarms([{ public_id: 0, name: 'No farm available' }]);
-            if (err.response.status === 401) {
-                localStorage.clear();
-                navigate("/login")
-            }
+            handleUnauthorized(err, navigate);
         });
-    }, [])
+    }, [navigate])
     let changeFarm = (e) => {
         setAddData({ ...addData, farm_public_id: e.target.value });
-        if (e.target.value === 0) {
+        // U: OLD: e.target.value === 0 compared a string to a number.
+        if (e.target.value === "0") {
             //setFarm_public_iderr('Please select farm');
         } else {
             let url = `${apiPath}flocks/${e.target.value}/`;
-            config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
-            axios.get(url, config).then((res) => {
+            axios.get(url, getAuthConfig()).then((res) => {
                 setShowFlocks(1);
                 setShowForm(0);
                 if (res.data.results.total_records === 0) {
@@ -75,16 +73,13 @@ const AddPurchase = () => {
                     setFlocks(res.data.results.flock_list);
                 }
             }).catch((err) => {
-                setFlocks(err.data.results);
-                if (err.response.status === 401) {
-                    localStorage.clear();
-                    navigate("/login")
-                }
+                setFlocks([]);
+                handleUnauthorized(err, navigate);
             });
         }
     }
     let changeFlocks = (e) => {
-        if (e.target.value === 0) {
+        if (e.target.value === "0") {
             setFlockerr('Flock is not valid');
             setShowForm(0);
         } else {
@@ -105,8 +100,9 @@ const AddPurchase = () => {
             if (addData.company_name.trim()==='') { setCompany_nameerr('This fields is required'); error = 1; } else { setCompany_nameerr(''); }
             if (addData.item_name.trim()==='') { setItem_nameerr('This fields is required'); error = 1; } else { setItem_nameerr(''); }
             if (addData.unit<1) { setUniterr('This fields is required'); error = 1; } else { setUniterr(''); }
-            //if (addData.item_type.trim() === '' || addData.item_type == null) { setItem_typeerr('This fields is required'); error = 1; } else { setItem_typeerr(''); }
-            //if (addData.size.trim() === '' || addData.size == null) { setSizeerr('This fields is required'); error = 1; } else { setSizeerr(''); }
+            // U: OLD: feed size/item type validation was commented out, leaving setters unused.
+            if (Number(addData.size) < 1) { setSizeerr('This fields is required'); error = 1; } else { setSizeerr(''); }
+            if (addData.item_type === '' || addData.item_type === '0' || addData.item_type === null) { setItem_typeerr('This fields is required'); error = 1; } else { setItem_typeerr(''); }
             if (addData.quantity < 0) { setQuantityerr('This fields is required'); error = 1; } else { setQuantityerr(''); }
         } else if (showInputArea === 'M') {
             if (addData.cost < 0 || addData.cost === null) { setCosterr('This fields is not valid'); error = 1; } else { setCosterr(''); }
@@ -143,8 +139,7 @@ const AddPurchase = () => {
         if (error === 0) {
             setLoading(true)
             let url = `${apiPath}purchase/`;
-            config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
-            axios.post(url, addData, config).then((res) => {
+            axios.post(url, addData, getAuthConfig()).then((res) => {
                 setShow(true);
                 setLoading(false);
                 setTimeout((() => {
@@ -152,7 +147,7 @@ const AddPurchase = () => {
                 }), 3000);
                 setAddData({
                     ...addData,
-                    flock_public_id: '',
+                    flock_public_id: '0',
                     type: '',
                     date: null,
                     cost: null,
@@ -165,16 +160,14 @@ const AddPurchase = () => {
                     quantity: null
                 })
                 setShowForm(0)
+                // U: OLD: selected purchase action stayed active after save/reset.
+                setShowInputArea("0")
                 setErr('');
                 //setShowFlocks(0)
             }).catch((err) => {
-                console.log(err);
                 setLoading(false);
                 setErr('Something went wrong. Please try again');
-                if (err.response.status === 401) {
-                    localStorage.clear();
-                    navigate("/login")
-                }
+                handleUnauthorized(err, navigate);
             });
         }
 
@@ -233,7 +226,7 @@ const AddPurchase = () => {
     let closeAll = () => {
         setAddData({
             ...addData,
-            flock_public_id: '',
+            flock_public_id: '0',
             type: '',
             date: null,
             cost: null,
@@ -246,6 +239,8 @@ const AddPurchase = () => {
             quantity: null
         })
         setShowForm(0)
+        // U: OLD: selected purchase action stayed active after cancel/reset.
+        setShowInputArea("0")
         //setShowFlocks(0)
     }
     return (
@@ -280,8 +275,8 @@ const AddPurchase = () => {
                                             <Label for="farmselect">Select Farm</Label>
                                             <FormGroup>
                                                 <div className="input-group">
-                                                    <Input onChange={changeFarm} defaultValue={'Select Farm'} id="farmSelect" name="farm" type="select">
-                                                        <option disabled defaultValue={-1}>Select Farm</option>
+                                                    <Input onChange={changeFarm} defaultValue="0" id="farmSelect" name="farm" type="select">
+                                                        <option value="0" disabled>Select Farm</option>
                                                         {
                                                             farms.map((item) => {
                                                                 return (
@@ -297,7 +292,7 @@ const AddPurchase = () => {
                                                     <Label for="farmselect">Select Flocks</Label>
                                                     <div className="input-group">
                                                         <Input onChange={changeFlocks} value={addData.flock_public_id} id="farmSelect" name="flock" type="select">
-                                                            <option selected value={0}>Select Flocks</option>
+                                                            <option value="0">Select Flocks</option>
                                                             {
                                                                 flocks.map((item) => {
                                                                     return (
@@ -324,8 +319,8 @@ const AddPurchase = () => {
                                                                     </Col>
                                                                     <Col>
                                                                         <Label for="action" className="font-bold">Action</Label>
-                                                                        <Input defaultValue={0} onChange={showInputs} name="selectAction" type="select">
-                                                                            <option value='0' disabled selected>Select</option>
+                                                                        <Input value={showInputArea} onChange={showInputs} name="selectAction" type="select">
+                                                                            <option value='0' disabled>Select</option>
                                                                             <option value="F">Feed</option>
                                                                             <option value="M">Medicine</option>
                                                                             <option value="V">Vaccination</option>
@@ -363,7 +358,7 @@ const AddPurchase = () => {
                                                                             <Col>
                                                                                 <Label for="bagsSize" className="font-bold">Bags Size</Label>
                                                                                 <Input onChange={changeBagsSize} value={addData.size} name="bagsSize" type="select">
-                                                                                    <option disabled={true} selected>Select</option>
+                                                                                    <option value="0" disabled>Select</option>
                                                                                     <option value="50">50 KG</option>
                                                                                     <option value="100">100 KG</option>
                                                                                 </Input>
@@ -374,7 +369,7 @@ const AddPurchase = () => {
                                                                             <Col>
                                                                                 <Label for="feedType" className="font-bold">Feed Type</Label>
                                                                                 <Input onChange={changeFeedType} value={addData.item_type} name="feedType" type="select">
-                                                                                    <option value='0' disabled selected>Select</option>
+                                                                                    <option value='0' disabled>Select</option>
                                                                                     <option value="100">Pre Starter</option>
                                                                                     <option value="101">Starter</option>
                                                                                     <option value="102">Finisher</option>
@@ -562,7 +557,7 @@ const AddPurchase = () => {
                                                             </Accordion.Body>
                                                         </Accordion.Item>
                                                     </Accordion>
-                                                    {showInputArea === false ? null :
+                                                    {showInputArea === "0" ? null :
                                                         <div className="d-flex">
                                                             {loading ?
                                                                 <Button className="btn" color="danger" type="submit" disabled  >
