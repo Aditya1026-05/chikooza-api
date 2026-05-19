@@ -1,7 +1,9 @@
 # U: OLD: amqp==5.1.1
 # U: NEW: Celery is not configured or imported by this project; keep broker deps out until a worker exists.
 # amqp==5.1.1
-anyio==3.6.1
+# U: OLD: anyio==3.6.1
+# U: NEW: not directly imported; httpx/langchain can resolve the compatible async backend they need.
+# anyio==3.6.1
 # U: OLD: asgiref==3.5.2
 # U: NEW: Django 5.2 requires the modern ASGI support package.
 asgiref==3.11.1
@@ -48,7 +50,9 @@ django-log-request-id==2.1.2
 django-oauth-toolkit==3.2.0
 # U: OLD: django-service-objects==0.7.0
 django-service-objects==0.7.1
-django-sms==0.5.0
+# U: OLD: django-sms==0.5.0
+# U: NEW: no SMS backend/app import is wired in this codebase; keep it out until real SMS integration exists.
+# django-sms==0.5.0
 # OLD: djangorestframework==3.11.0
 # NEW: Django 4.1 removed django.conf.urls.url, so DRF must be Django-4-compatible.
 # U: OLD: djangorestframework==3.14.0
@@ -75,8 +79,12 @@ idna==3.15
 # U: OLD: oauthlib==3.2.0
 # U: NEW: required by django-oauth-toolkit 3.2.
 oauthlib==3.3.1
-onesignal-sdk==2.0.0
-pdfkit==1.0.0
+# U: OLD: onesignal-sdk==2.0.0
+# U: NEW: no OneSignal notification integration is imported or configured.
+# onesignal-sdk==2.0.0
+# U: OLD: pdfkit==1.0.0
+# U: NEW: backend PDF rendering uses xhtml2pdf in users/utils.py, not wkhtmltopdf/pdfkit.
+# pdfkit==1.0.0
 # OLD: missing xhtml2pdf dependency even though users/utils.py imports it.
 # NEW: Add a compatible xhtml2pdf/reportlab pair for PDF generation imports.
 xhtml2pdf==0.2.11
@@ -84,8 +92,12 @@ reportlab==3.6.13
 # OLD: Pillow==9.1.1
 # NEW: Pillow 10.4 has Python 3.11 macOS wheels and avoids local JPEG header builds.
 Pillow==10.4.0
-prompt-toolkit==3.0.29
-python-dateutil==1.5
+# U: OLD: prompt-toolkit==3.0.29
+# U: NEW: direct CLI prompt dependency is unused by project code.
+# prompt-toolkit==3.0.29
+# U: OLD: python-dateutil==1.5
+# U: NEW: project code uses datetime/Django date handling directly; no dateutil import remains.
+# python-dateutil==1.5
 # U: OLD: pytz==2022.1
 # U: NEW: project OTP logic now uses django.utils.timezone; Django 5 uses zoneinfo/timezone utilities.
 # pytz==2022.1
