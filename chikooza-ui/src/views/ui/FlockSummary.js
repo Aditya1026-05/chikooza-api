@@ -6,14 +6,13 @@ import {
   Card,
   CardTitle,
   CardBody,
-  Form,
   FormGroup,
   Label,
   Input,
   Alert,
 } from "reactstrap";
 import "../../assets/css/header.css";
-import { contentArea, apiPath, config } from "../../Constants";
+import { contentArea, apiPath, getAuthConfig, handleUnauthorized } from "../../Constants";
 import { useState, useEffect } from "react";
 import axios from "axios";
 // import '../ui/custom.css'
@@ -25,7 +24,6 @@ const FlockSummary = () => {
   const [showFlock, setShowFlock] = useState(false);
   const [showForm, setShowForm] = useState(false);
   let [flocks, setFlocks] = useState([]);
-  let [flock, setFlock] = useState([]);
   let [farms, setFarms] = useState([]);
   let [currentFlock, setcurrentFlock] = useState({});
   let [flockdata, setFlockData] = useState({});
@@ -33,9 +31,10 @@ const FlockSummary = () => {
 
   useEffect(() => {
     let url = `${apiPath}farm/`;
-    config.headers["Authorization"] = `Bearer ${localStorage.getItem("token")}`;
+    // U: Replaced shared config mutation with per-request auth headers from getAuthConfig().
+    // config.headers["Authorization"] = `Bearer ${localStorage.getItem("token")}`;
     axios
-      .get(url, config)
+      .get(url, getAuthConfig())
       .then((res) => {
         if (res.data.results.length === 0) {
           setFarms([{ public_id: 0, name: "No farm available" }]);
@@ -45,23 +44,21 @@ const FlockSummary = () => {
       })
       .catch((err) => {
         setFarms([{ public_id: 0, name: "No farm available" }]);
-        if (err.response.status === 401) {
-          localStorage.clear();
-          navigate("/login");
-        }
+        handleUnauthorized(err, navigate);
       });
-  }, []);
+  }, [navigate]);
   let changeFarm = (e) => {
-    if (e.target.value === 0) {
+    setShowForm(false);
+    setFlockData({});
+    if (e.target.value === "0") {
       setShowFlock(false);
       setFlocks([]);
     } else {
       let url = `${apiPath}flocks/${e.target.value}/`;
-      config.headers["Authorization"] = `Bearer ${localStorage.getItem(
-        "token"
-      )}`;
+      // U: Replaced shared config mutation with per-request auth headers from getAuthConfig().
+      // config.headers["Authorization"] = `Bearer ${localStorage.getItem("token")}`;
       axios
-        .get(url, config)
+        .get(url, getAuthConfig())
         .then((res) => {
           if (res.data.results.total_records === 0) {
             setFlocks([
@@ -75,45 +72,39 @@ const FlockSummary = () => {
         })
         .catch((err) => {
           //setFormError('No Flock available.');
-          if (err.response.status === 401) {
-            localStorage.clear();
-            navigate("/login");
-          }
+          handleUnauthorized(err, navigate);
         });
     }
   };
-  let changeFlock = (e) => {
-    if (e.target.value === 0) {
-      setShowForm(false);
-    } else {
-      const user = flocks.find((u) => u.flock_public_id === e.target.value);
-      setcurrentFlock(user);
-      setShowForm(true);
-      setFlock(user.flock_public_id);
-      console.log(user);
-    }
-  };
-
-  const getsetFlockData = () => {
-    let url = `${apiPath}flockSummary/${flock}/`;
-    const config = {
-      headers: {
-        Authorization: `Bearer ${localStorage.getItem("token")}`,
-      },
-    };
+  const getsetFlockData = (flockPublicId) => {
+    let url = `${apiPath}flockSummary/${flockPublicId}/`;
     axios
-      .get(url, config)
+      .get(url, getAuthConfig())
       .then((res) => {
         setFlockData(res.data.results);
-        console.log(res.data.results);
       })
       .catch((err) => {
         console.log(err);
-        if (err.response.status === 401) {
-          localStorage.clear();
-          navigate("/login");
-        }
+        handleUnauthorized(err, navigate);
       });
+  };
+  let changeFlock = (e) => {
+    const flockPublicId = e.target.value;
+    if (flockPublicId === "0") {
+      setShowForm(false);
+      setFlockData({});
+    } else {
+      const user = flocks.find((u) => String(u.flock_public_id) === flockPublicId);
+      if (!user) {
+        setShowForm(false);
+        setFlockData({});
+        return;
+      }
+      setcurrentFlock(user);
+      setShowForm(true);
+      // U: Replaced click-time summary fetch with an explicit load after flock selection.
+      getsetFlockData(flockPublicId);
+    }
   };
   function downloadPDFWithjsPDF() {
     const orientation = "portrait"; // portrait or landscape
@@ -166,10 +157,10 @@ const FlockSummary = () => {
                           name="farm"
                           type="select"
                           className="font_family_content "
+                          defaultValue="0"
                         >
                           <option
-                            selected
-                            value={0}
+                            value="0"
                             className="font_family_content "
                           >
                             Select Farm
@@ -199,15 +190,14 @@ const FlockSummary = () => {
                         <div className="input-group">
                           <Input
                             onChange={changeFlock}
-                            onClick={getsetFlockData}
                             id="flockSelect"
                             name="flock"
                             type="select"
                             className="font_family_content "
+                            defaultValue="0"
                           >
                             <option
-                              selected={true}
-                              value={0}
+                              value="0"
                               className="font_family_content "
                             >
                               Select Flocks
@@ -564,6 +554,7 @@ const FlockSummary = () => {
                               </Alert>
                               {flockdata.sales_data?.map((sale, index) => (
                                 <Table
+                                  key={sale.public_id || `${sale.date}-${index}`}
                                   className="no-wrap mt-3 align-middle table-responsive table-bordered sales-table"
                                   responsive
                                   borderless
@@ -579,10 +570,8 @@ const FlockSummary = () => {
                                         Birds Lifted
                                       </td>
                                       <td className="font_family_content">
-                                        {flockdata.sales_data[index]
-                                          .lifting_count > 0
-                                          ? flockdata.sales_data[index]
-                                              .lifting_count
+                                        {sale.lifting_count > 0
+                                          ? sale.lifting_count
                                           : "-"}
                                       </td>
                                       {/* <td className="font_family_sub " style={{ backgroundColor: "rgb(229,229,229)" }}>Status</td>
@@ -596,10 +585,8 @@ const FlockSummary = () => {
                                         Avg. Wt.
                                       </td>
                                       <td className="font_family_content">
-                                        {flockdata.sales_data[index]
-                                          .average_weight > 0
-                                          ? flockdata.sales_data[index]
-                                              .average_weight
+                                        {sale.average_weight > 0
+                                          ? sale.average_weight
                                           : "-"}
                                       </td>
                                     </tr>
@@ -613,7 +600,7 @@ const FlockSummary = () => {
                                         Sale Date
                                       </td>
                                       <td className="font_family_content">
-                                        {flockdata.sales_data[index].date}
+                                        {sale.date}
                                       </td>
                                       <td
                                         className="font_family_sub "
@@ -624,8 +611,8 @@ const FlockSummary = () => {
                                         Sale Amt.
                                       </td>
                                       <td className="font_family_content">
-                                        {flockdata.sales_data[index].cost > 0
-                                          ? flockdata.sales_data[index].cost
+                                        {sale.cost > 0
+                                          ? sale.cost
                                           : "-"}
                                       </td>
                                     </tr>
