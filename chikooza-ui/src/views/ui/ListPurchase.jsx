@@ -4,8 +4,10 @@ import { contentArea, apiPath, getAuthConfig, handleUnauthorized } from "../../C
 import { useState, useEffect } from "react";
 import axios from 'axios';
 import { Link } from "react-router-dom";
-import jsPDF from "jspdf";
-import 'jspdf-autotable'
+// U: OLD: import jsPDF from "jspdf";
+// U: OLD: import 'jspdf-autotable'
+// U: NEW: lazy-load the PDF runtime only when the user exports.
+import { loadAutoTable, loadJsPDF } from "../../utils/pdf";
 import { useNavigate } from "react-router-dom";
 
 
@@ -15,6 +17,7 @@ const ListPurchase = () => {
     const [showFlock, setShowFlock] = useState(false);
     const [showForm, setShowForm] = useState(false);
     let [purchaseList, setPurchaseList] = useState([]);
+    const [isExportingPdf, setIsExportingPdf] = useState(false);
     let navigate = useNavigate()
 
     useEffect(() => {
@@ -91,29 +94,38 @@ const ListPurchase = () => {
         }
         return `${day} ${dt.toLocaleString('en-us', { month: 'short' })} ${dt.getFullYear().toString().substr(-2)}`;
     }
-    const downloadPdf = () => {
+    const downloadPdf = async () => {
+        setIsExportingPdf(true);
         const unit = "pt";
         const size = "A4"; // Use A1, A2, A3 or A4
         const orientation = "landscape"; // portrait or landscape
-        const doc = new jsPDF(orientation, unit, size);
-        doc.setFontSize(15);
-        const headers = [["Date", "Type", "Company Name", 'Item Name', 'Amount(Rs)', 'Quantity', 'Remarks']];
-        const data = purchaseList.map((elt) => [
-            elt.date,
-            elt.type,
-            elt.company_name,
-            elt.item_name,
-            elt.cost,
-            elt.quantity,
-            elt.remarks,
-        ]);
-        let content = {
-            startY: 50,
-            head: headers,
-            body: data
-        };
-        doc.autoTable(content);
-        doc.save('Purchase List.pdf');
+        try {
+            const [jsPDF, autoTable] = await Promise.all([
+                loadJsPDF(),
+                loadAutoTable(),
+            ]);
+            const doc = new jsPDF(orientation, unit, size);
+            doc.setFontSize(15);
+            const headers = [["Date", "Type", "Company Name", 'Item Name', 'Amount(Rs)', 'Quantity', 'Remarks']];
+            const data = purchaseList.map((elt) => [
+                elt.date,
+                elt.type,
+                elt.company_name,
+                elt.item_name,
+                elt.cost,
+                elt.quantity,
+                elt.remarks,
+            ]);
+            let content = {
+                startY: 50,
+                head: headers,
+                body: data
+            };
+            autoTable(doc, content);
+            doc.save('Purchase List.pdf');
+        } finally {
+            setIsExportingPdf(false);
+        }
     }
     return (
         <Row>
@@ -165,7 +177,9 @@ const ListPurchase = () => {
                                         {
                                             showForm &&
                                             <>
-                                                <button type="button" onClick={downloadPdf} className="btn-danger font_family_content mb-2 fs-5">Export</button>
+                                                <button type="button" onClick={downloadPdf} disabled={isExportingPdf} className="btn-danger font_family_content mb-2 fs-5">
+                                                    {isExportingPdf ? "Exporting..." : "Export"}
+                                                </button>
                                                 <Table bordered striped>
                                                     <thead>
                                                         <tr className="text-center">

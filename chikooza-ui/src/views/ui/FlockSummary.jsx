@@ -16,8 +16,10 @@ import { contentArea, apiPath, getAuthConfig, handleUnauthorized } from "../../C
 import { useState, useEffect } from "react";
 import axios from "axios";
 // import '../ui/custom.css'
-import jsPDF from "jspdf";
-import "jspdf-autotable";
+// U: OLD: import jsPDF from "jspdf";
+// U: OLD: import "jspdf-autotable";
+// U: NEW: lazy-load the PDF runtime only when the user exports.
+import { loadJsPDF } from "../../utils/pdf";
 import { useNavigate } from "react-router-dom";
 
 const FlockSummary = () => {
@@ -27,6 +29,7 @@ const FlockSummary = () => {
   let [farms, setFarms] = useState([]);
   let [currentFlock, setcurrentFlock] = useState({});
   let [flockdata, setFlockData] = useState({});
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
   let navigate = useNavigate();
 
   useEffect(() => {
@@ -106,17 +109,26 @@ const FlockSummary = () => {
       getsetFlockData(flockPublicId);
     }
   };
-  function downloadPDFWithjsPDF() {
+  async function downloadPDFWithjsPDF() {
+    setIsExportingPdf(true);
     const orientation = "portrait"; // portrait or landscape
-    var doc = new jsPDF(orientation, "pt", "a4");
-    doc.html(document.querySelector("#flock_summary"), {
-      callback: function (doc) {
-        doc.save("Flock summary.pdf");
-      },
-      margin: [0, 0, 0, 0],
-      x: 60,
-      y: 15,
-    });
+    try {
+      const jsPDF = await loadJsPDF();
+      var doc = new jsPDF(orientation, "pt", "a4");
+      await new Promise((resolve) => {
+        doc.html(document.querySelector("#flock_summary"), {
+          callback: function (doc) {
+            doc.save("Flock summary.pdf");
+            resolve();
+          },
+          margin: [0, 0, 0, 0],
+          x: 60,
+          y: 15,
+        });
+      });
+    } finally {
+      setIsExportingPdf(false);
+    }
   }
   return (
     <Row>
@@ -134,9 +146,10 @@ const FlockSummary = () => {
                 <button
                   type="button"
                   onClick={downloadPDFWithjsPDF}
+                  disabled={isExportingPdf}
                   className="btn btn-outline-secondary font_family_content "
                 >
-                  Export as PDF
+                  {isExportingPdf ? "Exporting..." : "Export as PDF"}
                 </button>
               </div>
             ) : (

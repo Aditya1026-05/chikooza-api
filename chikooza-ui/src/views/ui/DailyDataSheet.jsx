@@ -17,8 +17,10 @@ import { contentArea, apiPath, getAuthConfig, handleUnauthorized } from "../../C
 import { useState, useEffect } from "react";
 import axios from "axios";
 // import '../ui/custom.css'
-import jsPDF from "jspdf";
-import "jspdf-autotable";
+// U: OLD: import jsPDF from "jspdf";
+// U: OLD: import "jspdf-autotable";
+// U: NEW: lazy-load the PDF runtime only when the user exports.
+import { loadAutoTable, loadJsPDF } from "../../utils/pdf";
 import { useNavigate } from "react-router-dom";
 
 const DailyDataSheet = () => {
@@ -28,6 +30,7 @@ const DailyDataSheet = () => {
   let [flock, setFlock] = useState([]);
   let [farms, setFarms] = useState([]);
   let [dailydatalist, setDailyDataList] = useState([]);
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -108,67 +111,80 @@ const DailyDataSheet = () => {
       });
   };
 
-  const downloadPdf = () => {
+  const downloadPdf = async () => {
+    setIsExportingPdf(true);
     const unit = "pt";
     const size = "A4"; // Use A1, A2, A3 or A4
     const orientation = "landscape"; // portrait or landscape
-    const doc = new jsPDF(orientation, unit, size);
-    doc.setFontSize(15);
-    const headers = [
-      [
-        "Date",
-        "Age(In Days)",
-        "Bird Count",
-        "Mort",
-        "Cum Mort(%)",
-        "Daily Feed Kg(bags)",
-        "Feed/Bird(gm)",
-        "Cum Feed",
-        "Cum Feed/Bird(gm)",
-        "Avg Brd Wt",
-        "FCR (Adj FCR)",
-        "Fd Stk",
-        "Remarks",
-      ],
-    ];
-    const data = dailydatalist.map((elt, index) => {
-      const currentBirds = parseFloat(elt.current_bird_count);
-      const cumFeedPerBird = currentBirds > 0
-        ? ((parseFloat(elt.total_feed) * 1000) / currentBirds).toFixed(2)
-        : "-";
 
-      return [
-        elt.date,
-        index + 1,
-        elt.current_bird_count,
-        elt.mortality,
-        `${elt.cum_mort} (${elt.total_mortality_percentage.toFixed(2)}%)`,
-        elt.feed_intake,
-        elt.average_feed,
-        elt.total_feed,
-        cumFeedPerBird,
-        elt.average_bird_weight <= 0 ? "-" : elt.average_bird_weight,
-        elt.average_bird_weight <= 0
-          ? "-"
-          : `${elt.total_fcr.toFixed(2)} (${elt.fcr.toFixed(2)})`,
-        elt.feed_stock,
-        elt.remarks,
+    try {
+      const [jsPDF, autoTable] = await Promise.all([
+        loadJsPDF(),
+        loadAutoTable(),
+      ]);
+      const doc = new jsPDF(orientation, unit, size);
+      doc.setFontSize(15);
+      const headers = [
+        [
+          "Date",
+          "Age(In Days)",
+          "Bird Count",
+          "Mort",
+          "Cum Mort(%)",
+          "Daily Feed Kg(bags)",
+          "Feed/Bird(gm)",
+          "Cum Feed",
+          "Cum Feed/Bird(gm)",
+          "Avg Brd Wt",
+          "FCR (Adj FCR)",
+          "Fd Stk",
+          "Remarks",
+        ],
       ];
-    });
-    let content = {
-      startY: 200,
-      head: headers,
-      body: data,
-    };
-    doc.autoTable(content);
-    doc.html(document.querySelector("#flock_summary"), {
-      callback: function (doc) {
-        doc.save("Daily Data Sheet.pdf");
-      },
-      margin: [0, 0, 0, 0],
-      x: 55,
-      y: 15,
-    });
+      const data = dailydatalist.map((elt, index) => {
+        const currentBirds = parseFloat(elt.current_bird_count);
+        const cumFeedPerBird = currentBirds > 0
+          ? ((parseFloat(elt.total_feed) * 1000) / currentBirds).toFixed(2)
+          : "-";
+
+        return [
+          elt.date,
+          index + 1,
+          elt.current_bird_count,
+          elt.mortality,
+          `${elt.cum_mort} (${elt.total_mortality_percentage.toFixed(2)}%)`,
+          elt.feed_intake,
+          elt.average_feed,
+          elt.total_feed,
+          cumFeedPerBird,
+          elt.average_bird_weight <= 0 ? "-" : elt.average_bird_weight,
+          elt.average_bird_weight <= 0
+            ? "-"
+            : `${elt.total_fcr.toFixed(2)} (${elt.fcr.toFixed(2)})`,
+          elt.feed_stock,
+          elt.remarks,
+        ];
+      });
+      let content = {
+        startY: 200,
+        head: headers,
+        body: data,
+      };
+      autoTable(doc, content);
+      await new Promise((resolve) => {
+        doc.html(document.querySelector("#flock_summary"), {
+          callback: function (doc) {
+            doc.save("Daily Data Sheet.pdf");
+            resolve();
+          },
+          margin: [0, 0, 0, 0],
+          x: 55,
+          y: 15,
+        });
+      });
+    } finally {
+      setIsExportingPdf(false);
+    }
   };
 
   return (
@@ -187,9 +203,10 @@ const DailyDataSheet = () => {
                 <button
                   type="button"
                   onClick={downloadPdf}
+                  disabled={isExportingPdf}
                   className="btn btn-outline-secondary font_family_content fs-5"
                 >
-                  Export as PDF
+                  {isExportingPdf ? "Exporting..." : "Export as PDF"}
                 </button>
               </div>
             ) : (
