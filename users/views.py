@@ -27,6 +27,7 @@ from common.constant import (
     USERNAME_ALREADY_EXIST,
 )
 from common.utils import (
+    build_otp_response_payload,
     check_user_existence_for_validation,
     create_token,
     get_detail,
@@ -87,7 +88,9 @@ class SendOTPView(viewsets.ViewSet):
                 )
                 return get_detail(
                     "OTP created",
-                    {"otp": create_otp.otp, "mobile_number": create_otp.mobile_number},
+                    # U: OLD: {"otp": create_otp.otp, "mobile_number": create_otp.mobile_number}
+                    # U: NEW: hide OTP in production responses, keep it visible for local MVP setup.
+                    build_otp_response_payload(create_otp.otp, create_otp.mobile_number),
                     status.HTTP_201_CREATED,
                 )
 
@@ -282,10 +285,12 @@ class ResetPasswordView(viewsets.ViewSet):
                     )
                     return get_detail(
                         "OTP created to reset password",
-                        {
-                            "otp": create_otp.otp,
-                            "mobile_number": serializer.data["mobile_number"],
-                        },
+                        # U: OLD: {"otp": create_otp.otp, "mobile_number": serializer.data["mobile_number"]}
+                        # U: NEW: hide OTP in production responses, keep it visible for local MVP setup.
+                        build_otp_response_payload(
+                            create_otp.otp,
+                            serializer.data["mobile_number"],
+                        ),
                         status.HTTP_201_CREATED,
                     )
         except Users.DoesNotExist:
@@ -360,7 +365,9 @@ class SendOtpForUpdateMobileView(viewsets.ViewSet):
             )
             return get_detail(
                 "OTP created to update mobile_number",
-                {"otp": create_otp.otp, "mobile_number": create_otp.mobile_number},
+                # U: OLD: {"otp": create_otp.otp, "mobile_number": create_otp.mobile_number}
+                # U: NEW: hide OTP in production responses, keep it visible for local MVP setup.
+                build_otp_response_payload(create_otp.otp, create_otp.mobile_number),
                 status.HTTP_201_CREATED,
             )
 

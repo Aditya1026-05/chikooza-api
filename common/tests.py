@@ -2,7 +2,7 @@ from unittest.mock import patch
 
 from django.test import SimpleTestCase, override_settings
 
-from common.utils import send_otp
+from common.utils import build_otp_response_payload, send_otp
 
 
 class SendOtpTests(SimpleTestCase):
@@ -21,3 +21,23 @@ class SendOtpTests(SimpleTestCase):
 
         self.assertEqual(otp, 987654)
         randint.assert_called_once_with(100000, 999999)
+
+
+class OtpResponsePayloadTests(SimpleTestCase):
+    @override_settings(CHIKOOZA_FIXED_OTP=None, DEBUG=False)
+    def test_hides_otp_in_production_payload(self):
+        payload = build_otp_response_payload(123456, "9999999999")
+
+        self.assertEqual(payload, {"mobile_number": "9999999999"})
+
+    @override_settings(CHIKOOZA_FIXED_OTP=None, DEBUG=True)
+    def test_includes_otp_for_debug_payload(self):
+        payload = build_otp_response_payload(123456, "9999999999")
+
+        self.assertEqual(payload, {"mobile_number": "9999999999", "otp": 123456})
+
+    @override_settings(CHIKOOZA_FIXED_OTP="123456", DEBUG=False)
+    def test_includes_otp_for_explicit_fixed_otp_payload(self):
+        payload = build_otp_response_payload(123456, "9999999999")
+
+        self.assertEqual(payload, {"mobile_number": "9999999999", "otp": 123456})

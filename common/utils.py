@@ -251,6 +251,15 @@ def send_otp(mobile_number):
     return random.randint(100000, 999999)
 
 
+def build_otp_response_payload(otp, mobile_number):
+    payload = {"mobile_number": mobile_number}
+    # U: OLD: OTP endpoints always returned the OTP value in API responses.
+    # U: NEW: expose it only for local/debug or explicitly fixed-OTP MVP testing.
+    if settings.DEBUG or getattr(settings, "CHIKOOZA_FIXED_OTP", None):
+        payload["otp"] = otp
+    return payload
+
+
 def otp_delete_after_five_minutes(otp_object):
     if otp_object.created_at < datetime.datetime.now(
         pytz.timezone("UTC")
