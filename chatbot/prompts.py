@@ -1,4 +1,6 @@
-from langchain.prompts import PromptTemplate
+# U: OLD: from langchain.prompts import PromptTemplate
+# U: NEW: LangChain 1.x exposes prompt templates from langchain_core.
+from langchain_core.prompts import PromptTemplate
 
 PROMPTS = {
     'qa': PromptTemplate(

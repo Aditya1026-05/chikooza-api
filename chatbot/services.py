@@ -4,13 +4,11 @@ import re
 import time
 
 from django.conf import settings
-from langchain.chains import RetrievalQA
-from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import PyPDFLoader, TextLoader
-from langchain_community.llms import Ollama
 from langchain_community.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_ollama import OllamaLLM
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from .prompts import PROMPTS
 #from langchain_community.llms import HTTPLLM
@@ -22,7 +20,8 @@ class RAGService:
         # U: NEW: keep chatbot RAG data inside the chatbot app, matching latest upstream layout.
         self.index_dir = os.path.join(settings.BASE_DIR, 'chatbot', 'data')
         self.index_path = os.path.join(self.index_dir, 'index')
-        self.qa_chain = None
+        self.llm = None
+        self.retriever = None
         # U: OLD code hardcoded Ollama URL/model inside _load_components.
         # U: NEW keeps the same default model but allows local/deployment overrides.
         self.ollama_base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
@@ -41,18 +40,16 @@ class RAGService:
             allow_dangerous_deserialization=True
         )
         #AS-2025-07-21-<1>  STARTS
-        self.qa_chain = RetrievalQA.from_chain_type(
-            llm=OllamaLLM(
-                # U: OLD: model="gemma3:1b", base_url=f"{ollama_base_url}"
-                # U: NEW: use env-backed fields configured during service setup.
-                model=self.ollama_model,
-                base_url=self.ollama_base_url,
-            ),
-            chain_type="stuff",
-            retriever=self.vector_store.as_retriever(search_kwargs={"k": 3}),
-            return_source_documents=True,
-            chain_type_kwargs={"prompt": PROMPTS['qa']}
+        # U: OLD: RetrievalQA.from_chain_type(...) used the deprecated legacy chain API.
+        # U: NEW: use explicit retrieve -> format context -> prompt -> LLM invocation,
+        # U: which is compatible with the current LangChain package split.
+        self.llm = OllamaLLM(
+            # U: OLD: model="gemma3:1b", base_url=f"{ollama_base_url}"
+            # U: NEW: use env-backed fields configured during service setup.
+            model=self.ollama_model,
+            base_url=self.ollama_base_url,
         )
+        self.retriever = self.vector_store.as_retriever(search_kwargs={"k": 3})
 
         print("[✅] Loaded existing FAISS index from", self.index_dir)
         #AS-2025-07-21-<1>  ENDS
@@ -82,13 +79,15 @@ class RAGService:
 
     def query(self, query_text, prompt_type='qa'):
         try:
-            self.qa_chain.combine_documents_chain.llm_chain.prompt = PROMPTS.get(prompt_type, PROMPTS['qa'])
-
-            result = self.qa_chain.invoke({"query": query_text})
-            print(result)
+            prompt = PROMPTS.get(prompt_type, PROMPTS['qa'])
+            docs = self.retriever.invoke(query_text)
+            context = self._format_documents(docs)
+            answer = self.llm.invoke(
+                prompt.format(context=context, question=query_text)
+            )
             return {
-                "result": result["result"],
-                "context": result.get("source_documents", [])
+                "result": str(answer),
+                "context": docs
             }
 
         except Exception as e:
@@ -128,6 +127,9 @@ class RAGService:
             ),
             "context": docs
         }
+
+    def _format_documents(self, docs):
+        return "\n\n".join(doc.page_content for doc in docs)
 
     def add_files_to_index(self, file_paths):
         """

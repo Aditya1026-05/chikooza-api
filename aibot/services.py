@@ -4,8 +4,12 @@ import re
 from django.conf import settings
 from django.db import connection
 from langchain_ollama import OllamaLLM
-from langchain.prompts import PromptTemplate
-from langchain.chains import LLMChain
+# U: OLD: from langchain.prompts import PromptTemplate
+# U: NEW: LangChain 1.x exposes prompts from langchain_core.
+from langchain_core.prompts import PromptTemplate
+# U: OLD: from langchain.chains import LLMChain
+# U: NEW: legacy chain classes live in langchain_classic under LangChain 1.x.
+from langchain_classic.chains import LLMChain
 
 logger = logging.getLogger(__name__)
 
@@ -304,8 +308,11 @@ Return only the SQL query:"""
 import logging
 from django.db import connection
 from langchain_ollama import OllamaLLM
-from langchain.prompts import PromptTemplate
-from langchain.chains import LLMChain
+# U: OLD: from langchain.prompts import PromptTemplate
+from langchain_core.prompts import PromptTemplate
+# U: OLD: from langchain.chains import LLMChain
+# U: NEW: legacy chain classes live in langchain_classic under LangChain 1.x.
+from langchain_classic.chains import LLMChain
 
 logger = logging.getLogger(__name__)
 
