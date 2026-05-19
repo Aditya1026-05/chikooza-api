@@ -1,0 +1,11 @@
+.font_family_sub{
+    font-family: Times;
+    font-weight: 500;
+}
+.font_family_heading{
+        font-family: 'Times New Roman';
+        font-weight: 550;
+}
+.font_family_content{
+        font-family:serif;
+}

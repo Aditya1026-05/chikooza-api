@@ -41,3 +41,10 @@ settings.py/
 /settings.py/
 
 local_settings.py
+
+# U: Frontend monorepo local artifacts. Keep source tracked, but never commit
+# U: installed packages, local env files, generated builds, or accidental diff dumps.
+/chikooza-ui/node_modules/
+/chikooza-ui/.env
+/chikooza-ui/build/
+/chikooza-ui/isk

@@ -1,0 +1,18 @@
+node_modules/
+.env
+
+# SSL certificates
+*.crt
+*.key
+*.pem
+*.cnf
+ssl/
+certs/
+
+#build
+dist/
+build/
+out/
+
+# U: Accidental terminal diff dump, not frontend source or runtime input.
+isk
