@@ -4,7 +4,7 @@ import { Link } from "react-router-dom";
 import { Tab, Tabs } from 'react-bootstrap';
 import { Row, Col, Card, CardTitle, CardBody, FormGroup, Label, Input } from "reactstrap";
 import '../../assets/css/header.css';
-import { contentArea, apiPath, config } from "../../Constants";
+import { contentArea, apiPath, getAuthConfig, handleUnauthorized } from "../../Constants";
 import { useState, useEffect } from "react";
 import axios from 'axios';
 import Chart from 'react-apexcharts';
@@ -27,8 +27,9 @@ const Member = () => {
   useEffect(() => {
     getsetFlockData2()
     let url = `${apiPath}farm/`;
-    config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
-    axios.get(url, config).then((res) => {
+    // U: Replaced shared config mutation with per-request auth headers from getAuthConfig().
+    // config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
+    axios.get(url, getAuthConfig()).then((res) => {
       if (res.data.results.length === 0) {
         setFarms([{ public_id: 0, name: 'No farm available' }]);
       } else {
@@ -36,20 +37,18 @@ const Member = () => {
       }
     }).catch((err) => {
       setFarms([{ public_id: 0, name: 'No farm available' }]);
-      if (err.response.status === 401) {
-        localStorage.clear();
-        navigate("/login")
-      }
+      handleUnauthorized(err, navigate);
     });
   }, [])
   let changeFarm = (e) => {
-    if (e.target.value === 0) {
+    if (e.target.value === "0") {
       setShowFlock(false)
       setFlocks([]);
     } else {
       let url = `${apiPath}flocks/${e.target.value}/`;
-      config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
-      axios.get(url, config).then((res) => {
+      // U: Replaced shared config mutation with per-request auth headers from getAuthConfig().
+      // config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
+      axios.get(url, getAuthConfig()).then((res) => {
         if (res.data.results.total_records === 0) {
           setFlocks([{ flock_public_id: 0, flock_name: 'No flock available' }]);
         } else {
@@ -57,18 +56,19 @@ const Member = () => {
         }
         setShowFlock(true)
       }).catch((err) => {
-        if (err.response.status === 401) {
-          localStorage.clear();
-          navigate("/login")
-        }
+        handleUnauthorized(err, navigate);
       });
     }
   }
   let changeFlock = (e) => {
-    if (e.target.value === 0) {
+    if (e.target.value === "0") {
       setShowForm(false)
     } else {
-      const user = flocks.find(u => u.flock_public_id === e.target.value);
+      const user = flocks.find(u => String(u.flock_public_id) === e.target.value);
+      if (!user) {
+        setShowForm(false);
+        return;
+      }
       setShowForm(true)
       setFlock(user.flock_public_id)
     }
@@ -78,13 +78,7 @@ const Member = () => {
 
     let url = `${apiPath}graph/${flock}/`
 
-    const config = {
-      headers: {
-        "Authorization": `Bearer ${localStorage.getItem('token')}`
-      }
-    };
-
-    axios.get(url, config)
+    axios.get(url, getAuthConfig())
       .then((res) => {
         setDate(res.data.results.date)
         setCurrentCount(res.data.results.current_bird_count)
@@ -95,10 +89,7 @@ const Member = () => {
       }
       ).catch(err => {
         console.log(err)
-        if (err.response.status === 401) {
-          localStorage.clear();
-          navigate("/login")
-        }
+        handleUnauthorized(err, navigate);
       })
   }
 
@@ -106,13 +97,7 @@ const Member = () => {
 
     let url = `${apiPath}graph/1/`
 
-    const config = {
-      headers: {
-        "Authorization": `Bearer ${localStorage.getItem('token')}`
-      }
-    };
-
-    axios.get(url, config)
+    axios.get(url, getAuthConfig())
       .then((res) => {
         setDate(res.data.results.date)
         setCurrentCount(res.data.results.current_bird_count)
@@ -123,10 +108,7 @@ const Member = () => {
       }
       ).catch(err => {
         console.log(err)
-        if (err.response.status === 401) {
-          localStorage.clear();
-          navigate("/login")
-        }
+        handleUnauthorized(err, navigate);
       })
   };
 
