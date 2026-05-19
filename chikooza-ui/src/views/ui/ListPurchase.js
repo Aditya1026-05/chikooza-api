@@ -1,6 +1,6 @@
-import { Row, Col, Table, Card, CardTitle, CardBody, Button, Form, FormGroup, Label, Input, FormText, Nav, NavItem } from "reactstrap";
+import { Row, Col, Table, Card, CardTitle, CardBody, FormGroup, Label, Input } from "reactstrap";
 import '../../assets/css/header.css';
-import { contentArea, apiPath, config } from "../../Constants";
+import { contentArea, apiPath, getAuthConfig, handleUnauthorized } from "../../Constants";
 import { useState, useEffect } from "react";
 import axios from 'axios';
 import { Link } from "react-router-dom";
@@ -10,23 +10,6 @@ import { useNavigate } from "react-router-dom";
 
 
 const ListPurchase = () => {
-    useEffect(() => {
-        let url = `${apiPath}farm/`;
-        config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
-        axios.get(url, config).then((res) => {
-            if (res.data.results.length == 0) {
-                setFarms([{ public_id: 0, name: 'No farm available' }]);
-            } else {
-                setFarms(res.data.results);
-            }
-        }).catch((err) => {
-            setFarms([{ public_id: 0, name: 'No farm available' }]);
-            if (err.response.status === 401) {
-                localStorage.clear();
-                navigate("/login")
-            }
-        });
-    }, [])
     let [farms, setFarms] = useState([]);
     let [flocks, setFlocks] = useState([]);
     const [showFlock, setShowFlock] = useState(false);
@@ -34,63 +17,80 @@ const ListPurchase = () => {
     let [purchaseList, setPurchaseList] = useState([]);
     let navigate = useNavigate()
 
+    useEffect(() => {
+        let url = `${apiPath}farm/`;
+        // U: Replaced shared config mutation with per-request auth headers from getAuthConfig().
+        // config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
+        axios.get(url, getAuthConfig()).then((res) => {
+            if (res.data.results.length === 0) {
+                setFarms([{ public_id: 0, name: 'No farm available' }]);
+            } else {
+                setFarms(res.data.results);
+            }
+        }).catch((err) => {
+            setFarms([{ public_id: 0, name: 'No farm available' }]);
+            handleUnauthorized(err, navigate);
+        });
+    }, [navigate])
+
     let changeFarm = (e) => {
-        if (e.target.value == 0) {
+        setPurchaseList([]);
+        setShowForm(false);
+        if (e.target.value === "0") {
             //setFarm_public_iderr('Please select farm');
+            setShowFlock(false);
+            setFlocks([]);
         } else {
             let url = `${apiPath}flocks/${e.target.value}/`;
-            config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
-            axios.get(url, config).then((res) => {
+            // U: Replaced shared config mutation with per-request auth headers from getAuthConfig().
+            // config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
+            axios.get(url, getAuthConfig()).then((res) => {
                 setShowFlock(true);
-                if (res.data.results.total_records == 0) {
+                if (res.data.results.total_records === 0) {
                     setFlocks([{ flock_public_id: 0, flock_name: 'No flock available' }]);
                 } else {
                     setFlocks(res.data.results.flock_list);
                 }
                 setShowForm(false);
             }).catch((err) => {
-                setFlocks(err.data.results);
-                if (err.response.status === 401) {
-                    localStorage.clear();
-                    navigate("/login")
-                }
+                // U: Avoid reading err.data.results because Axios errors expose response data under err.response.
+                setFlocks([{ flock_public_id: 0, flock_name: 'No flock available' }]);
+                handleUnauthorized(err, navigate);
             });
         }
     }
     let changeFlocks = (e) => {
-        if (e.target.value == 0) {
+        if (e.target.value === "0") {
             setShowForm(false);
+            setPurchaseList([]);
         } else {
             let url = `${apiPath}purchase/?flock_public_id=${e.target.value}`;
-            config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
-            axios.get(url, config).then((res) => {
+            // U: Replaced shared config mutation with per-request auth headers from getAuthConfig().
+            // config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
+            axios.get(url, getAuthConfig()).then((res) => {
                 setPurchaseList(res.data.results.purchase_list);
                 setShowForm(true);
             }).catch((err) => {
                 setShowForm(false);
                 setPurchaseList([]);
-                if (err.response.status === 401) {
-                    localStorage.clear();
-                    navigate("/login")
-                }
+                handleUnauthorized(err, navigate);
             });
         }
     }
     let getformateddate = (tdate) => {
         let dt = new Date(tdate);
         let day = dt.getDate();
-        if (day == 1 || day == 21 || day == 31) {
+        if (day === 1 || day === 21 || day === 31) {
             day = `${day}st`;
-        } else if (day == 2 || day == 22) {
+        } else if (day === 2 || day === 22) {
             day = `${day}nd`;
-        } else if (day == 3 || day == 23) {
+        } else if (day === 3 || day === 23) {
             day = `${day}rd`;
         } else {
             day = `${day}th`;
         }
         return `${day} ${dt.toLocaleString('en-us', { month: 'short' })} ${dt.getFullYear().toString().substr(-2)}`;
     }
-    console.log(purchaseList);
     const downloadPdf = () => {
         const unit = "pt";
         const size = "A4"; // Use A1, A2, A3 or A4
@@ -132,8 +132,8 @@ const ListPurchase = () => {
                                     <div className='gridmargin'>
                                         <FormGroup>
                                             <div className="input-group">
-                                                <Input onChange={changeFarm} defaultValue={'Select Farm'} id="farmSelect" name="farm" type="select">
-                                                    <option disabled defaultValue={0}>Select Farm</option>
+                                                <Input onChange={changeFarm} defaultValue="0" id="farmSelect" name="farm" type="select">
+                                                    <option value="0">Select Farm</option>
                                                     {
                                                         farms.map((item) => {
                                                             return (
@@ -149,8 +149,8 @@ const ListPurchase = () => {
                                             <FormGroup>
                                                 <Label for="farmselect">Select Flocks</Label>
                                                 <div className="input-group">
-                                                    <Input onChange={changeFlocks} id="farmSelect" name="flock" type="select">
-                                                        <option selected value={0}>Select Flocks</option>
+                                                    <Input onChange={changeFlocks} id="farmSelect" name="flock" type="select" defaultValue="0">
+                                                        <option value="0">Select Flocks</option>
                                                         {
                                                             flocks.map((item) => {
                                                                 return (
@@ -165,7 +165,7 @@ const ListPurchase = () => {
                                         {
                                             showForm &&
                                             <>
-                                                < button type="button" onClick={downloadPdf} className="btn-danger font_family_content mb-2 fs-5">Export</button>
+                                                <button type="button" onClick={downloadPdf} className="btn-danger font_family_content mb-2 fs-5">Export</button>
                                                 <Table bordered striped>
                                                     <thead>
                                                         <tr className="text-center">
@@ -178,9 +178,9 @@ const ListPurchase = () => {
                                                     <tbody>
                                                         {
                                                             purchaseList.length > 0 ?
-                                                                purchaseList.map((item, index) => {
+                                                                purchaseList.map((item) => {
                                                                     return (
-                                                                        <tr key={index} className="text-center">
+                                                                        <tr key={item.public_id} className="text-center">
                                                                             <td>{getformateddate(item.date)}</td>
                                                                             <td>{item.type}</td>
                                                                             <td>{item.cost}</td>
