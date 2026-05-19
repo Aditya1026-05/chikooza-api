@@ -1,5 +1,7 @@
 import { Card, CardBody, CardSubtitle, CardTitle, Row, Col } from "reactstrap";
-import Chart from "react-apexcharts";
+// U: OLD: import Chart from "react-apexcharts";
+// U: NEW: use the lazy chart wrapper so ApexCharts is split out of route chunks.
+import Chart from "../ApexChart";
 
 const SalesChart = () => {
   const options = {

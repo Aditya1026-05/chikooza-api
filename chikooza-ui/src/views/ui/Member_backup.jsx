@@ -7,7 +7,9 @@ import '../../assets/css/header.css';
 import { contentArea, apiPath, getAuthConfig, handleUnauthorized } from "../../Constants";
 import { useState, useEffect } from "react";
 import axios from 'axios';
-import Chart from 'react-apexcharts';
+// U: OLD: import Chart from 'react-apexcharts';
+// U: NEW: use the lazy chart wrapper so ApexCharts is split out of this route chunk.
+import Chart from '../../components/ApexChart';
 import { useNavigate } from "react-router-dom";
 
 const Member = () => {
