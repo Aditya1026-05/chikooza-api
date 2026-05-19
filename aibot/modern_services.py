@@ -98,6 +98,7 @@ class TenantSafeSQLExecutor:
         "insert", "update", "delete", "drop", "create", "alter", "truncate",
         "grant", "revoke", "attach", "detach",
     }
+    SOURCE_PATTERN = re.compile(r"\b(?:from|join)\s+([`\"\[]?[a-z_][\w.]*[`\"\]]?)")
 
     def execute(self, plan: SQLPlan) -> list[dict]:
         self._validate(plan)
@@ -119,13 +120,26 @@ class TenantSafeSQLExecutor:
         if any(re.search(rf"\b{token}\b", sql_lower) for token in self.FORBIDDEN_TOKENS):
             raise ValueError("Unsafe SQL token found.")
 
-        if not any(view in sql_lower for view in self.ALLOWED_VIEWS):
+        # U: OLD validation only confirmed that one safe view appeared anywhere:
+        # if not any(view in sql_lower for view in self.ALLOWED_VIEWS):
+        #     raise ValueError("Query references an unsupported data source.")
+        # U: NEW validation rejects every FROM/JOIN source that is not an
+        # U: approved tenant-scoped AI view.
+        sources = self._referenced_sources(sql_lower)
+        if not sources or any(source not in self.ALLOWED_VIEWS for source in sources):
             raise ValueError("Query references an unsupported data source.")
 
-        view_references = sum(sql_lower.count(view) for view in self.ALLOWED_VIEWS)
+        view_references = len(sources)
         owner_filters = sql_lower.count("owner_id = %s")
         if owner_filters < view_references:
             raise ValueError("Tenant filter is missing from one or more data sources.")
+
+    def _referenced_sources(self, sql_lower: str) -> list[str]:
+        sources = []
+        for raw_source in self.SOURCE_PATTERN.findall(sql_lower):
+            source = raw_source.strip("`\"[]").split(".")[-1]
+            sources.append(source)
+        return sources
 
 
 class ChikoozaTextToSQLService:
