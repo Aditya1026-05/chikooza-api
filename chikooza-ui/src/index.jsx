@@ -7,10 +7,12 @@ import App from "./App";
 // U: NEW: HashRouter was unused; the app currently runs with BrowserRouter.
 import { BrowserRouter } from "react-router-dom";
 import Loader from "./layouts/loader/Loader";
-import "primereact/resources/themes/lara-light-indigo/theme.css";
-import "primereact/resources/primereact.min.css";
+// U: OLD: PrimeReact theme/runtime CSS was loaded globally even though no PrimeReact components are used.
+// import "primereact/resources/themes/lara-light-indigo/theme.css";
+// import "primereact/resources/primereact.min.css";
 import "primeicons/primeicons.css";
-import "primeflex/primeflex.css";
+// U: OLD: PrimeFlex utilities were imported globally but are not used by the current UI.
+// import "primeflex/primeflex.css";
 
 ReactDOM.render(
   <Suspense fallback={<Loader />}>
