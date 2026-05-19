@@ -5,3 +5,19 @@
 @import "bootstrap/scss/bootstrap";
 @import "./layout/sidebar";
 @import "./layout/container";
+
+:root {
+  // U: NEW: shared product colors for custom components that do not consume Bootstrap variables.
+  --chikooza-page-bg: #f5f8f2;
+  --chikooza-surface: #ffffff;
+  --chikooza-ink: #17231b;
+  --chikooza-muted: #68776d;
+  --chikooza-accent: #d98a15;
+}
+
+body {
+  background:
+    radial-gradient(circle at top left, rgba(31, 122, 77, 0.12), transparent 34rem),
+    linear-gradient(180deg, #fbfdf8 0%, var(--chikooza-page-bg) 48%, #eef5eb 100%);
+  color: var(--chikooza-ink);
+}

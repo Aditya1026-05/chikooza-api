@@ -1,19 +1,31 @@
 /*******************/
 // Theme Fonts
 /********************/
-@import url("https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600&display=swap");
-$font-family-sans-serif: "Montserrat", sans-serif;
+// U: OLD: Montserrat gave the app a generic admin-template feel.
+// U: NEW: Plus Jakarta Sans keeps the UI professional while feeling more modern.
+@import url("https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap");
+$font-family-sans-serif: "Plus Jakarta Sans", sans-serif;
 /*******************/
 // Theme Colors
 /********************/
-$primary: #2962ff;
-$info: #26c6da;
-$danger: #f62d51;
-$success: #39c449;
-$warning: #ffbc34;
-$dark: #1e2a35;
-$light: #eaf2fb;
-$secondary: #35363b;
+// U: OLD: blue-heavy default dashboard palette:
+// $primary: #2962ff;
+// $info: #26c6da;
+// $danger: #f62d51;
+// $success: #39c449;
+// $warning: #ffbc34;
+// $dark: #1e2a35;
+// $light: #eaf2fb;
+// $secondary: #35363b;
+// U: NEW: agriculture-focused palette for a poultry farm operations product.
+$primary: #1f7a4d;
+$info: #0f8ea0;
+$danger: #c2410c;
+$success: #2f855a;
+$warning: #d98a15;
+$dark: #17231b;
+$light: #edf6ef;
+$secondary: #66756b;
 
 $theme-colors: (
   "primary": $primary,
@@ -24,23 +36,23 @@ $theme-colors: (
   "danger": $danger,
   "light": $light,
   "dark": $dark,
-  "light-primary": #d6e4f3,
-  "light-success": #d5f3f2,
-  "light-info": #d3edfa,
-  "light-warning": #f8ecdc,
-  "light-danger": #f8dddd,
+  "light-primary": #dff1e7,
+  "light-success": #dcf4e5,
+  "light-info": #d7f0f4,
+  "light-warning": #fbecd2,
+  "light-danger": #f8ded6,
 );
 // scss-docs-start gray-color-variables
 $white: #fff !default;
 $gray-100: #f8f9fa !default;
-$gray-200: #f2f7f8 !default;
+$gray-200: #f3f7f1 !default;
 $gray-300: #dee2e6 !default;
 $gray-400: #ced4da !default;
 $gray-500: #adb5bd !default;
-$gray-600: #757e85 !default;
+$gray-600: #68776d !default;
 $gray-700: #495057 !default;
 $gray-800: #343a40 !default;
-$gray-900: #1e2a35 !default;
+$gray-900: #17231b !default;
 $black: #000 !default;
 
 /*******************/
@@ -51,15 +63,15 @@ $font-weight-bold: 500 !default;
 /*******************/
 // Theme body bg & text color
 /********************/
-$body-bg: $gray-200 !default;
+$body-bg: #f5f8f2 !default;
 $body-color: $gray-900 !default;
 $gradient: linear-gradient(-90deg, rgba($white, 0.5), rgba($white, 0)) !default;
 
 /*******************/
 // Theme common variable
 /********************/
-$border-radius: 0.3rem !default;
-$box-shadow: 0 0.5rem 1rem rgba($black, 0.05);
+$border-radius: 0.55rem !default;
+$box-shadow: 0 1rem 2rem rgba(23, 35, 27, 0.08);
 $headings-font-weight: 400 !default;
 $h5-font-size: 1.05rem !default;
 $h6-font-size: 0.875rem !default;
