@@ -1,7 +1,7 @@
 import { Alert, Row, Col, Card, CardTitle, CardBody, Button, Form, FormGroup, Input, Label } from "reactstrap";
 import '../../assets/css/header.css';
 import { FaMapMarkerAlt } from "react-icons/fa";
-import { contentArea, apiPath, config } from "../../Constants";
+import { contentArea, apiPath, config, getAuthConfig, handleUnauthorized } from "../../Constants";
 import { useEffect, useState } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
@@ -11,11 +11,16 @@ const AddFarm = () => {
   const navigate = useNavigate();
   const [show, setShow] = useState(false);
   const [quardinatesModel, setQuardinatesModel] = useState(false);
-  let [quardinates, setQuardinates] = useState({ latitude: null, longitude: null, quardinates: null });
+  // U: OLD: let [quardinates, setQuardinates] = useState(...)
+  // U: NEW: keep only the setter because the UI stores the selected coordinates in addData.
+  let [, setQuardinates] = useState({ latitude: null, longitude: null, quardinates: null });
   let areaLocation = () => {
     navigator.geolocation.getCurrentPosition(function (position) {
-      setQuardinates({ latitude: position.coords.latitude.toFixed(3), longitude: position.coords.longitude.toFixed(3), quardinates: `${position.coords.latitude.toFixed(3)},${position.coords.longitude.toFixed(3)}` });
-      setAddData({ ...addData, coordinates: `${position.coords.latitude.toFixed(3)},${position.coords.longitude.toFixed(3)}` });
+      const coordinates = `${position.coords.latitude.toFixed(3)},${position.coords.longitude.toFixed(3)}`;
+      setQuardinates({ latitude: position.coords.latitude.toFixed(3), longitude: position.coords.longitude.toFixed(3), quardinates: coordinates });
+      // U: OLD: setAddData({ ...addData, coordinates: ... })
+      // U: NEW: functional update avoids overwriting form edits with stale state.
+      setAddData((currentData) => ({ ...currentData, coordinates }));
       setQuardinatesModel(false)
     });
   }
@@ -31,41 +36,37 @@ const AddFarm = () => {
   let [stateError, setStateError] = useState(null);
   let [numberofshedsError, setNumberofshedsError] = useState(null);
   let [err, setErr] = useState('');
-  let error = 0;
+  // U: OLD: let error = 0;
+  // U: NEW: validation state is local to save() so stale renders cannot affect submission.
 
   useEffect(() => {
     let url = `${apiPath}state/`;
     axios.get(url, config).then((res) => {
       setState(res.data.results);
     }).catch((err) => {
-      if (err.response.status === 401) {
-        localStorage.clear();
-        navigate("/login")
-      }
+      handleUnauthorized(err, navigate);
     });
-  }, [])
+  }, [navigate])
   useEffect(() => {
     let url = `${apiPath}country/`;
     axios.get(url, config).then((res) => {
       setCountry(res.data.results);
     }).catch((err) => {
-      if (err.response.status === 401) {
-        localStorage.clear();
-        navigate("/login")
-      }
+      handleUnauthorized(err, navigate);
     });
-  }, [])
+  }, [navigate])
   let save = (e) => {
     e.preventDefault();
     setLoading(false);
-    if (addData.country === 0) { setCountryError('Please select country'); error = 1; } else { setCountryError(''); }
-    if (addData.state === 0) { setStateError('Please select state'); error = 1; } else { setStateError(''); }
-    if (addData.farmname.trim() === '') { setFarmnameError('Please enter name'); error = 1; } else { setFarmnameError(''); }
-    if (addData.address.trim() === '') { setAddressError('Please enter address'); error = 1; } else { setAddressError(''); }
-    if (addData.pincode.trim() === '' || addData.pincode.trim() < 1) { setPincodeError('Please enter pincode'); error = 1; } else { setPincodeError(''); }
-    if (addData.numberofsheds.trim() === '' || addData.numberofsheds.trim() < 1) { setNumberofshedsError('Please enter no of sheds'); error = 1; } else { setNumberofshedsError(''); }
-    if (addData.cityorvillage.trim() === '') { setCityorvillageError('Please enter city/Village name'); error = 1; } else { setCityorvillageError(''); }
-    if (error === 0) {
+    let validationError = 0;
+    if (addData.country === 0 || addData.country === "0") { setCountryError('Please select country'); validationError = 1; } else { setCountryError(''); }
+    if (addData.state === 0 || addData.state === "0") { setStateError('Please select state'); validationError = 1; } else { setStateError(''); }
+    if (addData.farmname.trim() === '') { setFarmnameError('Please enter name'); validationError = 1; } else { setFarmnameError(''); }
+    if (addData.address.trim() === '') { setAddressError('Please enter address'); validationError = 1; } else { setAddressError(''); }
+    if (addData.pincode.trim() === '' || Number(addData.pincode.trim()) < 1) { setPincodeError('Please enter pincode'); validationError = 1; } else { setPincodeError(''); }
+    if (addData.numberofsheds.trim() === '' || Number(addData.numberofsheds.trim()) < 1) { setNumberofshedsError('Please enter no of sheds'); validationError = 1; } else { setNumberofshedsError(''); }
+    if (addData.cityorvillage.trim() === '') { setCityorvillageError('Please enter city/Village name'); validationError = 1; } else { setCityorvillageError(''); }
+    if (validationError === 0) {
       setLoading(true);
       let farm = {
         name: addData.farmname,
@@ -78,28 +79,26 @@ const AddFarm = () => {
         shed_count: addData.numberofsheds
       };
       let url = `${apiPath}farm/`;
-      config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
-      axios.post(url, farm, config).then((res) => {
+      // U: OLD: config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
+      axios.post(url, farm, getAuthConfig()).then((res) => {
         setLoading(false);
         setShow(true);
         setTimeout(successMsg, 3000);
       }).catch((err) => {
         setErr('Something went wrong. Please try again');
-        console.log(err)
-        if (err.response.status === 401) {
-          localStorage.clear();
-          navigate("/login")
-        }
+        handleUnauthorized(err, navigate);
       });
     }
   }
   let countryChange = (e) => {
     setAddData({ ...addData, country: e.target.value });
-    e.target.value.trim() === 0 ? setCountryError('Please select country') : setCountryError('');
+    // U: OLD: e.target.value.trim() === 0 compared a string to a number.
+    e.target.value.trim() === "0" ? setCountryError('Please select country') : setCountryError('');
   }
   let stateChange = (e) => {
     setAddData({ ...addData, state: e.target.value });
-    e.target.value.trim() === 0 ? setStateError('Please select state') : setStateError('');
+    // U: OLD: e.target.value.trim() === 0 compared a string to a number.
+    e.target.value.trim() === "0" ? setStateError('Please select state') : setStateError('');
   }
   let farmnameChange = (e) => {
     setAddData({ ...addData, farmname: e.target.value });
@@ -111,12 +110,12 @@ const AddFarm = () => {
   }
   let pincodeChange = (e) => {
     setAddData({ ...addData, pincode: e.target.value });
-    e.target.value.trim() === '' || e.target.value.trim() < 1 ? setPincodeError('Please enter pincode') : setPincodeError('');
+    e.target.value.trim() === '' || Number(e.target.value.trim()) < 1 ? setPincodeError('Please enter pincode') : setPincodeError('');
   }
 
   let numberofshedsChange = (e) => {
     setAddData({ ...addData, numberofsheds: e.target.value });
-    e.target.value.trim() === '' || e.target.value.trim() < 1 ? setNumberofshedsError('Please enter no of sheds') : setNumberofshedsError('');
+    e.target.value.trim() === '' || Number(e.target.value.trim()) < 1 ? setNumberofshedsError('Please enter no of sheds') : setNumberofshedsError('');
   }
   let cityorvillageChange = (e) => {
     setAddData({ ...addData, cityorvillage: e.target.value });

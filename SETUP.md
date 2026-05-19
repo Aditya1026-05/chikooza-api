@@ -215,12 +215,30 @@ DATABASES = {
 
 ## Changes before Running Development Server
 
-#### 1. Delete the existing Database:
+#### 1. Configure local environment variables
+
+```bash
+# U: OLD: backend settings were hardcoded directly inside chikooza/settings.py.
+# U: NEW: copy the example file and adjust values only when your local ports/hosts differ.
+cp .env.example .env
+```
+
+The important local defaults are:
+
+```bash
+DJANGO_DEBUG=True
+DJANGO_SECRET_KEY=django-insecure-local-dev-only-change-before-deploy
+DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1,0.0.0.0,.herokuapp.com
+CHIKOOZA_CORS_ALLOW_ALL=True
+CHIKOOZA_API_BASE_URL=http://127.0.0.1:8002/
+```
+
+#### 2. Delete the existing Database:
 
 ```
 del db.sqlite
 ```
-#### 2. Comment the contents of operations in the files:
+#### 3. Comment the contents of operations in the files:
 
 
 1. sales/migrations/0004_auto_20221130_
@@ -251,8 +269,9 @@ python manage.py createsuperuser
 
 
 ```
-# Run server on port 8001 (as configured in settings.py)
-python manage.py runserver 8001
+# U: OLD: python manage.py runserver 8001
+# U: NEW: run the API on the same port used by CHIKOOZA_API_BASE_URL.
+python manage.py runserver 8002
 ```
 #### Step 4: Verify Installation Success
 
@@ -262,16 +281,16 @@ Once the server is running, you should see output like:
 System check identified no issues (0 silenced).
 June 10, 2025 - 10:30:
 Django version 4.1.3, using settings 'chikooza.settings'
-Starting development server at http://127.0.0.1:8001/
+Starting development server at http://127.0.0.1:8002/
 Quit the server with CTRL-C.
 ```
 #### Step 5: Access Your Application
 
 Open your web browser and navigate to:
 
-1. Main Application: http://127.0.0.1:8001/
-2. Admin Panel: http://127.0.0.1:8001/admin/
-3. API Endpoints: http://127.0.0.1:8001/api/ (depending on your URL configuration)
+1. Main Application: http://127.0.0.1:8002/
+2. Admin Panel: http://127.0.0.1:8002/admin/
+3. API Endpoints: http://127.0.0.1:8002/api/ (depending on your URL configuration)
 
 
 
@@ -284,5 +303,4 @@ Following this guide, you should now have:
 3. Database set up and migrated
 4. Development server running successfully
 5. Access to admin panel and application
-
 

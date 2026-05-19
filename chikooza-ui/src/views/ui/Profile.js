@@ -1,8 +1,10 @@
-import { Alert, Row, Col, Table, Card, CardTitle, CardBody, Button, Form, FormGroup, Label, Input, FormText, Nav, NavItem } from "reactstrap";
+// U: OLD unused reactstrap imports kept this screen noisy during builds.
+// import { Table, Input, FormText, Nav, NavItem } from "reactstrap";
+import { Alert, Row, Col, Card, CardTitle, CardBody, Button, Form, FormGroup, Label } from "reactstrap";
 import '../../assets/css/header.css';
 import { Link } from "react-router-dom";
 import { useState, useEffect } from "react";
-import { contentArea, apiPath, config } from "../../Constants";
+import { contentArea, apiPath, getAuthConfig, handleUnauthorized } from "../../Constants";
 import axios from 'axios';
 import { useNavigate } from "react-router-dom";
 import Modal from 'react-bootstrap/Modal';
@@ -19,22 +21,19 @@ const Profile = () => {
 
   useEffect(() => {
     let url = `${apiPath}users/profile/${localStorage.getItem('publicid')}/`;
-    config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
-    axios.get(url, config).then((res) => {
+    // U: OLD: config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
+    axios.get(url, getAuthConfig()).then((res) => {
       setData(res.data.results);
     }).catch((err) => {
-      //console.log(err);
-      if (err.response.status === 401) {
-        localStorage.clear();
-        navigate("/login")
-      }
+      handleUnauthorized(err, navigate);
     });
-  }, [])
+  }, [navigate])
   let inputValue = (e) => {
-    if (e.target.name == 'name') {
-      if (e.target.value.trim() == "") {
+    if (e.target.name === 'name') {
+      // U: OLD: e.target.name == 'name' and e.target.value.trim() == "" used loose equality.
+      if (e.target.value.trim() === "") {
         setError({ ...error, name: 'Name is required' });
-        //setData({...data,name:e.target.value});
+        setData({ ...data, name: e.target.value });
       } else {
         setError({ ...error, name: '' });
         setData({ ...data, name: e.target.value });
@@ -42,8 +41,10 @@ const Profile = () => {
     } else {
       if (!(RegExp(/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,15}/g).test(e.target.value.trim()))) {
         setError({ ...error, email: 'Email is required or invalid' });
+        setData({ ...data, email: e.target.value });
       } else {
-        setError('');
+        // U: OLD: setError('') replaced the error object with a string.
+        setError({ ...error, email: '' });
         setData({ ...data, email: e.target.value });
       }
     }
@@ -51,31 +52,29 @@ const Profile = () => {
   let update = (e) => {
     e.preventDefault();
     setLoading(false);
-    if (!(RegExp(/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,15}/g).test(data.email))) {
-      setError({ ...error, name: 'Name is required' });
-    }
-    if (data.name === '') {
-      setError({ ...error, email: 'Email is required or invalid' });
-    }
-    if ((data.name === '') || (RegExp(/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,15}/g).test(data.email))) {
+    const nextError = {
+      name: data.name.trim() === '' ? 'Name is required' : '',
+      email: RegExp(/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,15}/g).test(data.email.trim()) ? '' : 'Email is required or invalid'
+    };
+    setError(nextError);
+    // U: OLD: if ((data.name === '') || emailIsValid) allowed invalid profile updates.
+    // U: NEW: submit only when both fields are valid.
+    if (nextError.name === '' && nextError.email === '') {
       let user = {
         name: data.name,
         email: data.email
       };
       setLoading(true);
       let url = `${apiPath}users/profile/${localStorage.getItem('publicid')}/`;
-      axios.patch(url, user, config).then((res) => {
+      axios.patch(url, user, getAuthConfig()).then((res) => {
         setErr(res.data.message);
         setShow(true);
         setLoading(false);
         setTimeout(successMsg, 3000)
       }).catch((err) => {
         setLoading(false);
-        setErr(err.response.data.error);
-        if (err.response.status === 401) {
-          localStorage.clear();
-          navigate("/login")
-        }
+        setErr(err?.response?.data?.error || 'Something went wrong. Please try again');
+        handleUnauthorized(err, navigate);
       });
     }
   }
@@ -109,7 +108,8 @@ const Profile = () => {
               <Col sm="12" md={{ offset: 2, size: 8 }}>
                 <div className={contentArea}>
                   <div className='gridmargin'>
-                    {/* {(err !== '') && <Alert color="success">{err}</Alert>} */}
+                    {/* U: OLD success/error alert was fully commented out, leaving err state unused. */}
+                    {(err !== '' && !show) && <Alert color="danger">{err}</Alert>}
                     <Form onSubmit={update}>
                       <FormGroup >
                         <Row >

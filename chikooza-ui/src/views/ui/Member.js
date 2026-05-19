@@ -1,11 +1,10 @@
 // import { Row, Col, Table, Card, CardTitle, CardBody, Button, Form, FormGroup, Label, Input, FormText, Nav, NavItem } from "reactstrap";
 import '../../assets/css/header.css';
-import { Link } from "react-router-dom";
 import { Tab, Tabs } from 'react-bootstrap';
 import { Row, Col, Card, CardTitle, CardBody, FormGroup, Label, Input } from "reactstrap";
-import '../../assets/css/header.css';
-import { contentArea, apiPath, config } from "../../Constants";
-import { useState, useEffect } from "react";
+// U: OLD duplicate header.css import removed.
+import { contentArea, apiPath, getAuthConfig, handleUnauthorized } from "../../Constants";
+import { useState, useEffect, useCallback } from "react";
 import axios from 'axios';
 import Chart from 'react-apexcharts';
 import { useNavigate } from "react-router-dom";
@@ -15,7 +14,9 @@ const Member = () => {
   const [showFlock, setShowFlock] = useState(false);
   const [showForm, setShowForm] = useState(false);
   let [flocks, setFlocks] = useState([]);
-  let [flock, setFlock] = useState([]);
+  // U: OLD: let [flock, setFlock] = useState([]) was only written to, never read.
+  const [selectedFarm, setSelectedFarm] = useState("0");
+  const [selectedFlock, setSelectedFlock] = useState("0");
   let [farms, setFarms] = useState([]);
   let [date, setDate] = useState([])
   let [currentCount, setCurrentCount] = useState([])
@@ -25,67 +26,115 @@ const Member = () => {
   let [fcr, setFcr] = useState([])
   const navigate = useNavigate();
 
+  const getsetFlockData2 = useCallback((flock_id) => {
+    let url = `${apiPath}graph/${flock_id}/`
+
+    // U: OLD: this screen created/mutated request config objects inline for auth headers.
+    // U: NEW: use a fresh authenticated config object per request.
+    axios.get(url, getAuthConfig())
+      .then((res) => {
+        setGraphError('');
+        setDate(res.data.results.date)
+        setCurrentCount(res.data.results.current_bird_count)
+        setMortality(res.data.results.mortality)
+        setWeek(res.data.results.week)
+        setWeight(res.data.results.average_weight)
+        setFcr(res.data.results.fcr)
+      }
+      ).catch(err => {
+        setGraphError(err?.response?.data?.message || 'Unable to load flock graph data');
+        setDate([])
+        setCurrentCount([])
+        setMortality([])
+        setWeek([])
+        setWeight([])
+        setFcr([])
+        handleUnauthorized(err, navigate);
+      })
+  }, [navigate]);
+
   useEffect(() => {
     //getsetFlockData2()
     let url = `${apiPath}farm/`;
-    config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
-    axios.get(url, config).then((res) => {
+    // U: OLD: config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
+    axios.get(url, getAuthConfig()).then((res) => {
       if (res.data.results.length === 0) {
         setFarms([{ public_id: 0, name: 'No farm available' }]);
+        setSelectedFarm("0");
       } else {
         setFarms(res.data.results);
         //setlatId(res.data.results[res.data.results.length - 1].public_id);
-        url = `${apiPath}flocks/${res.data.results[res.data.results.length - 1].public_id}/`;
-        axios.get(url, config).then((res) => {
+        const latestFarm = res.data.results[res.data.results.length - 1];
+        setSelectedFarm(String(latestFarm.public_id));
+        url = `${apiPath}flocks/${latestFarm.public_id}/`;
+        axios.get(url, getAuthConfig()).then((res) => {
           if (res.data.results.total_records === 0) {
             setFlocks([{ flock_public_id: 0, flock_name: 'No flock available' }]);
-          } else {//console.log(res.data.results.flock_list[res.data.results.flock_list.length-1].flock_public_id);
-            getsetFlockData2(res.data.results.flock_list[res.data.results.flock_list.length - 1].flock_public_id)
-            setFlocks(res.data.results.flock_list);
+            setSelectedFlock("0");
+            setShowForm(false);
+          } else {
+            const flockList = res.data.results.flock_list;
+            const latestFlock = flockList[flockList.length - 1];
+            getsetFlockData2(latestFlock.flock_public_id)
+            setSelectedFlock(String(latestFlock.flock_public_id));
+            setFlocks(flockList);
+            setShowForm(true);
           }
           setShowFlock(true)
         }).catch((err) => {
+          handleUnauthorized(err, navigate);
         });
       }
     }).catch((err) => {
       setFarms([{ public_id: 0, name: 'No farm available' }]);
-      if (err.response.status === 401) {
-        localStorage.clear();
-        navigate("/login")
-      }
+      setSelectedFarm("0");
+      handleUnauthorized(err, navigate);
     });
-  }, [])
+  }, [getsetFlockData2, navigate])
   let changeFarm = (e) => {
-    if (e.target.value === 0) {
+    // U: OLD: e.target.value === 0 compared a string to a number.
+    if (e.target.value === "0") {
       setShowFlock(false)
+      setShowForm(false)
       setFlocks([]);
+      setSelectedFarm("0");
+      setSelectedFlock("0");
     } else {
+      setSelectedFarm(e.target.value);
       let url = `${apiPath}flocks/${e.target.value}/`;
-      config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
-      axios.get(url, config).then((res) => {
+      axios.get(url, getAuthConfig()).then((res) => {
         if (res.data.results.total_records === 0) {
           setFlocks([{ flock_public_id: 0, flock_name: 'No flock available' }]);
+          setSelectedFlock("0");
+          setShowForm(false);
         } else {
-          getsetFlockData2(res.data.results.flock_list[res.data.results.flock_list.length - 1].flock_public_id)
-          setFlocks(res.data.results.flock_list);
+          const flockList = res.data.results.flock_list;
+          const latestFlock = flockList[flockList.length - 1];
+          getsetFlockData2(latestFlock.flock_public_id)
+          setSelectedFlock(String(latestFlock.flock_public_id));
+          setFlocks(flockList);
+          setShowForm(true);
         }
         setShowFlock(true)
       }).catch((err) => {
-        if (err.response.status === 401) {
-          localStorage.clear();
-          navigate("/login")
-        }
+        handleUnauthorized(err, navigate);
       });
     }
   }
   let changeFlock = (e) => {
-    if (e.target.value === 0) {
+    if (e.target.value === "0") {
       setShowForm(false)
+      setSelectedFlock("0");
     } else {
       getsetFlockData2(e.target.value)
-      const user = flocks.find(u => u.flock_public_id === e.target.value);
+      const user = flocks.find(u => String(u.flock_public_id) === e.target.value);
+      if (!user) {
+        setShowForm(false);
+        setSelectedFlock("0");
+        return;
+      }
       setShowForm(true)
-      setFlock(user.flock_public_id)
+      setSelectedFlock(String(user.flock_public_id))
     }
   }
 
@@ -117,42 +166,6 @@ const Member = () => {
   //     })
   // }
 
-  const getsetFlockData2 = (flock_id) => {
-
-    let url = `${apiPath}graph/${flock_id}/`
-
-    const config = {
-      headers: {
-        "Authorization": `Bearer ${localStorage.getItem('token')}`
-      }
-    };
-
-    axios.get(url, config)
-      .then((res) => {
-        setGraphError('');
-        setDate(res.data.results.date)
-        setCurrentCount(res.data.results.current_bird_count)
-        setMortality(res.data.results.mortality)
-        setWeek(res.data.results.week)
-        setWeight(res.data.results.average_weight)
-        setFcr(res.data.results.fcr)
-      }
-      ).catch(err => {
-        //console.log(err.response.data.message);
-        setGraphError(err.response.data.message);
-        setDate([])
-        setCurrentCount([])
-        setMortality([])
-        setWeek([])
-        setWeight([])
-        setFcr([])
-        if (err.response.status === 401) {
-          localStorage.clear();
-          navigate("/login")
-        }
-      })
-  };
-
   return (
     <Row>
       <Col>
@@ -172,12 +185,12 @@ const Member = () => {
                     <FormGroup>
                       <Label for="farmselect">Select Farm</Label>
                       <div className="input-group">
-                        <Input onChange={changeFarm} id="farmSelect" name="farm" type="select">
-                          <option disabled>Select Farm</option>
+                        <Input value={selectedFarm} onChange={changeFarm} id="farmSelect" name="farm" type="select">
+                          <option value="0" disabled>Select Farm</option>
                           {
                             farms.map((item) => {
                               return (
-                                <option selected={true} key={item.public_id} value={item.public_id}>{item.name}</option>
+                                  <option key={item.public_id} value={item.public_id}>{item.name}</option>
                               )
                             })
                           }
@@ -191,12 +204,12 @@ const Member = () => {
                       <FormGroup>
                         <Label for="farmselect">Select Flock</Label>
                         <div className="input-group">
-                          <Input onChange={changeFlock} id="flockSelect" name="flock" type="select">
-                            <option disabled>Select Flocks</option>
+                          <Input value={selectedFlock} onChange={changeFlock} id="flockSelect" name="flock" type="select">
+                            <option value="0" disabled>Select Flocks</option>
                             {
                               flocks.map((item) => {
                                 return (
-                                  <option selected={true} key={item.flock_public_id} value={item.flock_public_id}>{item.flock_name}</option>
+                                  <option key={item.flock_public_id} value={item.flock_public_id}>{item.flock_name}</option>
                                 )
                               })
                             }

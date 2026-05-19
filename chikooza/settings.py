@@ -14,24 +14,52 @@ from pathlib import Path
 
 import django_heroku
 from corsheaders.defaults import default_headers
+from django.core.exceptions import ImproperlyConfigured
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+
+def _env_bool(name, default=False):
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _env_list(name, default=""):
+    value = os.environ.get(name, default)
+    return [item.strip() for item in value.split(",") if item.strip()]
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/4.0/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = "django-insecure-r59bgclxkscsn72w79bl%(0yp0+wg*65*00yrk8d^1%=*#7!os"
-
+# U: OLD: SECRET_KEY was hardcoded in this file.
+# U: NEW: read secrets from the environment; keep a local-only fallback for setup.
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = (True,)
-CORS_ORIGIN_ALLOW_ALL = True
+# U: OLD: DEBUG = (True,)
+# U: OLD: DEBUG = True
+DEBUG = _env_bool("DJANGO_DEBUG", True)
+SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY")
+if not SECRET_KEY:
+    if not DEBUG:
+        raise ImproperlyConfigured("DJANGO_SECRET_KEY must be set when DJANGO_DEBUG is false.")
+    SECRET_KEY = "django-insecure-local-dev-only-change-before-deploy"
+
+# U: OLD: CORS_ORIGIN_ALLOW_ALL = True
+# U: NEW: use the current django-cors-headers setting name and allow explicit origins in deployment.
+CORS_ALLOW_ALL_ORIGINS = _env_bool("CHIKOOZA_CORS_ALLOW_ALL", DEBUG)
+CORS_ALLOWED_ORIGINS = _env_list("CHIKOOZA_CORS_ALLOWED_ORIGINS")
 CORS_ALLOW_HEADERS = default_headers + ("Access-Control-Allow-Origin",)
-DEBUG = True
 CORS_ALLOW_CREDENTIALS = True
 APPEND_SLASH = False
 USE_TZ = False
-ALLOWED_HOSTS = ["*", "https://chikooza-app.herokuapp.com/"]
+# U: OLD: ALLOWED_HOSTS = ["*", "https://chikooza-app.herokuapp.com/"]
+# U: NEW: keep hosts configurable and remove URL schemes/wildcards from the default list.
+ALLOWED_HOSTS = _env_list(
+    "DJANGO_ALLOWED_HOSTS",
+    "localhost,127.0.0.1,0.0.0.0,.herokuapp.com",
+)
 
 # Application definition
 INSTALLED_APPS = [
@@ -65,20 +93,23 @@ if not HOSTNAME.endswith("/"):
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    # U: OLD: corsheaders.middleware.CorsMiddleware was placed after Django auth/CSRF middleware.
+    # U: NEW: django-cors-headers recommends placing it as high as possible before CommonMiddleware.
+    "corsheaders.middleware.CorsMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
-    "corsheaders.middleware.CorsMiddleware",
+    # "corsheaders.middleware.CorsMiddleware",
     "common.middleware.PageNotFoundMiddleware",
     "common.middleware.AuthenticationErrorMessage",
 #MV-2025-07-17-<2>  STARTS
     "chatbot.middleware.LoggingMiddleware"
 #MV-2025-07-17-<2>  ENDS
 ]
-CORS_ORIGIN_ALLOW_ALL = True
+# U: OLD: CORS_ORIGIN_ALLOW_ALL = True
 ROOT_URLCONF = "chikooza.urls"
 
 TEMPLATES = [

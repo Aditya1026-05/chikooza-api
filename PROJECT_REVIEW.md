@@ -61,6 +61,8 @@ This note captures the current understanding of the repo after first local setup
 - OLD sales migrations that duplicated columns already present in `sales/migrations/0001_initial.py` were commented and replaced with no-op migration operations.
 - OLD eager chatbot service startup was commented/replaced with lazy loading so Django can start without initializing local RAG/Ollama on import.
 - OLD hardcoded backend `HOSTNAME = "http://127.0.0.1:8001/"` was commented/replaced with `CHIKOOZA_API_BASE_URL`, defaulting to `http://127.0.0.1:8002/`.
+- U: OLD hardcoded `SECRET_KEY`, duplicated `DEBUG=True`, wildcard `ALLOWED_HOSTS`, and always-open CORS were replaced with environment-driven settings and safer local defaults.
+- U: OLD `corsheaders.middleware.CorsMiddleware` order was replaced with the recommended high middleware position before `CommonMiddleware`.
 - Added backend `.env.example`.
 - Added UI `.env.example` so `REACT_APP_API_BASE_URL` and `REACT_APP_TEMPLATE_BASE_URL` are explicit.
 - Added missing UI dependency `react-chatbot-kit`.
@@ -79,8 +81,8 @@ This note captures the current understanding of the repo after first local setup
 
 - Very little automated testing exists. Both backend and UI currently have zero tests.
 - Many frontend warnings show unused imports, weak equality checks, missing hook dependencies, and array callback mistakes.
-- UI mutates a shared `config` object for auth headers across many files instead of centralizing Axios setup.
-- Backend settings are not production-safe: secret key is hardcoded, `DEBUG=True`, broad CORS, and broad allowed hosts.
+- UI still mutates a shared `config` object in many older files; new touched screens now use a fresh authenticated config helper.
+- Backend settings are safer than before, but deployment still needs real `DJANGO_SECRET_KEY`, `DJANGO_DEBUG=False`, exact allowed hosts, exact CORS origins, HTTPS/security headers, and deployment testing.
 - Migrations are inconsistent in `sales`; no-op migration patches make local setup work but should be cleaned properly later.
 - The backend depends on local/slow AI services in `chatbot` and `aibot`; `chatbot` now has graceful failure, while `aibot` still needs the same level of review.
 - `aibot/services.py` uses pattern matching plus LangChain SQL agent behavior and contains risky parsing/formatting logic that should be reviewed before production use.

@@ -3,7 +3,9 @@ import ReactDOM from "react-dom";
 import "./assets/scss/style.scss";
 import App from "./App";
 import reportWebVitals from "./reportWebVitals";
-import { BrowserRouter, HashRouter } from "react-router-dom";
+// U: OLD: import { BrowserRouter, HashRouter } from "react-router-dom";
+// U: NEW: HashRouter was unused; the app currently runs with BrowserRouter.
+import { BrowserRouter } from "react-router-dom";
 import Loader from "./layouts/loader/Loader";
 import "primereact/resources/themes/lara-light-indigo/theme.css";
 import "primereact/resources/primereact.min.css";
