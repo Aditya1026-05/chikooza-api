@@ -23,10 +23,18 @@ class CreateDailyDataService(services.Service):
     def process(self):
         data = self.data.get("data")
         user = self.data.get("user")
+        flock = self.data.get("flock")
         flock_vaccinations = data.get("flock_vaccination")
         quantity = 0
+        if flock is None:
+            # U: OLD: Flock.objects.get(public_id=...) allowed daily data under another farmer's flock.
+            # U: NEW: resolve the flock through the authenticated farmer.
+            flock = Flock.objects.get(public_id=data.get("flock_public_id"), user=user)
         purchases = Purchase.objects.filter(
-            flock__public_id=data.get("flock_public_id"),
+            # U: OLD: purchase totals were calculated by flock public_id only.
+            # U: NEW: use the already-owned flock and authenticated farmer.
+            flock=flock,
+            user=user,
             type="Feed",
             date__lte=data.get("date"),
         )
@@ -36,7 +44,6 @@ class CreateDailyDataService(services.Service):
             else:
                 purchase.quantity = purchase.quantity
             quantity = quantity + purchase.quantity
-        flock = Flock.objects.get(public_id=data.get("flock_public_id"))
         yesterday = data.get("date") - datetime.timedelta(days=1)
 
         if DailyData.objects.filter(date=yesterday, flock=flock).exists():
@@ -292,8 +299,13 @@ class UpdateDailyDataService(services.Service):
                         status=flock_vaccinations["status"][i],
                     )
                 else:
+                    # U: OLD: FlockVaccination.objects.get(public_id=...) allowed editing another farmer's vaccination row.
+                    # U: NEW: limit updates to vaccinations attached to the current daily data and flock.
                     flock_vaccine = FlockVaccination.objects.get(
-                        public_id=flock_vaccinations['flock_vaccination_public_id'][i])
+                        public_id=flock_vaccinations['flock_vaccination_public_id'][i],
+                        dailydata=daily_data,
+                        flock=flock,
+                    )
                     vaccine = Vaccines.objects.get(public_id=flock_vaccinations['vaccine_public_id'][i])
                     flock_vaccine.vaccine = vaccine
                     flock_vaccine.status = flock_vaccinations['status'][i]
@@ -335,12 +347,16 @@ class CreateFlockVaccinationService(services.Service):
         daily_data_public_id = data.get("dailydata").get("public_id")
         flock_public_id = data.get("flock").get("public_id")
         vaccine_public_id = data.get("vaccine").get("public_id")
+        user = self.data.get("user")
+        # U: OLD: create looked up daily data/flock by public IDs only.
+        # U: NEW: resolve the flock and daily data through the authenticated farmer.
+        flock = Flock.objects.get(public_id=flock_public_id, user=user)
         flock_vaccination = FlockVaccination.objects.create(
             public_id=PublicId.create_public_id(),
             dailydata=DailyData.objects.get(
-                public_id=daily_data_public_id, flock__public_id=flock_public_id
+                public_id=daily_data_public_id, flock=flock, user=user
             ),
-            flock=Flock.objects.get(public_id=flock_public_id),
+            flock=flock,
             vaccine=Vaccines.objects.get(public_id=vaccine_public_id),
             status=data.get("status"),
         )

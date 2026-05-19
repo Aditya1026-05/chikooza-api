@@ -56,6 +56,33 @@ from flocks.utils import prepare_daily_data_response
 #MV-23-6-25- 17-10 change end
 
 
+def _flock_queryset_for_request(request):
+    """
+    U: Scope flock records to the authenticated farmer unless an admin explicitly requests data.
+    """
+    if getattr(request.user, "is_superuser", False):
+        return Flock.objects.all()
+    return Flock.objects.filter(user=request.user.users)
+
+
+def _dailydata_queryset_for_request(request):
+    """
+    U: Scope daily data rows to the authenticated farmer unless an admin explicitly requests data.
+    """
+    if getattr(request.user, "is_superuser", False):
+        return DailyData.objects.all()
+    return DailyData.objects.filter(user=request.user.users)
+
+
+def _flock_vaccination_queryset_for_request(request):
+    """
+    U: Scope flock vaccination rows through the authenticated farmer's flocks.
+    """
+    if getattr(request.user, "is_superuser", False):
+        return FlockVaccination.objects.all()
+    return FlockVaccination.objects.filter(flock__user=request.user.users)
+
+
 
 class DailyDataView(viewsets.ViewSet):
     """
@@ -78,11 +105,16 @@ class DailyDataView(viewsets.ViewSet):
             serializer = CreateDailyDataSerializer(data=request.data)
             if serializer.is_valid(raise_exception=True):
                 serializer_data = serializer.validated_data
+                # U: OLD: duplicate check and create trusted flock_public_id globally.
+                # U: NEW: resolve the flock through the authenticated farmer first.
+                flock = _flock_queryset_for_request(request).get(
+                    public_id=serializer_data["flock_public_id"]
+                )
                 check_dailydata_existence_for_validation(
-                    serializer_data["date"], serializer_data["flock_public_id"]
+                    serializer_data["date"], flock.public_id
                 )
                 daily_data = CreateDailyDataService.execute(
-                    {"data": serializer_data, "user": request.user.users}
+                    {"data": serializer_data, "user": request.user.users, "flock": flock}
                 )
                 return get_detail(
                     "Daily Data Created",
@@ -108,7 +140,8 @@ class DailyDataView(viewsets.ViewSet):
                 #flock_date = Flock.objects.get(public_id=flock_public_id).hatch_date
                 
 #MV-23-6-25- 17-10 get flock and hatch date
-                flock = Flock.objects.get(public_id=flock_public_id)
+                # U: OLD: Flock.objects.get(public_id=flock_public_id)
+                flock = _flock_queryset_for_request(request).get(public_id=flock_public_id)
                 flock_date = flock.hatch_date
 #MV-23-6-25- 17-10 change end
 
@@ -116,9 +149,10 @@ class DailyDataView(viewsets.ViewSet):
                 number_of_days = (date - flock_date).days
                 yesterday = date - datetime.timedelta(days=1)
                 
-                if DailyData.objects.filter(flock__public_id=flock_public_id, date=yesterday).exists():
-                    yesterday_daily_data = DailyData.objects.get(
-                        flock__public_id=flock_public_id, date=yesterday
+                daily_data_queryset = _dailydata_queryset_for_request(request)
+                if daily_data_queryset.filter(flock=flock, date=yesterday).exists():
+                    yesterday_daily_data = daily_data_queryset.get(
+                        flock=flock, date=yesterday
                     )
                     yesterday_daily_data_result = YesterdayDailyDataGetSerializer(yesterday_daily_data).data
                     
@@ -130,9 +164,9 @@ class DailyDataView(viewsets.ViewSet):
                 else:
                     yesterday_daily_data_result = {}
                     
-                if DailyData.objects.filter(flock__public_id=flock_public_id, date=date).exists():
-                    dailydata = DailyData.objects.get(
-                        flock__public_id=flock_public_id, date=date
+                if daily_data_queryset.filter(flock=flock, date=date).exists():
+                    dailydata = daily_data_queryset.get(
+                        flock=flock, date=date
                     )
                     result = DailyDataGetSerializer(dailydata).data
                     
@@ -158,7 +192,8 @@ class DailyDataView(viewsets.ViewSet):
     @classmethod
     def partial_update(cls, request, pk):
         try:
-            dailydata = DailyData.objects.get(public_id=pk)
+            # U: OLD: DailyData.objects.get(public_id=pk)
+            dailydata = _dailydata_queryset_for_request(request).get(public_id=pk)
             serializer = UpdateDailyDataSerializer(data=request.data)
             if serializer.is_valid(raise_exception=True):
                 serializer_data = serializer.validated_data
@@ -200,7 +235,7 @@ class FlockVaccinationView(viewsets.ViewSet):
             if serializer.is_valid(raise_exception=True):
                 serializer_data = serializer.validated_data
                 flock_vaccination = CreateFlockVaccinationService.execute(
-                    {"data": serializer_data}
+                    {"data": serializer_data, "user": request.user.users}
                 )
                 return get_detail(
                     "Flock Vaccination Created",
@@ -224,7 +259,8 @@ class FlockVaccinationView(viewsets.ViewSet):
 
     @classmethod
     def list(cls, request):
-        flock_vaccination = FlockVaccination.objects.all()
+        # U: OLD: FlockVaccination.objects.all()
+        flock_vaccination = _flock_vaccination_queryset_for_request(request)
         return list_response(
             "Flock Vaccination List",
             flock_vaccination.count(),
@@ -236,7 +272,8 @@ class FlockVaccinationView(viewsets.ViewSet):
     @classmethod
     def retrieve(cls, request, pk):
         try:
-            flock_vaccination = FlockVaccination.objects.get(public_id=pk)
+            # U: OLD: FlockVaccination.objects.get(public_id=pk)
+            flock_vaccination = _flock_vaccination_queryset_for_request(request).get(public_id=pk)
             return get_detail(
                 "Flock Vaccination Detail",
                 GetFlockVaccinationSerializer(flock_vaccination).data,
@@ -250,13 +287,20 @@ class FlockVaccinationView(viewsets.ViewSet):
     @classmethod
     def delete(cls, request, pk):
         try:
-            flock_vaccination = FlockVaccination.objects.get(public_id=pk)
+            # U: OLD: FlockVaccination.objects.get(public_id=pk)
+            flock_vaccination = _flock_vaccination_queryset_for_request(request).get(public_id=pk)
             flock_vaccination.delete()
             return delete_response(FLOCK_VACCINATION_DELETE, status.HTTP_200_OK)
         except FlockVaccination.DoesNotExist:
             return error_response(
                 {ERROR: FLOCK_VACCINATION_DOES_NOT_EXIST}, status.HTTP_404_NOT_FOUND
             )
+
+    @classmethod
+    def destroy(cls, request, pk):
+        # U: OLD: DefaultRouter DELETE routes expect destroy(), but this view only exposed delete().
+        # U: NEW: keep delete() for compatibility and route DELETE through the same scoped logic.
+        return cls.delete(request, pk)
 
 
 class VaccinesView(viewsets.ViewSet):
@@ -281,12 +325,21 @@ class DailyDataDetailView(viewsets.ViewSet):
     Class to give detail of daily data.
     """
 
+    authentication_classes = [OAuth2Authentication]
+    permission_classes = [TokenMatchesOASRequirements]
+
+    required_alternate_scopes = {
+        "GET": [["read"]],
+    }
+
     @classmethod
     def list(cls, request):
         try:
-            daily_data = DailyData.objects.filter(
-                flock__public_id=request.GET.get("flock_public_id")
+            # U: OLD: DailyData.objects.filter(flock__public_id=...)
+            flock = _flock_queryset_for_request(request).get(
+                public_id=request.GET.get("flock_public_id")
             )
+            daily_data = _dailydata_queryset_for_request(request).filter(flock=flock)
             
 #MV-23-6-25- 17-10 append new values to response
             result_data = []
@@ -325,6 +378,10 @@ class DailyDataDetailView(viewsets.ViewSet):
 #MV-23-6-25- 17-10 change end
 
                 status.HTTP_200_OK,
+            )
+        except Flock.DoesNotExist:
+            return error_response(
+                {ERROR: FLOCK_DOES_NOT_EXIST}, status.HTTP_404_NOT_FOUND
             )
         except DailyData.DoesNotExist:
             return error_response(
@@ -385,14 +442,16 @@ class DailyDataAverageFeedBirdsView(viewsets.ViewSet):
             if serializer.is_valid(raise_exception=True):
                 serializer_data = serializer.validated_data
                 feed_intake = serializer_data["feed_intake"]
-                flock = Flock.objects.get(
+                # U: OLD: Flock.objects.get(public_id=...)
+                flock = _flock_queryset_for_request(request).get(
                     public_id=serializer.validated_data["flock"].get("public_id")
                 )
                 date = serializer_data["date"]
                 current_bird_count = serializer_data["current_bird_count"]
                 yesterday = date - datetime.timedelta(days=1)
-                if DailyData.objects.filter(date=yesterday, flock=flock).exists():
-                    yesterday_daily_data = DailyData.objects.get(
+                daily_data_queryset = _dailydata_queryset_for_request(request)
+                if daily_data_queryset.filter(date=yesterday, flock=flock).exists():
+                    yesterday_daily_data = daily_data_queryset.get(
                         date=yesterday, flock=flock
                     )
                     yesterday_avg_feed = yesterday_daily_data.average_feed
@@ -436,14 +495,16 @@ class DailyDataFCRView(viewsets.ViewSet):
             serializer = DailyDataFCRSerializer(data=request.GET)
             if serializer.is_valid(raise_exception=True):
                 serializer_data = serializer.validated_data
-                flock = Flock.objects.get(
+                # U: OLD: Flock.objects.get(public_id=...)
+                flock = _flock_queryset_for_request(request).get(
                     public_id=serializer_data["flock"].get("public_id")
                 )
                 average_feed = serializer_data["average_feed"]
                 date = serializer_data["date"]
                 yesterday = date - datetime.timedelta(days=1)
-                if DailyData.objects.filter(date=yesterday, flock=flock).exists():
-                    yesterday_daily_data = DailyData.objects.get(
+                daily_data_queryset = _dailydata_queryset_for_request(request)
+                if daily_data_queryset.filter(date=yesterday, flock=flock).exists():
+                    yesterday_daily_data = daily_data_queryset.get(
                         date=yesterday, flock=flock
                     )
                     avg_feed = yesterday_daily_data.total_average_feed
@@ -484,11 +545,19 @@ class DailyDataLastDateView(viewsets.ViewSet):
     Class to give last date of daily data.
     """
 
+    authentication_classes = [OAuth2Authentication]
+    permission_classes = [TokenMatchesOASRequirements]
+
+    required_alternate_scopes = {
+        "GET": [["read"]],
+    }
+
     def retrieve(self, request, pk):
         try:
             count = 0
-            flock = Flock.objects.get(public_id=pk)
-            daily_data = DailyData.objects.filter(flock=flock).latest("date")
+            # U: OLD: Flock.objects.get(public_id=pk)
+            flock = _flock_queryset_for_request(request).get(public_id=pk)
+            daily_data = _dailydata_queryset_for_request(request).filter(flock=flock).latest("date")
             sales = Sales.objects.filter(flock=flock, date__gt=daily_data.date)
             for sale in sales:
                 count += sale.lifting_count
@@ -529,9 +598,11 @@ class DailyDataListView(viewsets.ViewSet):
     @classmethod
     def list(cls, request):
         try:
-            daily_data = DailyData.objects.filter(
-            flock__public_id=request.GET.get("flock_public_id")
+            # U: OLD: DailyData.objects.filter(flock__public_id=...)
+            flock = _flock_queryset_for_request(request).get(
+                public_id=request.GET.get("flock_public_id")
             )
+            daily_data = _dailydata_queryset_for_request(request).filter(flock=flock)
             
 #MV-23-6-25- 17-10 append new values to response
             result_data = []
@@ -570,6 +641,10 @@ class DailyDataListView(viewsets.ViewSet):
 #MV-23-6-25- 17-10 change end
 
                 status.HTTP_200_OK,
+            )
+        except Flock.DoesNotExist:
+            return error_response(
+                {ERROR: FLOCK_DOES_NOT_EXIST}, status.HTTP_404_NOT_FOUND
             )
         except DailyData.DoesNotExist:
             return error_response(
@@ -622,47 +697,61 @@ class FeedAvailabilityView(viewsets.ViewSet):
 
 
 class PDFView(viewsets.ViewSet):
+    authentication_classes = [OAuth2Authentication]
+    permission_classes = [TokenMatchesOASRequirements]
+
+    required_alternate_scopes = {
+        "GET": [["read"]],
+    }
+
     @classmethod
     def list(cls, request):
-        template_name = "dailydata.html"
+        try:
+            template_name = "dailydata.html"
 
 #MV-23-6-25- 17-10 append to response
-        # records = DailyData.objects.filter(flock__public_id=request.GET.get("flock_public_id"))
-        daily_data = DailyData.objects.filter(
-                flock__public_id=request.GET.get("flock_public_id")
+            # records = DailyData.objects.filter(flock__public_id=request.GET.get("flock_public_id"))
+            # U: OLD: DailyData.objects.filter(flock__public_id=...)
+            flock = _flock_queryset_for_request(request).get(
+                public_id=request.GET.get("flock_public_id")
             )
+            daily_data = _dailydata_queryset_for_request(request).filter(flock=flock)
         
-        result_data = []
+            result_data = []
 
-        for entry in daily_data:
-            flock = entry.flock
-            enriched = prepare_daily_data_response(entry, flock)
+            for entry in daily_data:
+                flock = entry.flock
+                enriched = prepare_daily_data_response(entry, flock)
                 
-            base_data = GetDailyDataListSerializer(entry).data
+                base_data = GetDailyDataListSerializer(entry).data
                 
-            base_data.update({
-                "bird_count": enriched["bird_count"],
-                "total_feed_purchased": enriched["total_feed_purchased"],
-                "total_feed_consumed": enriched["total_feed_consumed"],
-                "feed_stock": enriched["feed_stock"],
-                "average_feed_per_bird": enriched["average_feed_per_bird"],
-                "total_average_feed": enriched["total_average_feed"],
-                "total_mortality_percentage": enriched["total_mortality_percentage"],
-                "cum_mort": enriched["cum_mort"],
-                "fcr": enriched["fcr"],
-                "total_fcr": enriched["total_fcr"],
-                "remarks": enriched["remarks"],
-            })
+                base_data.update({
+                    "bird_count": enriched["bird_count"],
+                    "total_feed_purchased": enriched["total_feed_purchased"],
+                    "total_feed_consumed": enriched["total_feed_consumed"],
+                    "feed_stock": enriched["feed_stock"],
+                    "average_feed_per_bird": enriched["average_feed_per_bird"],
+                    "total_average_feed": enriched["total_average_feed"],
+                    "total_mortality_percentage": enriched["total_mortality_percentage"],
+                    "cum_mort": enriched["cum_mort"],
+                    "fcr": enriched["fcr"],
+                    "total_fcr": enriched["total_fcr"],
+                    "remarks": enriched["remarks"],
+                })
                 
-            result_data.append(base_data)
+                result_data.append(base_data)
 #MV-23-6-25- 17-10 change end
 
-        return render_to_pdf(
-            template_name,
-            {
-                # "record": records,
+            return render_to_pdf(
+                template_name,
+                {
+                    # "record": records,
 #MV-23-6-25- 17-10 new var
-                "record": result_data,
+                    "record": result_data,
 #MV-23-6-25- 17-10 change end
-            },
-        )
+                },
+            )
+        except Flock.DoesNotExist:
+            return error_response(
+                {ERROR: FLOCK_DOES_NOT_EXIST}, status.HTTP_404_NOT_FOUND
+            )
