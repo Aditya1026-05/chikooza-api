@@ -20,4 +20,14 @@ export default defineConfig({
   build: {
     outDir: "build",
   },
+  css: {
+    preprocessorOptions: {
+      scss: {
+        // U: OLD: Sass printed hundreds of known Bootstrap 5.3 deprecation warnings on every build.
+        // U: NEW: keep warnings actionable while Bootstrap finishes its module-system migration.
+        quietDeps: true,
+        silenceDeprecations: ["import", "global-builtin", "color-functions", "if-function"],
+      },
+    },
+  },
 });
