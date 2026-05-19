@@ -46,7 +46,9 @@ gunicorn==26.0.0
 # OLD: h11==0.12.0
 # NEW: httpx 0.28 uses httpcore 1.x, which requires h11 0.16+.
 h11==0.16.0
-heroku==0.1.4
+# U: OLD: heroku==0.1.4
+# U: NEW: unused legacy Heroku CLI/API package; deployment config is handled explicitly in settings.
+# heroku==0.1.4
 # OLD: httpcore
 # NEW: Pin httpcore so fresh installs resolve consistently with httpx 0.28.
 httpcore==1.0.9
