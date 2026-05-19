@@ -5,7 +5,6 @@ import {
   Collapse,
   Nav,
   NavItem,
-  NavbarBrand,
   UncontrolledDropdown,
   DropdownToggle,
   DropdownMenu,
@@ -14,8 +13,6 @@ import {
   Button,
 } from "reactstrap";
 //import { ReactComponent as LogoWhite } from "../assets/images/logos/adminprowhite.svg";
-import logo from "../assets/images/logos/chikooza_logo.svg";
-import logoMobile from "../assets/images/logos/chikooza_logo_mobile.png";
 import '../assets/css/header.css';
 import { useEffect } from "react";
 import { useNavigate } from 'react-router-dom';
@@ -58,12 +55,12 @@ const Header = () => {
   return (
     <Navbar light expand="md" className="fix-header chikooza-public-header">
       <div className="d-flex align-items-center">
-        <div className="d-lg-block d-none me-5 pe-3">
-          <img src={logo} width='156' height='35' alt="user" />
-        </div>
-        <NavbarBrand href="/">
-          <img src={logoMobile} width='35' height='35' alt="user" className="d-lg-none" />
-        </NavbarBrand>
+        {/* U: OLD: member header reused image logos from the legacy template.
+            U: NEW: use the same CSS-rendered Chikooza brand as the public header. */}
+        <Link to="/" className="navbar-brand chikooza-brand">
+          <span className="chikooza-brand-mark" aria-hidden="true">C</span>
+          <span className="chikooza-brand-text">Chikooza</span>
+        </Link>
         {/* <Button
           color="primary"
           className=" d-lg-none"

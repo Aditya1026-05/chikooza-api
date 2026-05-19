@@ -45,7 +45,9 @@ const FullLayout = () => {
                   <CardBody className="">
                     <Breadcrumb>
                       <BreadcrumbItem active>
-                        <span style={{ color: "#30c39e" }}><Link to="/" style={{ color: '#30c39e', 'textDecoration': 'none' }}>Home</Link></span> /
+                        {/* U: OLD: breadcrumb home link used a hardcoded green accent.
+                            U: NEW: use the crimson brand accent so public pages remain visually consistent. */}
+                        <span style={{ color: "#b71c1c" }}><Link to="/" style={{ color: '#b71c1c', 'textDecoration': 'none' }}>Home</Link></span> /
                         {pageName}
                       </BreadcrumbItem>
                       {/*<BreadcrumbItem>

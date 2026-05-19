@@ -2,10 +2,10 @@
   flex-shrink: 0;
   width: $sidebarWidth;
   // U: OLD: flat dark sidebar background.
-  // U: NEW: subtle green-black gradient that matches the agriculture palette.
+  // U: NEW: subtle red-black gradient that matches the Chikooza brand palette.
   background:
-    radial-gradient(circle at top left, rgba(217, 138, 21, 0.16), transparent 16rem),
-    linear-gradient(180deg, $sidebarColor 0%, #111a14 100%);
+    radial-gradient(circle at top left, rgba(245, 158, 11, 0.16), transparent 16rem),
+    linear-gradient(180deg, $sidebarColor 0%, #1f0f0f 100%);
   .nav-link {
     color: rgba(255, 255, 255, 0.68);
   }
@@ -17,7 +17,7 @@
     }
   }
   .sidenav-bg .active {
-    background: linear-gradient(135deg, $primary 0%, #2c9962 100%);
+    background: linear-gradient(135deg, $primary 0%, #dc2626 100%);
     border-radius: $border-radius;
     color: white;
     box-shadow: 0 0.75rem 1.5rem rgba($primary, 0.24);

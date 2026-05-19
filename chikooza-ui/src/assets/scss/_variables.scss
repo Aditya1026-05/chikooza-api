@@ -17,15 +17,16 @@ $font-family-sans-serif: "Plus Jakarta Sans", sans-serif;
 // $dark: #1e2a35;
 // $light: #eaf2fb;
 // $secondary: #35363b;
-// U: NEW: agriculture-focused palette for a poultry farm operations product.
-$primary: #1f7a4d;
-$info: #0f8ea0;
-$danger: #c2410c;
-$success: #2f855a;
-$warning: #d98a15;
-$dark: #17231b;
-$light: #edf6ef;
-$secondary: #66756b;
+// U: NEW: red-led professional palette for the Chikooza product.
+// U: Use dark crimson for primary UI instead of the inaccessible neon legacy red.
+$primary: #b71c1c;
+$info: #7c2d12;
+$danger: #991b1b;
+$success: #166534;
+$warning: #f59e0b;
+$dark: #241514;
+$light: #fff1f2;
+$secondary: #735653;
 
 $theme-colors: (
   "primary": $primary,
@@ -36,23 +37,23 @@ $theme-colors: (
   "danger": $danger,
   "light": $light,
   "dark": $dark,
-  "light-primary": #dff1e7,
-  "light-success": #dcf4e5,
-  "light-info": #d7f0f4,
-  "light-warning": #fbecd2,
-  "light-danger": #f8ded6,
+  "light-primary": #ffe4e6,
+  "light-success": #dcfce7,
+  "light-info": #ffedd5,
+  "light-warning": #fff7ed,
+  "light-danger": #fee2e2,
 );
 // scss-docs-start gray-color-variables
 $white: #fff !default;
 $gray-100: #f8f9fa !default;
-$gray-200: #f3f7f1 !default;
+$gray-200: #fff1f2 !default;
 $gray-300: #dee2e6 !default;
 $gray-400: #ced4da !default;
 $gray-500: #adb5bd !default;
-$gray-600: #68776d !default;
+$gray-600: #735653 !default;
 $gray-700: #495057 !default;
 $gray-800: #343a40 !default;
-$gray-900: #17231b !default;
+$gray-900: #241514 !default;
 $black: #000 !default;
 
 /*******************/
@@ -63,7 +64,7 @@ $font-weight-bold: 500 !default;
 /*******************/
 // Theme body bg & text color
 /********************/
-$body-bg: #f5f8f2 !default;
+$body-bg: #fff7f3 !default;
 $body-color: $gray-900 !default;
 $gradient: linear-gradient(-90deg, rgba($white, 0.5), rgba($white, 0)) !default;
 
@@ -71,7 +72,7 @@ $gradient: linear-gradient(-90deg, rgba($white, 0.5), rgba($white, 0)) !default;
 // Theme common variable
 /********************/
 $border-radius: 0.55rem !default;
-$box-shadow: 0 1rem 2rem rgba(23, 35, 27, 0.08);
+$box-shadow: 0 1rem 2rem rgba(127, 29, 29, 0.08);
 $headings-font-weight: 400 !default;
 $h5-font-size: 1.05rem !default;
 $h6-font-size: 0.875rem !default;

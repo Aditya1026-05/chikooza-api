@@ -8,16 +8,16 @@
 
 :root {
   // U: NEW: shared product colors for custom components that do not consume Bootstrap variables.
-  --chikooza-page-bg: #f5f8f2;
+  --chikooza-page-bg: #fff7f3;
   --chikooza-surface: #ffffff;
-  --chikooza-ink: #17231b;
-  --chikooza-muted: #68776d;
-  --chikooza-accent: #d98a15;
+  --chikooza-ink: #241514;
+  --chikooza-muted: #735653;
+  --chikooza-accent: #f59e0b;
 }
 
 body {
   background:
-    radial-gradient(circle at top left, rgba(31, 122, 77, 0.12), transparent 34rem),
-    linear-gradient(180deg, #fbfdf8 0%, var(--chikooza-page-bg) 48%, #eef5eb 100%);
+    radial-gradient(circle at top left, rgba(183, 28, 28, 0.1), transparent 34rem),
+    linear-gradient(180deg, #fffdfb 0%, var(--chikooza-page-bg) 48%, #fff1f2 100%);
   color: var(--chikooza-ink);
 }

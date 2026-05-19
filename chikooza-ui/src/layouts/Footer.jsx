@@ -5,7 +5,9 @@ import logoMobile from "../assets/images/logos/footer_logo.svg";
 const Footer = () => {
   return (
     <>
-      <footer className="page-footer font-small p-2 mt-0 " style={{ background: "#FD2F39" }}>
+      {/* U: OLD: footer used the legacy red brand block.
+          U: NEW: footer now follows the red/warm-neutral product palette. */}
+      <footer className="page-footer chikooza-footer font-small p-2 mt-0">
         <div className="container text-center">
           <div className="row">
             <div className="col-md-3 mx-auto text-whtie mt-3">
@@ -28,7 +30,7 @@ const Footer = () => {
             </div>
           </div>
         </div>
-        <div className="text-500 p-1 text-center mt-0 bg-black crfoot" >
+        <div className="text-500 p-1 text-center mt-0 crfoot chikooza-footer-bottom" >
           <p className="text-center text-white text-sm mt-2">Copyright © 2022 chikooza.com, All Right Reserved</p>
         </div>
       </footer>
