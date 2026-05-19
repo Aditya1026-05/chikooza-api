@@ -298,8 +298,10 @@ Important scripts:
 ```bash
 npm start
 npm run build
-npm test
 ```
+
+`npm start` runs the Vite development server. `npm run build` writes the
+production bundle to `chikooza-ui/build/`.
 
 ### `chikooza-ui/.env.example`
 
@@ -307,8 +309,13 @@ This shows which environment variables are needed.
 
 Important values:
 
+- `VITE_API_BASE_URL`
+- `VITE_TEMPLATE_BASE_URL`
 - `REACT_APP_API_BASE_URL`
 - `REACT_APP_TEMPLATE_BASE_URL`
+
+The `REACT_APP_*` names are kept temporarily for old local `.env` files, but
+new setup should use the `VITE_*` names.
 
 For local setup these point to:
 

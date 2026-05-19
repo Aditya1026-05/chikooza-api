@@ -2,46 +2,46 @@ import { lazy } from "react";
 
 
 /****Layouts*****/
-const FullLayout = lazy(() => import("../layouts/FullLayout.js"));
-const FullLayoutMember = lazy(() => import("../layouts/FullLayoutMember.js"));
-const HeaderLayout = lazy(() => import("../layouts/HeaderLayout.js"));
+const FullLayout = lazy(() => import("../layouts/FullLayout.jsx"));
+const FullLayoutMember = lazy(() => import("../layouts/FullLayoutMember.jsx"));
+const HeaderLayout = lazy(() => import("../layouts/HeaderLayout.jsx"));
 
 
 /***** Pages ****/
 
 //Original Pages
-const Login = lazy(() => import("../views/ui/Login.js"));
+const Login = lazy(() => import("../views/ui/Login.jsx"));
 // U: OLD unused route-level import caused a build warning; chatbot is mounted inside Home/Chatbot pages.
 // const ChikoozaChatbot = lazy(() => import('../components/ChikoozaChatbot/ChikoozaChatbot'));
-const Register = lazy(() => import("../views/ui/Register.js"));
-const Member = lazy(() => import("../views/ui/Member.js"));
-const AddFlock = lazy(() => import("../views/ui/Addflock.js"));
-const AddFarm = lazy(() => import("../views/ui/AddFarm.js"));
-const ManageFarm = lazy(() => import("../views/ui/ManageFarm.js"));
-const AddPurchase = lazy(() => import("../views/ui/AddPurchase.js"));
-const ManageFlock = lazy(() => import("../views/ui/ManageFlock.js"));
-const DailyDataSheet = lazy(() => import("../views/ui/DailyDataSheet.js"));
-const FlockSummary = lazy(() => import("../views/ui/FlockSummary.js"));
-const FlockDailyData = lazy(() => import("../views/ui/FlockDailyData.js"));
-const DayData = lazy(() => import("../views/ui/DayData.js"));
-const Home = lazy(() => import("../views/ui/Home.js"));
-const About = lazy(() => import("../views/ui/About.js"));
-const Contact = lazy(() => import("../views/ui/Contact.js"));
-const Profile = lazy(() => import("../views/ui/Profile.js"));
-const ChangePassword = lazy(() => import("../views/ui/ChangePassword.js"));
-const ForgetPassword = lazy(() => import("../views/ui/ForgetPassword.js"));
-const FlockSale = lazy(() => import("../views/ui/FlockSale.js"));
-const ViewSale = lazy(() => import("../views/ui/ViewSale.js"));
-const EditSale = lazy(() => import("../views/ui/EditSale.js"));
-const ListPurchase = lazy(() => import("../views/ui/ListPurchase.js"));
-const ViewPurchase = lazy(() => import("../views/ui/ViewPurchase.js"));
-const UpdateMobile = lazy(() => import("../views/ui/UpdateMobile.js"));
+const Register = lazy(() => import("../views/ui/Register.jsx"));
+const Member = lazy(() => import("../views/ui/Member.jsx"));
+const AddFlock = lazy(() => import("../views/ui/Addflock.jsx"));
+const AddFarm = lazy(() => import("../views/ui/AddFarm.jsx"));
+const ManageFarm = lazy(() => import("../views/ui/ManageFarm.jsx"));
+const AddPurchase = lazy(() => import("../views/ui/AddPurchase.jsx"));
+const ManageFlock = lazy(() => import("../views/ui/ManageFlock.jsx"));
+const DailyDataSheet = lazy(() => import("../views/ui/DailyDataSheet.jsx"));
+const FlockSummary = lazy(() => import("../views/ui/FlockSummary.jsx"));
+const FlockDailyData = lazy(() => import("../views/ui/FlockDailyData.jsx"));
+const DayData = lazy(() => import("../views/ui/DayData.jsx"));
+const Home = lazy(() => import("../views/ui/Home.jsx"));
+const About = lazy(() => import("../views/ui/About.jsx"));
+const Contact = lazy(() => import("../views/ui/Contact.jsx"));
+const Profile = lazy(() => import("../views/ui/Profile.jsx"));
+const ChangePassword = lazy(() => import("../views/ui/ChangePassword.jsx"));
+const ForgetPassword = lazy(() => import("../views/ui/ForgetPassword.jsx"));
+const FlockSale = lazy(() => import("../views/ui/FlockSale.jsx"));
+const ViewSale = lazy(() => import("../views/ui/ViewSale.jsx"));
+const EditSale = lazy(() => import("../views/ui/EditSale.jsx"));
+const ListPurchase = lazy(() => import("../views/ui/ListPurchase.jsx"));
+const ViewPurchase = lazy(() => import("../views/ui/ViewPurchase.jsx"));
+const UpdateMobile = lazy(() => import("../views/ui/UpdateMobile.jsx"));
 
 // MV-2025-07-05-<1>  STARTS
-const Chatbot = lazy(() => import("../views/ui/Chatbot.js"));
+const Chatbot = lazy(() => import("../views/ui/Chatbot.jsx"));
 // MV-2025-07-05-<1>  ENDS
 
-// const ResetPassword = lazy(() => import("../views/ui/ResetPassword.js"));
+// const ResetPassword = lazy(() => import("../views/ui/ResetPassword.jsx"));
 //Original Pages
 
 /*****Routes AddPurchase******/

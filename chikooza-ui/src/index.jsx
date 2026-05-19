@@ -1,8 +1,8 @@
 import React, { Suspense } from "react";
 import ReactDOM from "react-dom";
 import "./assets/scss/style.scss";
+import "bootstrap-icons/font/bootstrap-icons.css";
 import App from "./App";
-import reportWebVitals from "./reportWebVitals";
 // U: OLD: import { BrowserRouter, HashRouter } from "react-router-dom";
 // U: NEW: HashRouter was unused; the app currently runs with BrowserRouter.
 import { BrowserRouter } from "react-router-dom";
@@ -21,4 +21,3 @@ ReactDOM.render(
 
   document.getElementById("root")
 );
-reportWebVitals();

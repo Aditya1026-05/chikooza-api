@@ -14,8 +14,8 @@ This note captures the current understanding of the repo after first local setup
 - `venv/bin/python manage.py check` passes.
 - `venv/bin/python manage.py migrate --plan` reports no pending migrations.
 - `venv/bin/python manage.py test` runs successfully, but there are zero backend tests.
-- `npm run build` succeeds for the UI with warnings.
-- `npm test -- --watchAll=false` finds zero UI tests and exits with code 1 because CRA treats "no tests" as failure.
+- `npm run build` succeeds for the UI.
+- The UI build tool has been migrated from CRA/react-scripts to Vite; no frontend test runner is configured yet.
 - `/chat/` returns `200 OK` with retrieved context fallback when Ollama is not installed/running.
 - API smoke test works for OTP creation, signup, and login.
 
@@ -45,7 +45,7 @@ This note captures the current understanding of the repo after first local setup
 - `chikooza-ui/src/components/ChikoozaChatbot/`: existing basic chatbot UI wrapper.
 - `chikooza-ui/src/components/dashboard/`: dashboard widgets/charts/tables.
 - `chikooza-ui/src/assets/`: images, CSS, SCSS, logos.
-- `chikooza-ui/public/`: CRA public files.
+- `chikooza-ui/public/`: static assets served by Vite.
 - `chikooza-ui/build/`: generated production build output. It is tracked in this repo but should usually not be part of normal source commits unless deployment requires it.
 - `chikooza-ui/docs/setup/SETUP.md`: UI setup guide.
 
@@ -68,7 +68,7 @@ This note captures the current understanding of the repo after first local setup
 - U: OLD daily data and flock vaccination endpoints trusted public IDs without farmer ownership checks; daily records, calculations, PDF export, and vaccination CRUD are now scoped to the authenticated farmer and covered by tenant-isolation tests.
 - U: OLD sales create/list/detail/update/graph logic trusted public IDs without farmer ownership checks; sales operations are now scoped through the authenticated farmer's flocks and covered by tenant-isolation tests.
 - Added backend `.env.example`.
-- Added UI `.env.example` so `REACT_APP_API_BASE_URL` and `REACT_APP_TEMPLATE_BASE_URL` are explicit.
+- Added UI `.env.example` so `VITE_API_BASE_URL`/`VITE_TEMPLATE_BASE_URL` are explicit while old `REACT_APP_*` names remain temporarily supported.
 - Added missing UI dependency `react-chatbot-kit`.
 - OLD UI chatbot fetch URL `https://local.api.chuza.com:8001/chat/` was commented/replaced with `${apiPath}chat/`.
 - OLD chatbot behavior returned a 500 when Ollama was unavailable; new behavior keeps the endpoint usable with a retrieval-only fallback and explicit Ollama setup guidance.
@@ -90,7 +90,7 @@ This note captures the current understanding of the repo after first local setup
 - Migrations are inconsistent in `sales`; no-op migration patches make local setup work but should be cleaned properly later.
 - The backend depends on local/slow AI services in `chatbot` and `aibot`; `chatbot` now has graceful failure, while `aibot` still needs the same level of review.
 - `aibot/services.py` uses pattern matching plus LangChain SQL agent behavior and contains risky parsing/formatting logic that should be reviewed before production use.
-- The UI is on older React/CRA/MUI-era dependencies. A major "latest everything" upgrade should be a separate branch/task, not mixed into local setup fixes.
+- The UI still uses React 17, but CRA/react-scripts has been replaced with Vite to reduce dependency risk. React 19 remains a separate migration because some UI libraries still need compatibility review.
 - Generated UI `build/` artifacts are tracked; this creates noisy diffs after every build.
 
 ## Recommended Next Steps

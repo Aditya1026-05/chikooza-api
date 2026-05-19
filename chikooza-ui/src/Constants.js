@@ -1,5 +1,9 @@
-export const templatePath = process.env.REACT_APP_TEMPLATE_BASE_URL;
-export const apiPath = process.env.REACT_APP_API_BASE_URL;
+const env = import.meta.env;
+
+// U: OLD: CRA read only process.env.REACT_APP_* values.
+// U: NEW: prefer Vite VITE_* names while temporarily supporting REACT_APP_*.
+export const templatePath = env.VITE_TEMPLATE_BASE_URL || env.REACT_APP_TEMPLATE_BASE_URL;
+export const apiPath = env.VITE_API_BASE_URL || env.REACT_APP_API_BASE_URL;
 
 
 export const config = {

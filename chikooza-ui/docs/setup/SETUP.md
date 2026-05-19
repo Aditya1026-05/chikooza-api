@@ -133,8 +133,8 @@ ________________________________________________________________________
 npm start
 ```
 This will:
-1. Start the development server
-2. Open your browser to [http://localhost:3000](http://localhost:3000)
+1. Start the Vite development server
+2. Open your browser to the Vite URL shown in the terminal, usually [http://localhost:5173](http://localhost:5173)
 
 ### Build for Production
 
@@ -143,9 +143,7 @@ npm run build
 ```
 ### Run Tests
 
-```
-npm test
-```
+There is no frontend test runner configured yet after the Vite migration.
 ________________________________________________________________________
 
 ## Success Indicators
@@ -153,7 +151,7 @@ ________________________________________________________________________
 
 Your setup is complete when:
 1. npm start runs without errors
-2. Application opens in browser at [http://localhost:3000](http://localhost:3000)
+2. Application opens in browser at the Vite URL, usually [http://localhost:5173](http://localhost:5173)
 3. No console errors in browser developer tools
 4. All features work as expected
 ________________________________________________________________________
@@ -165,7 +163,7 @@ Following this guide, you should now have:
 1. A working React.js development environment
 2. All Node.js dependencies installed and configured
 3. The project cloned and set up on the correct Git branch
-4. Development server running successfully on [http://localhost:3000](http://localhost:3000)
+4. Development server running successfully on the Vite URL, usually [http://localhost:5173](http://localhost:5173)
 5. Access to a fully functional frontend interface
 6. Confirmation that there are no console errors and all features are working as
     expected

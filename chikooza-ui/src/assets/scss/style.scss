@@ -1,6 +1,7 @@
 @import "variables";
 
-@import "~bootstrap/scss/bootstrap";
-@import "~bootstrap-icons/font/bootstrap-icons.scss";
+// U: OLD CRA/Sass loader accepted ~ package imports.
+// U: NEW Vite/Sass resolves package imports directly.
+@import "bootstrap/scss/bootstrap";
 @import "./layout/sidebar";
 @import "./layout/container";

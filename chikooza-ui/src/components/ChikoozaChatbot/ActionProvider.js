@@ -23,7 +23,7 @@ class ActionProvider {
 
     try {
       // OLD: const res = await fetch('https://local.api.chuza.com:8001/chat/', {
-      // U: NEW: build the URL from REACT_APP_API_BASE_URL and tolerate missing trailing slashes.
+      // U: NEW: build the URL from the configured API base URL and tolerate missing trailing slashes.
       const res = await fetch(getChatApiUrl(), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
