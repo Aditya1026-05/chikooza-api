@@ -1,7 +1,7 @@
-import { Row, Col, Badge, Table, Card, CardTitle, CardBody, CardText, Button, Form, FormGroup, Label, Input, FormText, Nav, NavItem } from "reactstrap";
+import { Row, Col, Card, CardTitle, CardBody, Button, Form, FormGroup, Label, Input } from "reactstrap";
 import '../../assets/css/header.css';
 import { useState, useEffect } from "react";
-import { contentArea, apiPath, config } from "../../Constants";
+import { contentArea, apiPath, getAuthConfig, handleUnauthorized } from "../../Constants";
 import Modal from 'react-bootstrap/Modal'
 import { Link } from "react-router-dom";
 import axios from 'axios';
@@ -20,30 +20,34 @@ const ManageFlock = () => {
 
     useEffect(() => {
         let url = `${apiPath}farm/`;
-        config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
-        axios.get(url, config).then((res) => {
-            if (res.data.results.length == 0) {
+        // U: OLD: config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
+        axios.get(url, getAuthConfig()).then((res) => {
+            if (res.data.results.length === 0) {
                 setFarms([{ public_id: 0, name: 'No farm available' }]);
             } else {
                 setFarms(res.data.results);
             }
         }).catch((err) => {
             setFarms([{ public_id: 0, name: 'No farm available' }]);
-            if (err.response.status === 401) {
-                localStorage.clear();
-                navigate("/login")
-            }
+            handleUnauthorized(err, navigate);
         });
-    }, [])
+    }, [navigate])
     let save = (e) => {
         e.preventDefault();
     }
     let changeFarm = (e) => {
+        if (e.target.value === "0") {
+            setShowFlock(false);
+            setShowForm(false);
+            setFlocks([]);
+            setList([]);
+            return;
+        }
         let url = `${apiPath}flocks/${e.target.value}/`;
-        config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
-        axios.get(url, config).then((res) => {
+        // U: OLD: config.headers['Authorization'] was mutated before each request.
+        axios.get(url, getAuthConfig()).then((res) => {
             setShowFlock(true);
-            if (res.data.results.total_records == 0) {
+            if (res.data.results.total_records === 0) {
                 setFlocks([{ flock_public_id: 0, flock_name: 'No flock available' }]);
             } else {
                 setFlocks(res.data.results.flock_list);
@@ -51,94 +55,56 @@ const ManageFlock = () => {
             setShowForm(false);
         }).catch((err) => {
             setFlocks([{ flock_public_id: 0, flock_name: 'No flock available' }]);
-            if (err.response.status === 401) {
-                localStorage.clear();
-                navigate("/login")
-            }
+            handleUnauthorized(err, navigate);
         });
     }
     let changeFlocks = (e) => {
-        if (e.target.value == 0) {
+        // U: OLD: e.target.value == 0 and numeric public_id comparisons were mixing strings and numbers.
+        if (e.target.value === "0") {
             setShowForm(false);
+            setList([]);
         } else {
-            let newArray = flocks.slice();
-            newArray.find((o, i) => {
-                if (o.flock_public_id === e.target.value) {
-                    let url = `${apiPath}dailyDataDetail/?flock_public_id=${o.flock_public_id}`;
-                    config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
-                    axios.get(url, config).then((res) => {
-                        if (res.data.results.total_records > 0) {
-                            setList(res.data.results.daily_data_list);
-                        } else {
-                            setList([]);
-                        }
-                    }).catch((err) => {
-                        setList([]);
-                        if (err.response.status === 401) {
-                            localStorage.clear();
-                            navigate("/login")
-                        }
-                    });
-                    setShowForm(true);
-                    setFlock(o);
+            const selectedFlock = flocks.find((o) => String(o.flock_public_id) === e.target.value);
+            if (!selectedFlock) {
+                setShowForm(false);
+                setList([]);
+                return;
+            }
+            let url = `${apiPath}dailyDataDetail/?flock_public_id=${selectedFlock.flock_public_id}`;
+            axios.get(url, getAuthConfig()).then((res) => {
+                if (res.data.results.total_records > 0) {
+                    setList(res.data.results.daily_data_list);
+                } else {
+                    setList([]);
                 }
+            }).catch((err) => {
+                setList([]);
+                handleUnauthorized(err, navigate);
             });
+            setShowForm(true);
+            setFlock(selectedFlock);
         }
     }
     let [modalShow, setModalShow] = useState(false);
     let [week, setWeek] = useState(null);
     let [days, setDays] = useState([]);
     let handleShow = (e) => {
-        let day = new Array();
-        if (e.target.value == 1) {
-            day = [1, 2, 3, 4, 5, 6, 7];
-            setDays(day);
-        } else if (e.target.value == 2) {
-            day = [8, 9, 10, 11, 12, 13, 14];
-            setDays(day);
-        } else if (e.target.value == 3) {
-            day = [15, 16, 17, 18, 19, 20, 21];
-            setDays(day);
-        } else if (e.target.value == 4) {
-            day = [22, 23, 24, 25, 26, 27, 28];
-            setDays(day);
-        } else if (e.target.value == 5) {
-            day = [29, 30, 31, 32, 33, 34, 35];
-            setDays(day);
-        } else if (e.target.value == 6) {
-            day = [36, 37, 38, 39, 40, 41, 42];
-            setDays(day);
-        } else if (e.target.value == 7) {
-            day = [43, 44, 45, 46, 47, 48, 49];
-            setDays(day);
-        } else if (e.target.value == 8) {
-            day = [50, 51, 52, 53, 54, 55, 56];
-            setDays(day);
-        } else if (e.target.value == 9) {
-            day = [57, 58, 59, 60, 61, 62, 63];
-            setDays(day);
-        } else if (e.target.value == 10) {
-            day = [64, 65, 66, 67, 68, 69, 70];
-            setDays(day);
-        } else if (e.target.value == 11) {
-            day = [71, 72, 73, 74, 75, 76, 77];
-            setDays(day);
-        } else {
-            day = [78, 79, 80, 81, 82, 83, 84];
-            setDays(day);
-        }
-        setWeek(e.target.value);
+        // U: OLD: a long loose-equality if/else block manually listed every week.
+        const selectedWeek = Number(e.target.value);
+        const firstDay = ((selectedWeek - 1) * 7) + 1;
+        setDays(Array.from({ length: 7 }, (_, index) => firstDay + index));
+        setWeek(selectedWeek);
         setModalShow(true)
     }
     let getrealdate = (dt, num) => {
         let dt1 = new Date(dt);
         dt1.setDate(dt1.getDate() + num);
         let text = `${new Date(dt1).getMonth() + 1}`;
-        if (text.length == 1) {
+        if (text.length === 1) {
             text = `0${text}`;
         }
         let textday = `${dt1.getDate()}`;
-        if (textday.length == 1) {
+        if (textday.length === 1) {
             textday = `0${textday}`;
         }
         return `${new Date(dt1).getFullYear()}-${text}-${textday}`;
@@ -169,7 +135,7 @@ const ManageFlock = () => {
                                 <Button color="success" className="ml-3 mt-3 mb-3" key={number}>
                                     <Link to={`/daydata/${flock.farm_public_id}/${flock.flock_public_id}/${getrealdate(flock.hatch_date, number)}`} className="linkdailydata">{getrealmonth(flock.hatch_date, number)}<br />Day {number}</Link>
                                 </Button> :
-                                (number == list.length + 1) ?
+                                (number === list.length + 1) ?
                                     <Button color="warning" className="ml-3 mt-3 mb-3" key={number}>
                                         <Link to={`/daydata/${flock.farm_public_id}/${flock.flock_public_id}/${getrealdate(flock.hatch_date, number)}`} className="linkdailydata">{getrealmonth(flock.hatch_date, number)}<br />Day {number}</Link>
                                     </Button> :
@@ -229,8 +195,8 @@ const ManageFlock = () => {
                                                 <FormGroup>
                                                     <Label for="farmselect">Select Flock</Label>
                                                     <div className="input-group">
-                                                        <Input onChange={changeFlocks} id="farmSelect" name="flock" type="select">
-                                                            <option selected value={0}>Select Flocks</option>
+                                                        <Input onChange={changeFlocks} defaultValue="0" id="farmSelect" name="flock" type="select">
+                                                            <option value="0" disabled>Select Flocks</option>
                                                             {
                                                                 flocks.map((item) => {
                                                                     return (

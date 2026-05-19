@@ -13,7 +13,7 @@ import {
   CardHeader,
 } from "reactstrap";
 import "../../assets/css/header.css";
-import { contentArea, apiPath, config } from "../../Constants";
+import { contentArea, apiPath, getAuthConfig, handleUnauthorized } from "../../Constants";
 import { useState, useEffect } from "react";
 import axios from "axios";
 // import '../ui/custom.css'
@@ -32,9 +32,9 @@ const DailyDataSheet = () => {
 
   useEffect(() => {
     let url = `${apiPath}farm/`;
-    config.headers["Authorization"] = `Bearer ${localStorage.getItem("token")}`;
+    // U: OLD: config.headers["Authorization"] = `Bearer ${localStorage.getItem("token")}`;
     axios
-      .get(url, config)
+      .get(url, getAuthConfig())
       .then((res) => {
         if (res.data.results.length === 0) {
           setFarms([{ public_id: 0, name: "No farm available" }]);
@@ -44,23 +44,21 @@ const DailyDataSheet = () => {
       })
       .catch((err) => {
         setFarms([{ public_id: 0, name: "No farm available" }]);
-        if (err.response.status === 401) {
-          localStorage.clear();
-          navigate("/login");
-        }
+        handleUnauthorized(err, navigate);
       });
-  }, []);
+  }, [navigate]);
   let changeFarm = (e) => {
-    if (e.target.value === 0) {
+    // U: OLD: e.target.value === 0 compared a string value to a number.
+    if (e.target.value === "0") {
       setShowFlock(false);
+      setShowForm(false);
       setFlocks([]);
+      setDailyDataList([]);
     } else {
       let url = `${apiPath}flocks/${e.target.value}/`;
-      config.headers["Authorization"] = `Bearer ${localStorage.getItem(
-        "token"
-      )}`;
+      // U: OLD: config.headers["Authorization"] was mutated before each request.
       axios
-        .get(url, config)
+        .get(url, getAuthConfig())
         .then((res) => {
           if (res.data.results.total_records === 0) {
             setFlocks([
@@ -74,41 +72,39 @@ const DailyDataSheet = () => {
         })
         .catch((err) => {
           //setFormError('No Flock available.');
-          if (err.response.status === 401) {
-            localStorage.clear();
-            navigate("/login");
-          }
+          handleUnauthorized(err, navigate);
         });
     }
   };
   let changeFlock = (e) => {
-    if (e.target.value === 0) {
+    if (e.target.value === "0") {
       setShowForm(false);
+      setFlock([]);
+      setDailyDataList([]);
     } else {
-      const user = flocks.find((u) => u.flock_public_id === e.target.value);
+      // U: OLD: strict comparison between numeric flock_public_id and string select value prevented lookup.
+      const selectedFlock = flocks.find((u) => String(u.flock_public_id) === e.target.value);
+      if (!selectedFlock) {
+        setShowForm(false);
+        setDailyDataList([]);
+        return;
+      }
       setShowForm(true);
-      setFlock(user);
+      setFlock(selectedFlock);
+      getDailyDataList(selectedFlock.flock_public_id);
     }
   };
-  const getDailyDataList = () => {
-    let url = `${apiPath}dailyDataList/?flock_public_id=${flock.flock_public_id}`;
-    const config = {
-      headers: {
-        Authorization: `Bearer ${localStorage.getItem("token")}`,
-      },
-    };
+  const getDailyDataList = (flockPublicId) => {
+    // U: OLD: this used flock state immediately after setFlock(), so it could request the previous flock.
+    let url = `${apiPath}dailyDataList/?flock_public_id=${flockPublicId}`;
     axios
-      .get(url, config)
+      .get(url, getAuthConfig())
       .then((res) => {
         setDailyDataList(res.data.results.daily_data_list);
-        console.log(res.data.results.daily_data_list);
       })
       .catch((err) => {
-        console.log(err);
-        if (err.response.status === 401) {
-          localStorage.clear();
-          navigate("/login");
-        }
+        setDailyDataList([]);
+        handleUnauthorized(err, navigate);
       });
   };
 
@@ -214,14 +210,15 @@ const DailyDataSheet = () => {
                         <div className="input-group">
                           <Input
                             onChange={changeFarm}
+                            defaultValue="0"
                             id="farmSelect"
                             name="farm"
                             type="select"
                             className="font_family_content fs-5"
                           >
                             <option
-                              selected
-                              value={0}
+                              value="0"
+                              disabled
                               className="font_family_content fs-5"
                             >
                               Select Farm
@@ -251,17 +248,15 @@ const DailyDataSheet = () => {
                           <div className="input-group">
                             <Input
                               onChange={changeFlock}
-                              onClick={() => {
-                                getDailyDataList();
-                              }}
+                              defaultValue="0"
                               id="flockSelect"
                               name="flock"
                               type="select"
                               className="font_family_content fs-5"
                             >
                               <option
-                                selected={true}
-                                value={0}
+                                value="0"
+                                disabled
                                 className="font_family_content fs-5"
                               >
                                 Select Flocks
@@ -437,8 +432,6 @@ const DailyDataSheet = () => {
                                         const currentBirds = parseFloat(
                                           item.current_bird_count
                                         );
-                                        const initialBirds =
-                                          parseFloat(flock?.actual_birds) || 1; // Fallback to 1 to avoid division by zero
                                         const cumFeedPerBird =
                                           currentBirds > 0
                                             ? (
