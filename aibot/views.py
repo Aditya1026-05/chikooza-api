@@ -3,7 +3,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import viewsets, status
 from oauth2_provider.contrib.rest_framework import OAuth2Authentication
-from .services import SQLAgentService
+from .services import SQLAgentService, AISQLService
 from .preprocessing import QueryPreprocessor
 from .log_utils import ChatLogHandler
 from .models import AIChatLog
@@ -48,7 +48,8 @@ class AIChatViewSet(viewsets.ViewSet):
                 'query_id': query_id
             }
 
-            service = SQLAgentService(user=request.user)
+            # service = SQLAgentService(user=request.user)
+            service = AISQLService(user=request.user)
             result = service.query(query)
             
             self._log_interaction(request, result)

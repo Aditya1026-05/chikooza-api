@@ -19,46 +19,56 @@ class ChatbotConfig(AppConfig):
             print("Checking for new documents to add to the chatbot...")
             self.update_chatbot_index()
 
+
     def update_chatbot_index(self):
         """
-        Scans the 'data' folder for new documents, updates the FAISS index,
-        and archives processed files to a 'processed_documents' subfolder.
+        Scans the 'chatbot/data' folder for new documents, updates the FAISS index,
+        and logs processed files to avoid re-indexing.
         """
-        # Imports are done here to avoid issues during Django's startup process.
         from .services import RAGService
 
-        # The source directory is now the main 'data' folder
-        source_dir = os.path.join(settings.BASE_DIR, 'data')
-        processed_dir = os.path.join(source_dir, 'processed_documents')
+        # 1. The data folder is now inside the chatbot app
+        data_dir = os.path.join(settings.BASE_DIR, 'chatbot', 'data')
+        log_file_path = os.path.join(data_dir, 'processed_log.txt')
 
-        # Ensure the directory for processed files exists
-        os.makedirs(processed_dir, exist_ok=True)
+        # Ensure the data directory exists
+        os.makedirs(data_dir, exist_ok=True)
 
-        # Get all files from the 'data' directory, but only include specific document types
-        all_items_in_dir = os.listdir(source_dir)
+        # 2. Get the set of already processed files from the log
+        processed_files = set()
+        try:
+            with open(log_file_path, 'r') as f:
+                processed_files = set(line.strip() for line in f)
+        except FileNotFoundError:
+            pass # Log file doesn't exist yet, which is fine
+
+        # 3. Find all potential document files in the data directory
+        all_items_in_dir = os.listdir(data_dir)
         file_paths_to_add = []
-        allowed_extensions = ['.pdf', '.txt', '.md'] # Add any other text-based extensions you use
+        allowed_extensions = ['.pdf', '.txt', '.md']
 
         for item_name in all_items_in_dir:
-            full_path = os.path.join(source_dir, item_name)
-            # Check if it's a file and has an allowed extension
-            if os.path.isfile(full_path) and os.path.splitext(item_name)[1].lower() in allowed_extensions:
-                file_paths_to_add.append(full_path)
+            # Check if it's a file, has an allowed extension, AND has not been processed yet
+            if item_name not in processed_files and os.path.splitext(item_name)[1].lower() in allowed_extensions:
+                full_path = os.path.join(data_dir, item_name)
+                if os.path.isfile(full_path):
+                    file_paths_to_add.append(full_path)
 
         if not file_paths_to_add:
-            print("No new documents found in the 'data' folder.")
+            print("No new documents found to index.")
             return
 
         try:
-            print(f"Found {len(file_paths_to_add)} new document(s) in 'data' folder. Processing...")
+            print(f"Found {len(file_paths_to_add)} new document(s). Processing...")
             rag_service = RAGService()
-            rag_service.add_files_to_index(file_paths_to_add)
+            successfully_processed_paths = rag_service.add_files_to_index(file_paths_to_add)
 
-            # Move the processed files to the 'processed_documents' subfolder
-            for path in file_paths_to_add:
-                shutil.move(path, os.path.join(processed_dir, os.path.basename(path)))
-            
-            print(f"Successfully processed and archived {len(file_paths_to_add)} file(s).")
+            # 4. Log the successfully processed files to prevent re-indexing
+            if successfully_processed_paths:
+                with open(log_file_path, 'a') as f:
+                    for path in successfully_processed_paths:
+                        f.write(os.path.basename(path) + '\n')
+                print(f"Successfully logged {len(successfully_processed_paths)} processed file(s).")
 
         except Exception as e:
             print(f"ERROR: Could not update chatbot index. {e}")
