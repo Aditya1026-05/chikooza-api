@@ -87,11 +87,15 @@ oauthlib==3.3.1
 # pdfkit==1.0.0
 # OLD: missing xhtml2pdf dependency even though users/utils.py imports it.
 # NEW: Add a compatible xhtml2pdf/reportlab pair for PDF generation imports.
-xhtml2pdf==0.2.11
-reportlab==3.6.13
+# U: OLD: xhtml2pdf==0.2.11
+# U: NEW: keep the existing renderer but upgrade the maintained PDF package.
+xhtml2pdf==0.2.17
+# U: OLD: reportlab==3.6.13
+reportlab==4.5.1
 # OLD: Pillow==9.1.1
 # NEW: Pillow 10.4 has Python 3.11 macOS wheels and avoids local JPEG header builds.
-Pillow==10.4.0
+# U: OLD: Pillow==10.4.0
+Pillow==12.2.0
 # U: OLD: prompt-toolkit==3.0.29
 # U: NEW: direct CLI prompt dependency is unused by project code.
 # prompt-toolkit==3.0.29

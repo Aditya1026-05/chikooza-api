@@ -47,13 +47,16 @@ def create_user(data, sign_up=None):
         "User Registered", {"public_id": users.public_id}, status.HTTP_201_CREATED
     )
 
-def render_to_pdf(template_src, context_dict={}):
+def render_to_pdf(template_src, context_dict=None):
+    # U: OLD: context_dict={} used a mutable default argument.
+    # U: NEW: default to None and create a fresh dict for each PDF render.
+    context_dict = context_dict or {}
     template = get_template(template_src)
     html = template.render(context_dict)
-    response = HttpResponse(content_type='application/pdf')
+    response = HttpResponse(content_type="application/pdf")
     pdf_status = pisa.CreatePDF(html, dest=response)
 
     if pdf_status.err:
-        return HttpResponse('Some errors were encountered <pre>' + html + '</pre>')
+        return HttpResponse("Some errors were encountered <pre>" + html + "</pre>")
 
     return response
