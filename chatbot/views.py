@@ -25,18 +25,28 @@ def get_rag_service():
 def chat_api(request):
     if request.method != 'POST':
         return JsonResponse({'error': 'Method not allowed'}, status=405)
-        
+
     try:
-        data = json.loads(request.body)
+        try:
+            data = json.loads(request.body)
+        except json.JSONDecodeError:
+            return JsonResponse({'error': 'Invalid JSON body'}, status=400)
+
         query_text = data.get('query', '').strip()
         prompt_type = data.get('prompt_type', 'qa')
-        
+
+        # U: OLD: empty queries reached the RAG service and failed later.
+        # U: NEW: reject bad input before loading FAISS/Ollama.
+        if not query_text:
+            return JsonResponse({'error': 'Query is required'}, status=400)
+
         clean_query = preprocessor.preprocess(query_text)
-        
+
         start_time = time.time()
         # OLD: result = rag_service.query(clean_query, prompt_type)
         # NEW: use lazy-loaded service so missing local LLM/model setup affects only /chat/.
-        result = get_rag_service().query(clean_query, prompt_type)
+        rag = get_rag_service()
+        result = rag.query(clean_query, prompt_type)
         processing_time = time.time() - start_time
         
         if not result:
@@ -62,7 +72,9 @@ def chat_api(request):
             'context': serializable_context,
             'prompt_type': prompt_type,
             'processing_time': processing_time,
-            'model': 'llama3.2:3b'
+            # U: OLD: 'model': 'llama3.2:3b'
+            # U: NEW: record the configured runtime model.
+            'model': getattr(rag, 'ollama_model', 'unknown')
         }
         
         return JsonResponse({
