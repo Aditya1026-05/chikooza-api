@@ -231,7 +231,11 @@ DJANGO_SECRET_KEY=django-insecure-local-dev-only-change-before-deploy
 DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1,0.0.0.0,.herokuapp.com
 CHIKOOZA_CORS_ALLOW_ALL=True
 CHIKOOZA_API_BASE_URL=http://127.0.0.1:8002/
+GROQ_API_KEY=
 ```
+
+`GROQ_API_KEY` must stay in local `.env` or deployment secrets only. Do not commit
+the real key; `.env.example` intentionally keeps it blank.
 
 #### 2. Delete the existing Database:
 
@@ -303,4 +307,3 @@ Following this guide, you should now have:
 3. Database set up and migrated
 4. Development server running successfully
 5. Access to admin panel and application
-
