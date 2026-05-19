@@ -339,7 +339,13 @@ class DailyDataDetailView(viewsets.ViewSet):
             flock = _flock_queryset_for_request(request).get(
                 public_id=request.GET.get("flock_public_id")
             )
-            daily_data = _dailydata_queryset_for_request(request).filter(flock=flock)
+            # U: OLD: PDF rows used database default ordering.
+            # U: NEW: exports should be stable and readable by flock date.
+            daily_data = (
+                _dailydata_queryset_for_request(request)
+                .filter(flock=flock)
+                .order_by("date")
+            )
             
 #MV-23-6-25- 17-10 append new values to response
             result_data = []
@@ -748,6 +754,16 @@ class PDFView(viewsets.ViewSet):
                     # "record": records,
 #MV-23-6-25- 17-10 new var
                     "record": result_data,
+                    # U: NEW: provide flock/export metadata for the corrected daily-data PDF template.
+                    "flock": {
+                        "name": flock.name,
+                        "public_id": flock.public_id,
+                        "farm_name": flock.farm.name,
+                        "hatch_date": flock.hatch_date,
+                        "actual_birds": flock.actual_birds,
+                    },
+                    "generated_on": datetime.date.today(),
+                    "total_records": len(result_data),
 #MV-23-6-25- 17-10 change end
                 },
             )

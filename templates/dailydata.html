@@ -1,49 +1,162 @@
-
+<!doctype html>
 <html>
-    <head>
-        <style>
-            * {
-                font-size: 15px;
-            }
+  <head>
+    <meta charset="utf-8">
+    <style>
+      /* U: OLD: this template exported dummy school data columns.
+         U: NEW: export actual Chikooza daily flock operations data. */
+      @page {
+        size: A4 landscape;
+        margin: 14mm 10mm;
+      }
 
-            table {
-                table-layout: fixed;
-                width: 100%;
-                border: 1px solid black;
-            }
+      * {
+        box-sizing: border-box;
+      }
 
-            table th {
-                text-align: left;
-                padding: 3px;
-                padding-bottom: 0;
-            }
+      body {
+        color: #17231b;
+        font-family: Helvetica, Arial, sans-serif;
+        font-size: 9px;
+        line-height: 1.35;
+      }
 
-            table td {
-                white-space: nowrap;
-                overflow: hidden;
-                text-overflow: ellipsis;
-                padding: 3px;
-                padding-bottom: 0;
-            }
-        </style>
-    </head>
+      h1 {
+        color: #1f7a4d;
+        font-size: 18px;
+        margin: 0 0 4px;
+      }
 
-    <body>
-        <table>
+      .subtitle {
+        color: #66756b;
+        font-size: 10px;
+        margin-bottom: 12px;
+      }
+
+      .meta {
+        border: 1px solid #d8e5d5;
+        margin-bottom: 12px;
+        padding: 8px;
+      }
+
+      .meta td {
+        padding: 2px 6px;
+      }
+
+      .label {
+        color: #66756b;
+        font-weight: bold;
+      }
+
+      table {
+        border-collapse: collapse;
+        width: 100%;
+      }
+
+      th {
+        background: #1f7a4d;
+        color: #ffffff;
+        font-size: 8px;
+        padding: 4px 3px;
+        text-align: left;
+      }
+
+      td {
+        border-bottom: 1px solid #dfe8dc;
+        padding: 4px 3px;
+        vertical-align: top;
+      }
+
+      tr:nth-child(even) td {
+        background: #f5f8f2;
+      }
+
+      .num {
+        text-align: right;
+      }
+
+      .empty {
+        border: 1px solid #d8e5d5;
+        color: #66756b;
+        padding: 18px;
+        text-align: center;
+      }
+
+      .remarks {
+        width: 120px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Chikooza Daily Flock Data</h1>
+    <div class="subtitle">Daily operations, feed, mortality, weight, FCR, and flock-health notes.</div>
+
+    <table class="meta">
+      <tr>
+        <td><span class="label">Farm:</span> {{ flock.farm_name|default:"-" }}</td>
+        <td><span class="label">Flock:</span> {{ flock.name|default:"-" }}</td>
+        <td><span class="label">Flock ID:</span> {{ flock.public_id|default:"-" }}</td>
+      </tr>
+      <tr>
+        <td><span class="label">Hatch Date:</span> {{ flock.hatch_date|date:"Y-m-d"|default:"-" }}</td>
+        <td><span class="label">Opening Birds:</span> {{ flock.actual_birds|default:"-" }}</td>
+        <td><span class="label">Generated:</span> {{ generated_on|date:"Y-m-d" }} | {{ total_records }} records</td>
+      </tr>
+    </table>
+
+    {% if record %}
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Date</th>
+            <th>Age</th>
+            <th>Birds</th>
+            <th>Mort.</th>
+            <th>Total Mort.</th>
+            <th>Mort. %</th>
+            <th>Feed Intake</th>
+            <th>Total Feed</th>
+            <th>Feed Stock</th>
+            <th>Avg Feed/Bird</th>
+            <th>Avg Wt.</th>
+            <th>FCR</th>
+            <th>Total FCR</th>
+            <th>Cooling</th>
+            <th>Heating</th>
+            <th>Sick</th>
+            <th>Medicine</th>
+            <th class="remarks">Remarks</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for data in record %}
             <tr>
-                <th> S No </th>
-                <th> Name </th>
-                <th> Roll No </th>
-                <th> Score </th>
+              <td class="num">{{ forloop.counter }}</td>
+              <td>{{ data.date|default:"-" }}</td>
+              <td class="num">{{ data.age|default:"0" }}</td>
+              <td class="num">{{ data.bird_count|default:"0" }}</td>
+              <td class="num">{{ data.mortality|default:"0" }}</td>
+              <td class="num">{{ data.cum_mort|default:"0" }}</td>
+              <td class="num">{{ data.total_mortality_percentage|default:"0" }}</td>
+              <td class="num">{{ data.feed_intake|default:"0" }}</td>
+              <td class="num">{{ data.total_feed_consumed|default:"0" }}</td>
+              <td class="num">{{ data.feed_stock|default:"0" }}</td>
+              <td class="num">{{ data.average_feed_per_bird|default:"0" }}</td>
+              <td class="num">{{ data.average_bird_weight|default:"0" }}</td>
+              <td class="num">{{ data.fcr|default:"0" }}</td>
+              <td class="num">{{ data.total_fcr|default:"0" }}</td>
+              <td>{{ data.cooling|yesno:"Yes,No" }}</td>
+              <td>{{ data.heating|yesno:"Yes,No" }}</td>
+              <td>{{ data.seek|yesno:"Yes,No" }}</td>
+              <td>{{ data.medicine|yesno:"Yes,No" }}</td>
+              <td class="remarks">{{ data.remarks|default:"-" }}</td>
             </tr>
-            {%for data in record%}
-            <tr>
-                <td style="width: 10%;"> {{forloop.counter}} </td>
-                <td sttyle="width: 40%; text-align: left;"> {{data.name|title}} </td>
-                <td style="width: 30%;"> {{data.roll_no}} </td>
-                <td style="width: 20%;"> {{data.score}} </td>
-            </tr>
-            {%endfor%}
-        </table>
-    </body>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <div class="empty">No daily data records were found for this flock.</div>
+    {% endif %}
+  </body>
 </html>

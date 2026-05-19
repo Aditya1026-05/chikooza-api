@@ -4,6 +4,9 @@
 .env.prod
 .env.dev
 /venv/
+# U: NEW: ignore alternate local virtualenv names created from setup docs.
+/chikooza_env/
+.venv/
 
 # SSL certificates
 *.crt

@@ -1,12 +1,13 @@
 from datetime import date
 from types import SimpleNamespace
 
+from django.template.loader import render_to_string
 from django.test import TestCase
 from rest_framework import status
 
 from common.base_models import Users
 from dailydata.models import DailyData, DarknessTime, FeedAvailability, FlockVaccination, Vaccines
-from dailydata.views import DailyDataView, FlockVaccinationView
+from dailydata.views import DailyDataView, FlockVaccinationView, PDFView
 from farm.models import Country, Farm, State
 from flocks.models import Breed, Flock
 
@@ -199,6 +200,72 @@ class DailyDataTenantIsolationTests(TestCase):
                     "vaccine_public_id": self.vaccine.public_id,
                     "status": "Start",
                 },
+            )
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_pdf_template_uses_chikooza_daily_data_columns(self):
+        html = render_to_string(
+            "dailydata.html",
+            {
+                "record": [
+                    {
+                        "date": self.day.isoformat(),
+                        "age": 1,
+                        "bird_count": 99,
+                        "mortality": 1,
+                        "cum_mort": 1,
+                        "total_mortality_percentage": 1,
+                        "feed_intake": 10,
+                        "total_feed_consumed": 10,
+                        "feed_stock": 90,
+                        "average_feed_per_bird": 101,
+                        "average_bird_weight": 50,
+                        "fcr": 0,
+                        "total_fcr": 2,
+                        "cooling": False,
+                        "heating": False,
+                        "seek": False,
+                        "medicine": False,
+                        "remarks": "Healthy flock",
+                    }
+                ],
+                "flock": {
+                    "farm_name": self.owner_farm.name,
+                    "name": self.owner_flock.name,
+                    "public_id": self.owner_flock.public_id,
+                    "hatch_date": self.owner_flock.hatch_date,
+                    "actual_birds": self.owner_flock.actual_birds,
+                },
+                "generated_on": self.day,
+                "total_records": 1,
+            },
+        )
+
+        self.assertIn("Chikooza Daily Flock Data", html)
+        self.assertIn("Mort. %", html)
+        self.assertIn("Feed Intake", html)
+        self.assertIn("Owner Daily Flock", html)
+        self.assertNotIn("Roll No", html)
+
+    def test_pdf_export_returns_pdf_for_authenticated_flock(self):
+        response = PDFView.list(
+            self._request(
+                self.owner,
+                query={"flock_public_id": self.owner_flock.public_id},
+            )
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response["Content-Type"], "application/pdf")
+        self.assertGreater(len(response.content), 0)
+
+    def test_pdf_export_rejects_other_users_flock(self):
+        response = PDFView.list(
+            self._request(
+                self.owner,
+                query={"flock_public_id": self.other_flock.public_id},
             )
         )
 
