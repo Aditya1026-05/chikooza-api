@@ -20,6 +20,11 @@
 *.db
 /db1.sqlite3
 /db.sqbpro
+*.sqbpro
+/requirements.txtcat
+/python
+/Setup Guide - Chikooza-API.pdf
+/Setup Guide - Chikooza-UI.pdf
 
 # Django
 __pycache__/
