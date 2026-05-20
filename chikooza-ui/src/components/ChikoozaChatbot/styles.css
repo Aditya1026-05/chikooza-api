@@ -5,7 +5,9 @@
 .chikooza-chatbot-container {
   position: fixed;
   right: 22px;
-  bottom: 28px;
+  /* U: OLD: launcher sat too close to the viewport bottom, cutting the label.
+     U: NEW: lift the launcher so the chat label remains fully visible. */
+  bottom: 76px;
   z-index: 1000;
   font-family: "Plus Jakarta Sans", sans-serif;
 }
@@ -21,9 +23,9 @@
   position: absolute;
   right: 0;
   bottom: 0;
-  width: 60px;
-  height: 60px;
-  border-radius: 22px;
+  width: 56px;
+  height: 56px;
+  border-radius: 18px;
   /* U: OLD: public chatbot used a red/pink gradient from the legacy template.
      U: NEW: use the same crimson/amber palette as the Chikooza product UI. */
   background:
@@ -270,7 +272,7 @@
 @media (max-width: 768px) {
   .chikooza-chatbot-container {
     right: 14px;
-    bottom: 22px;
+    bottom: 74px;
   }
 
   .chatbot-wrapper {
@@ -285,8 +287,8 @@
   }
 
   .chatbot-toggle-button {
-    width: 55px;
-    height: 55px;
+    width: 52px;
+    height: 52px;
     font-size: 22px;
   }
 }
@@ -294,7 +296,7 @@
 @media (max-width: 480px) {
   .chikooza-chatbot-container {
     right: 12px;
-    bottom: 18px;
+    bottom: 72px;
   }
 
   .chatbot-wrapper {
@@ -350,8 +352,8 @@
 /* Add this to your existing styles - Updated chatbot label positioning */
 .chatbot-label {
   position: absolute;
-  right: 0; /* Align with the toggle button */
-  bottom: -45px; /* Position below the toggle button */
+  right: -14px; /* Align with the lifted toggle button while giving text enough room. */
+  bottom: -44px;
   text-align: center; /* Center the text horizontally */
   color: #b71c1c;
   font-weight: 600;
@@ -361,7 +363,7 @@
   background: transparent;
   padding: 5px 10px;
   border-radius: 8px;
-  width: 60px;
+  width: 84px;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
@@ -376,19 +378,19 @@
 /* Make the label responsive */
 @media (max-width: 768px) {
   .chatbot-label {
-    right: 0;
-    bottom: -40px;
+    right: -16px;
+    bottom: -42px;
     font-size: 13px;
-    width: 55px; /* Match the smaller toggle button width */
+    width: 84px;
   }
 }
 
 @media (max-width: 480px) {
   .chatbot-label {
-    right: 0;
-    bottom: -35px;
+    right: -16px;
+    bottom: -40px;
     font-size: 12px;
-    width: 55px;
+    width: 82px;
   }
 }
 /*  MV-2025-07-05-<6>  ENDS */

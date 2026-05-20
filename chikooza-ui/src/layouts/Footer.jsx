@@ -1,59 +1,48 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import '../assets/css/header.css';
-import logoMobile from "../assets/images/logos/footer_logo.svg";
+import Logo from "../assets/images/logos/chikooza_logo.png";
 const Footer = () => {
   return (
     <>
       {/* U: OLD: footer used the legacy red brand block.
           U: NEW: footer now follows the red/warm-neutral product palette. */}
-      <footer className="page-footer chikooza-footer font-small p-2 mt-0">
-        <div className="container text-center">
-          <div className="row">
-            <div className="col-md-3 mx-auto text-whtie mt-3">
-              <img src={logoMobile} width='156' height='35' alt="logoMobile" />
+      <footer className="chikooza-footer">
+        <div className="chikooza-footer-inner">
+          <div className="chikooza-footer-brand">
+            <Link to="/" className="navbar-brand chikooza-brand chikooza-footer-logo">
+              <img src={Logo} alt="Chikooza" className="chikooza-brand-logo" />
+            </Link>
+            <p>
+              Poultry farm management for flocks, daily records, purchases,
+              sales, reports, and private farmer AI.
+            </p>
+          </div>
+          <div className="chikooza-footer-links">
+            <div>
+              <strong>Product</strong>
+              <Link to="/">Home</Link>
+              <Link to="/about">About</Link>
+              <Link to="/register">Register</Link>
             </div>
-            <div className="col-md-5 flex justify-content-center mt-3 mr-8">
-              <br></br>
-              <h5 className=" text-white font-medium "><Link to="/" className="linkheader  text-white">Home</Link></h5>
-              <h5 className="text-white font-medium ml-5 mr-5"><Link to="/about" className="linkheader  text-white">About Us</Link></h5>
-              <h5 className=" text-white font-medium" ><Link to="/contact" className="linkheader  text-white">Contact Us</Link></h5>
+            <div>
+              <strong>Farm Tools</strong>
+              <Link to="/login">Farmer login</Link>
+              <Link to="/chatbot">Farmer AI</Link>
+              <Link to="/contact">Contact</Link>
             </div>
-            <div className="col-md-2 mx-auto mt-3">
-              <ul className="list-unstyled text-white">
-                <li className="">
-                  <i className=" pi pi-facebook" style={{ 'fontSize': '1.8em' }}></i>&nbsp;&nbsp;&nbsp;&nbsp;
-                  <i className="pi pi-twitter" style={{ 'fontSize': '1.8em' }}></i>&nbsp;&nbsp;&nbsp;&nbsp;
-                  <i className="pi pi-instagram" style={{ 'fontSize': '1.8em' }}></i>&nbsp;&nbsp;&nbsp;&nbsp;
-                </li>
-              </ul>
+            <div>
+              <strong>Contact</strong>
+              <a href="mailto:bhucho@yahoo.com">bhucho@yahoo.com</a>
+              <a href="tel:+915689425798">+91 56894 25798</a>
             </div>
           </div>
         </div>
-        <div className="text-500 p-1 text-center mt-0 crfoot chikooza-footer-bottom" >
-          <p className="text-center text-white text-sm mt-2">Copyright © 2022 chikooza.com, All Right Reserved</p>
+        <div className="chikooza-footer-bottom">
+          <p>Copyright © 2026 chikooza.com. All rights reserved.</p>
+          <span>Built for broiler farm operations.</span>
         </div>
       </footer>
-      {/* <div className=" flex justify-content-around text-500  text-center mt-1 " style={{ background: "#FD2F39" }}>
-       <div>
-        <h2 className="text-white mt-5">Chikooza</h2>
-        </div>
-        <div className="flex justify-content-around text-white mt-5">
-            <h5>Home</h5> <h5 className="ml-5 mr-5">About Us</h5> <h5>Contact Us</h5>
-        </div>
-        <div >
-          <br></br>
-          <h6 className="display-8 text-white">Our Social Links</h6> */}
-      {/* <br></br> */}
-      {/* <ul className="list-unstyled text-white ">
-            <li className="">
-              <i className=" pi pi-facebook" style={{ 'fontSize': '1.8em' }}></i>&nbsp;&nbsp;&nbsp;&nbsp;
-              <i className="pi pi-twitter" style={{ 'fontSize': '1.8em' }}></i>&nbsp;&nbsp;&nbsp;&nbsp;
-              <i className="pi pi-instagram" style={{ 'fontSize': '1.8em' }}></i>&nbsp;&nbsp;&nbsp;&nbsp;
-            </li>
-          </ul>
-        </div>
-      </div> */}
     </>
   );
 };

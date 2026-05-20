@@ -1,7 +1,6 @@
 import { Outlet } from "react-router-dom";
 import Header from "./Header";
 import Footer from "./Footer";
-import { Container } from "reactstrap";
 
 const FullLayout = () => {
 
@@ -10,9 +9,9 @@ const FullLayout = () => {
       {/********header**********/}
       <Header />
       <div className="pageWrapper d-lg-flex">
-        <Container className="p-4" fluid>
-          <Outlet />
-        </Container>
+        {/* U: OLD: home was forced inside a padded Bootstrap container, making the landing page look boxed-in.
+            U: NEW: let marketing pages control their own responsive spacing and full-width sections. */}
+        <Outlet />
       </div>
       <Footer />
     </main>

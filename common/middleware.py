@@ -1,6 +1,7 @@
 import json
 
 from django.http import HttpResponse
+from django.utils.encoding import force_str
 
 from common.constant import APP_RESULT, MESSAGE
 
@@ -34,7 +35,15 @@ class AuthenticationErrorMessage:
     def __call__(self, request):
         response = self.get_response(request)
         if response.status_code in [401, 403, 405]:
-            data = {MESSAGE: str(response.data["detail"]), APP_RESULT: response.data}
+            # U: OLD: assumed every auth error was a DRF Response with `.data`.
+            # U: NEW: OAuth toolkit returns a plain HttpResponse, so handle both shapes.
+            response_data = getattr(response, "data", None)
+            if isinstance(response_data, dict):
+                message = str(response_data.get("detail") or response_data.get("error") or "Authentication failed.")
+                data = {MESSAGE: message, APP_RESULT: response_data}
+            else:
+                message = force_str(getattr(response, "content", b"")).strip() or "Authentication failed."
+                data = {MESSAGE: message, APP_RESULT: {"detail": message}}
             response = HttpResponse(
                 json.dumps(data),
                 content_type="application/json",

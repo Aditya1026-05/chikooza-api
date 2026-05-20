@@ -1,62 +1,110 @@
-import { Row, Col, Card, Button } from "reactstrap";
-import home from "../../assets/images/front/home.png";
-import profile1 from "../../assets/images/front/profile2.png";
-//latest
+import { Link } from "react-router-dom";
+import "../../assets/css/marketing.css";
+
+const principles = [
+  {
+    label: "Records",
+    title: "Operational clarity",
+    copy: "Farm teams should quickly see flock health, feed, mortality, purchases, sales, and reports without hunting across spreadsheets.",
+  },
+  {
+    label: "Privacy",
+    title: "Data ownership",
+    copy: "Each farmer's records stay scoped to their account. Private AI answers are generated only from the logged-in farmer's data.",
+  },
+  {
+    label: "Decisions",
+    title: "Practical decisions",
+    copy: "The product focuses on useful farm questions: FCR, current birds, mortality, sale amount, profit/loss, and purchase trends.",
+  },
+];
+
 const About = () => {
   return (
-    <>
-      <Row className="bg-white p-4 ml-1 mr-1">
-        <Col sm="6" lg="6" xl="6" xxl="6">
-          <h2 style={{ color: "#FD2F39" }}>About Chikooza</h2>
-          <h3>Broiler Performance Management For Higher Profits</h3>
-          <h5>We provied tools for easy management of your broiler flocks and to offer data driven insights into the performance of your boriler flocks to help you achieve better profits</h5>
-          <Button type="submit" className="btn mt-2" color="danger" >Read more</Button>
-        </Col>
-        <Col sm="6" lg="6" xl="6" xxl="6">
-          <img src={home} alt="logo" width="100%" />
-        </Col>
-      </Row><br />
-      <Row className="bg-white p-4 ml-1 mr-1">
-        <h2 className="ml-2" style={{ color: "#FD2F39" }}>Our Team</h2>
-        <br></br>
-        <Col sm="6" lg="6" xl="6" xxl="6">
-          <Card className='mt-0 shadow-2 m-3 p-3'>
-            <div className='one flex'>
-              <img src={profile1} alt="logo" width="120px" className='lg:ml-8 md:ml-0 sm:ml-0' />
-              <div className="mx-2 lg:ml-8 md:ml-0 sm:ml-0">
-                <br></br>
-                <h5>Abhishek Maheshwari</h5>
-                <ul className="list-unstyled text-red-500 ">
-                  <li className="mt-3">
-                    <i className=" pi pi-facebook" style={{ 'fontSize': '1.8em' }}></i>&nbsp;&nbsp;&nbsp;&nbsp;
-                    <i className="pi pi-twitter" style={{ 'fontSize': '1.8em' }}></i>&nbsp;&nbsp;&nbsp;&nbsp;
-                    <i className="pi pi-instagram" style={{ 'fontSize': '1.8em' }}></i>&nbsp;&nbsp;&nbsp;&nbsp;
-                  </li>
-                </ul>
-              </div>
-            </div>
-          </Card>
-        </Col>
-        <Col sm="6" lg="6" xl="6" xxl="6">
-          <Card className='mt-0 shadow-2 m-3 p-3'>
-            <div className='one flex'>
-              <img src={profile1} alt="logo" width="120px" className='lg:ml-8 md:ml-0 sm:ml-0' />
-              <div className="mx-2 lg:ml-8 md:ml-0 sm:ml-0">
-                <br></br>
-                <h5>Manish Goyal</h5>
-                <ul className="list-unstyled text-red-500 ">
-                  <li className="mt-3">
-                    <i className=" pi pi-facebook" style={{ 'fontSize': '1.8em' }}></i>&nbsp;&nbsp;&nbsp;&nbsp;
-                    <i className="pi pi-twitter" style={{ 'fontSize': '1.8em' }}></i>&nbsp;&nbsp;&nbsp;&nbsp;
-                    <i className="pi pi-instagram" style={{ 'fontSize': '1.8em' }}></i>&nbsp;&nbsp;&nbsp;&nbsp;
-                  </li>
-                </ul>
-              </div>
-            </div>
-          </Card>
-        </Col>
-      </Row>
-    </>
+    <main className="marketing-page brand-page">
+      {/* U: OLD: About page used legacy cards, typo-heavy copy, and fake social blocks.
+          U: NEW: match the Home page's brand/product story structure. */}
+      <section className="brand-hero">
+        <div className="brand-hero-copy">
+          <span className="home-eyebrow">About Chikooza</span>
+          <h1>The operating layer for broiler farm records.</h1>
+          <p>
+            Chikooza is built for farmers and farm operators who need a cleaner
+            way to capture daily work, understand flock performance, and keep
+            every farm record connected to the right account.
+          </p>
+          <div className="home-actions">
+            <Link className="home-primary-action" to="/register">
+              Create account
+            </Link>
+            <Link className="home-secondary-action" to="/contact">
+              Contact team
+            </Link>
+          </div>
+        </div>
+
+        <div className="brand-side-panel" aria-label="Chikooza farm operations coverage">
+          {/* U: OLD: this page displayed a generic stock image that did not match poultry farming.
+              U: NEW: use a product-relevant operations summary instead of misleading imagery. */}
+          <div>
+            <span>Farm records</span>
+            <strong>Country, state, farm, and flock setup</strong>
+          </div>
+          <div>
+            <span>Daily work</span>
+            <strong>Mortality, feed, weight and vaccination entries</strong>
+          </div>
+          <div>
+            <span>Business result</span>
+            <strong>Purchases, sales, PDF reports and Farmer AI</strong>
+          </div>
+        </div>
+      </section>
+
+      <section className="home-section">
+        <div className="home-section-heading">
+          <span>Why it exists</span>
+          <h2>Less guessing, better farm records.</h2>
+          <p>
+            The product combines farm setup, flock records, daily data,
+            purchase logs, sales tracking, dashboard charts, PDF reports, and AI
+            query support. The goal is to turn scattered farm activity into
+            usable performance information.
+          </p>
+        </div>
+        <div className="home-know-grid">
+          {principles.map((item) => (
+            <article className="home-know-card" key={item.title}>
+              <small>{item.label}</small>
+              <h3>{item.title}</h3>
+              <p>{item.copy}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="home-red-band">
+        <div>
+          <span>What farmers can do</span>
+          <h2>Manage the whole flock cycle from one account.</h2>
+        </div>
+        <div className="home-band-list">
+          <div>
+            <strong>01</strong>
+            <p>Register, verify OTP, and create the farmer workspace.</p>
+          </div>
+          <div>
+            <strong>02</strong>
+            <p>Add farms, create flocks, enter daily data, purchases, and sales.</p>
+          </div>
+          <div>
+            <strong>03</strong>
+            <p>Export reports and ask Farmer AI questions from scoped records.</p>
+          </div>
+        </div>
+      </section>
+    </main>
   );
 };
+
 export default About;

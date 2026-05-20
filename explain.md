@@ -143,7 +143,15 @@ It includes:
 
 Important local detail:
 
-- The OTP is currently fixed at `123456` in `common/utils.py`.
+- The OTP can be `123456` during local MVP/testing.
+- `common/utils.py` has `send_otp()`. That function first checks `CHIKOOZA_FIXED_OTP`.
+- If `.env` has `CHIKOOZA_FIXED_OTP=123456`, every OTP will be `123456`.
+- If `CHIKOOZA_FIXED_OTP` is not set but `DJANGO_DEBUG=True`, the code also returns `123456` so local testing stays easy.
+- If `CHIKOOZA_FIXED_OTP` is not set and `DJANGO_DEBUG=False`, the code uses `random.randint(100000, 999999)` to generate a real random OTP.
+- The generated OTP is stored in the SQL table named `otp`, which comes from `common/base_models.py` model `Otp`.
+- The OTP row is created by `users/services.py` in `SendOTPServices`, then checked by `VerifyOtpService` during signup/update flows.
+- In local/debug mode the API response includes the OTP so you can test easily. In production-style mode the API response hides the OTP.
+- Important: this project currently creates and stores OTPs, but it does not contain a real SMS provider integration. If `123456` is not being used, check the generated OTP in the database table `otp` during local development, or add/configure an SMS/email delivery service before production.
 
 Other modules depend on logged-in users, so this app is important.
 
@@ -524,11 +532,12 @@ The normal app flow is:
 ## What Is Working Locally Now
 
 - Backend server runs at `http://127.0.0.1:8002/`.
-- Frontend server runs at `http://127.0.0.1:3000/`.
-- Registration API works with fixed OTP `123456`.
-- Login API works.
+- Frontend server runs through Vite, usually at `http://127.0.0.1:5173/`.
+- Registration API works with local fixed/debug OTP `123456`.
+- Login API works and creates OAuth access tokens through Django OAuth Toolkit.
 - Main API flow works for farm, flock, purchase, daily data, sale, sales list, and flock summary.
-- Existing chatbot endpoint responds with fallback context if Ollama is not running.
+- Public website chatbot works through Groq when `GROQ_API_KEY` is configured.
+- Authenticated Farmer AI works through `/ai/` and applies user-level SQL scoping.
 
 ## One-Sentence Supervisor Summary
 

@@ -1,90 +1,149 @@
-// U: OLD unused dashboard/form/table imports were removed from runtime imports to reduce build noise.
-// import ProjectTables from "../../components/dashboard/ProjectTable";
-// import { Table, Card, CardTitle, CardBody, Form, FormGroup, Label } from "reactstrap";
-import { Row, Col, Button } from "reactstrap";
-// import home from "../../assets/images/front/home.png";
-// import profile1 from "../../assets/images/front/profile2.png";
-// import HeaderImg from "../../assets/frontimages/1.jpg";
-// import Image3 from "../../assets/frontimages/2.jpg";
-// import Image4 from "../../assets/frontimages/3.jpg";
-// import Image5 from "../../assets/frontimages/4.jpg";
-// import Image6 from "../../assets/frontimages/about.jpg";
-// import Image7 from "../../assets/frontimages/bg.jpg";
-// import Image8 from "../../assets/frontimages/bg1.jpg";
-import Image9 from "../../assets/frontimages/bg2.jpg";
-// U: OLD: import Marquee from "react-fast-marquee";
-// U: NEW: use a CSS marquee so the home page does not depend on an old React-only package.
-import CarousalHome from "./CarousalHome"
+import { Link } from "react-router-dom";
+import "../../assets/css/marketing.css";
+import HeroImage from "../../assets/images/frontimages/Chicken.jpeg";
+import ChikoozaChatbot from "../../components/ChikoozaChatbot/ChikoozaChatbot";
 
-// MV-2025-07-05-<9>  STARTS
-import ChikoozaChatbot from '../../components/ChikoozaChatbot/ChikoozaChatbot';
-// MV-2025-07-05-<9>  ENDS
+const exploreTiles = [
+  {
+    label: "Farm setup",
+    copy: "Create country, state, farm, and flock records before daily work starts.",
+    path: "/register",
+  },
+  {
+    label: "Daily records",
+    copy: "Capture mortality, feed, weight, vaccination, and farm observations.",
+    path: "/login",
+  },
+  {
+    label: "Purchases",
+    copy: "Track feed, medicine, equipment, and operating cost entries.",
+    path: "/login",
+  },
+  {
+    label: "Sales",
+    copy: "Record bird sales and understand sale value at flock level.",
+    path: "/login",
+  },
+  {
+    label: "Reports",
+    copy: "Export summaries and keep flock history ready for review.",
+    path: "/login",
+  },
+  {
+    label: "Farmer AI",
+    copy: "Ask private questions from the logged-in farmer's own data.",
+    path: "/login",
+  },
+];
 
+const knowMoreCards = [
+  {
+    title: "For farmers",
+    copy: "Simple data entry for farms, flocks, daily operations, purchases, and sales.",
+  },
+  {
+    title: "For supervisors",
+    copy: "Cleaner records and repeatable reports for reviewing flock performance.",
+  },
+  {
+    title: "For AI answers",
+    copy: "A safer base for RAG and Text-to-SQL because the source records stay structured.",
+  },
+];
 
-// import { useNavigate } from "react-router-dom";
-
-// U: OLD unused contact icons were removed from runtime imports; contact UI is handled on the Contact page.
-// import { FaPhoneAlt, FaUser, FaUserCircle } from "react-icons/fa";
-// import { MdEmail } from "react-icons/md";
-import { useNavigate } from "react-router-dom";
 const Home = () => {
-  let navigate = useNavigate();
-  let Aboutus = () => {
-    navigate("/about");
-  }
   return (
-    <>
-      <Row className="chikooza-hero g-0">
-        <Col sm="12" lg="6" xl="6" xxl="6" className="chikooza-hero-copy">
-          <div className="chikooza-hero-panel">
-            {/* U: OLD hero used inline 50px text and a generic danger button. */}
-            <span className="chikooza-eyebrow">Poultry farm intelligence</span>
-            <h1 className="chikooza-hero-title">
-              Insights into your flock, from placement to performance.
-            </h1>
-            <p className="chikooza-hero-subtitle">
-              Track broiler performance, daily operations, purchases, sales, and flock health in one focused workspace.
-            </p>
-            <div className="chikooza-hero-actions">
-              <Button type="button" className="chikooza-primary-action" onClick={Aboutus}>Explore Chikooza</Button>
-              <Button type="button" className="chikooza-secondary-action" outline onClick={() => navigate("/register")}>Create farmer account</Button>
-            </div>
-            <div className="chikooza-metrics-strip" aria-label="Product capabilities">
-              <div><strong>FCR</strong><span>Performance tracking</span></div>
-              <div><strong>Daily</strong><span>Mortality & feed logs</span></div>
-              <div><strong>Sales</strong><span>Revenue visibility</span></div>
-            </div>
-          </div>
-        </Col>
-        <Col sm="12" lg="6" xl="6" xxl="6" className="chikooza-hero-media">
-          <div className="chikooza-carousel-shell">
-            <CarousalHome />
-          </div>
-        </Col>
-    </Row>
-    <Row className="chikooza-welcome-section g-0">
-      <div className="grid mt-2">
-        <div className="col-12 index_banner">
-          <h1 className="chikooza-banner-title">Welcome to Chikooza</h1>
-          <p className="chikooza-banner-copy">A practical operating system for farms that need clearer decisions, not more spreadsheets.</p>
-          <div className="flex justify-content-center">
-              <Button type="button" className="chikooza-banner-action" onClick={Aboutus}>Read more</Button>
+    <main className="marketing-page home-page">
+      {/* U: OLD: home followed a generic SaaS landing page pattern.
+          U: NEW: Amul-inspired brand/product structure: strong hero, product tiles, and know-more cards. */}
+      <section className="home-hero">
+        <div className="home-hero-copy">
+          <span className="home-eyebrow">Poultry farm operations</span>
+          <h1>One reliable place for every broiler flock record.</h1>
+          <p>
+            Chikooza helps farmers manage farm setup, flock lifecycle, daily
+            work, purchases, sales, reports, and private AI questions from one
+            focused account.
+          </p>
+          <div className="home-actions">
+            <Link className="home-primary-action" to="/register">
+              Create farmer account
+            </Link>
+            <Link className="home-secondary-action" to="/login">
+              Farmer login
+            </Link>
           </div>
         </div>
-      </div>
-    </Row>
-    <Row className="chikooza-gallery-band g-0">
-      <div className="chikooza-marquee" aria-label="Poultry farm gallery">
-        <div className="chikooza-marquee-track">
-          <img src={Image9} className="chikooza-marquee-image" alt="Poultry farm environment" />
-          <img src={Image9} className="chikooza-marquee-image" alt="" aria-hidden="true" />
+
+        <div className="home-hero-media" aria-label="Chikooza poultry farm operations">
+          <div className="home-image-card">
+            <img src={HeroImage} alt="Chicken and poultry performance graph" />
+          </div>
+          <div className="home-badge-card">
+            <span>Current flock view</span>
+            <strong>Mortality, feed, weight and sale data together.</strong>
+          </div>
         </div>
-      </div>
-    </Row>
-{/* MV-2025-07-05-<9>  STARTS */}
-    <ChikoozaChatbot alwaysVisible={true} defaultOpen={false} />
-{/* MV-2025-07-05-<9>  ENDS */}
-    </>
+      </section>
+
+      <section className="home-section home-directory">
+        <div className="home-section-heading">
+          <span>Explore Chikooza</span>
+          <h2>Farm tools grouped around real daily work.</h2>
+          <p>
+            Like a product directory, each area is easy to understand before the
+            farmer enters the dashboard.
+          </p>
+        </div>
+        <div className="home-tile-grid">
+          {exploreTiles.map((tile) => (
+            <Link className="home-tile" key={tile.label} to={tile.path}>
+              <strong>{tile.label}</strong>
+              <span>{tile.copy}</span>
+            </Link>
+          ))}
+        </div>
+      </section>
+
+      <section className="home-red-band">
+        <div>
+          <span>From placement to sale</span>
+          <h2>Structured records first. Better dashboard and AI answers after that.</h2>
+        </div>
+        <div className="home-band-list" aria-label="Chikooza operating flow">
+          <div>
+            <strong>01</strong>
+            <p>Register farmer and verify OTP.</p>
+          </div>
+          <div>
+            <strong>02</strong>
+            <p>Add farm, flock, daily data, purchases, and sales.</p>
+          </div>
+          <div>
+            <strong>03</strong>
+            <p>Review reports and ask Farmer AI scoped to that account.</p>
+          </div>
+        </div>
+      </section>
+
+      <section className="home-section">
+        <div className="home-section-heading">
+          <span>Know More</span>
+          <h2>Built for practical farm management, not decorative dashboards.</h2>
+        </div>
+        <div className="home-know-grid">
+          {knowMoreCards.map((card) => (
+            <article className="home-know-card" key={card.title}>
+              <h3>{card.title}</h3>
+              <p>{card.copy}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <ChikoozaChatbot alwaysVisible={true} defaultOpen={false} />
+    </main>
   );
 };
+
 export default Home;

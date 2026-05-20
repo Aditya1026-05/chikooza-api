@@ -1,14 +1,17 @@
 from django.http import HttpResponse
 from django.template.loader import get_template
-from oauth2_provider.models import Application
 from rest_framework import status
 from rest_framework.response import Response
 from xhtml2pdf import pisa
 
 from common.base_models import Otp, PublicId, Users
 from common.constant import ERROR, INVALID_OTP
-from common.utils import create_token, get_detail, mobile_number_validation
-from chikooza.settings import HOSTNAME
+from common.utils import (
+    create_token,
+    get_detail,
+    get_or_create_oauth_application,
+    mobile_number_validation,
+)
 
 def verify_otp(mobile_number, otp):
     if Otp.objects.filter(mobile_number=mobile_number, otp=otp).exists():
@@ -31,13 +34,10 @@ def create_user(data, sign_up=None):
 
     users.set_password(data.get("password"))
     users.save()
-    user = Application.objects.create(
-        user=users,
-        authorization_grant_type="password",
-        client_type="confidential",
-        name="user",
-        redirect_uris = HOSTNAME
-    )
+    # U: OLD: Application.objects.create() used django-oauth-toolkit defaults,
+    # U: which hash client_secret and break this legacy password-grant login flow.
+    # U: NEW: create a server-owned OAuth application with a usable secret.
+    user = get_or_create_oauth_application(users)
     data["status_code"] = 201
     token = create_token(
         users.username, data.get("password"), user.client_id, user.client_secret

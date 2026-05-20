@@ -1,5 +1,5 @@
 import React from "react";
-import { Link } from "react-router-dom";
+import { Link, NavLink } from "react-router-dom";
 import {
   Navbar,
   Collapse,
@@ -8,6 +8,7 @@ import {
   Button,
 } from "reactstrap";
 import '../assets/css/header.css';
+import Logo from "../assets/images/logos/chikooza_logo.png";
 
 const Header = () => {
   // const navigate = useNavigate();
@@ -27,11 +28,10 @@ const Header = () => {
   return (
     <Navbar light expand="md" className="fix-header chikooza-public-header">
       <div className="d-flex align-items-center">
-        {/* U: OLD: header used image logos that clashed with the product palette.
-            U: NEW: use a CSS-rendered brand lockup that follows the red Chikooza theme. */}
+        {/* U: OLD: header used a temporary CSS "C" mark that looked generic.
+            U: NEW: restore the real Chikooza wordmark for a more professional brand header. */}
         <Link to="/" className="navbar-brand chikooza-brand">
-          <span className="chikooza-brand-mark" aria-hidden="true">C</span>
-          <span className="chikooza-brand-text">Chikooza</span>
+          <img src={Logo} alt="Chikooza" className="chikooza-brand-logo" />
         </Link>
         {/*<Button
           color="primary"
@@ -59,39 +59,39 @@ const Header = () => {
       <Collapse navbar isOpen={isOpen}>
         <Nav className="me-auto" navbar>
           <NavItem>
-            <Link to="/" className="linkheader">
+            <NavLink to="/" className={({ isActive }) => `linkheader ${isActive ? "linkheader-active" : ""}`}>
               Home
-            </Link>
+            </NavLink>
           </NavItem>
           <NavItem>
-            <Link to="/about" className="linkheader">
+            <NavLink to="/about" className={({ isActive }) => `linkheader ${isActive ? "linkheader-active" : ""}`}>
               About Us
-            </Link>
+            </NavLink>
+          </NavItem>
+          <NavItem>
+            <NavLink to="/contact" className={({ isActive }) => `linkheader ${isActive ? "linkheader-active" : ""}`}>
+              Contact
+            </NavLink>
           </NavItem>
           {isGuest ?
             <>
               <NavItem>
                 <Link to="/login" className="linkheader linkheader-cta">
-                  Farmer Login
+                  Login
                 </Link>
               </NavItem>
               <NavItem>
                 <Link to="/register" className="linkheader linkheader-secondary">
-                  Register
+                  Start free
                 </Link>
               </NavItem>
             </>
             : <NavItem>
-              <Link to="/member" className="linkheader">
-                Member
+              <Link to="/member" className="linkheader linkheader-cta">
+                Dashboard
               </Link>
             </NavItem>
           }
-          <NavItem>
-            <Link to="/contact" className="linkheader">
-              Contact Us
-            </Link>
-          </NavItem>
         </Nav>
       </Collapse>
     </Navbar>

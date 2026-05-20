@@ -239,6 +239,12 @@ deterministic local product answer.
 `CHIKOOZA_FIXED_OTP=123456` is only for local MVP testing. In production, remove
 that variable so OTPs are generated randomly.
 
+When `CHIKOOZA_FIXED_OTP` is not set, `common/utils.py::send_otp()` still returns
+`123456` if `DJANGO_DEBUG=True`. With `DJANGO_DEBUG=False`, it generates a random
+6 digit OTP and stores it in the SQL `otp` table through `users/services.py`.
+This project currently stores OTPs but does not include a real SMS provider
+integration, so production delivery still needs to be added/configured.
+
 #### 2. Do not manually edit migrations for normal setup
 
 U: OLD: the handoff guide asked developers to delete database files and comment

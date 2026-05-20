@@ -1,331 +1,263 @@
-import { Alert, Row, Col, Card, CardTitle, CardBody, Button, Form, FormGroup, Label } from "reactstrap";
-import '../../assets/css/header.css';
-import { Link } from "react-router-dom";
-import { useState } from "react";
-import { FaUserCircle, FaMailBulk, FaMobile, FaUser, FaLock} from "react-icons/fa";
-import { contentArea, apiPath, config } from "../../Constants";
-import Modal from 'react-bootstrap/Modal';
-import axios from 'axios';
-import { useNavigate } from 'react-router-dom';
-import { MdCancel } from "react-icons/md";
+import { useEffect, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { Alert, Button } from "reactstrap";
+import Modal from "react-bootstrap/Modal";
+import axios from "axios";
+import "../../assets/css/marketing.css";
+import { apiPath, config } from "../../Constants";
+
+const apiUrl = (path) => `${apiPath.replace(/\/?$/, "/")}users/${path}/`;
+
+const initialForm = {
+  name: "",
+  email: "",
+  mobile: "",
+  username: "",
+  password: "",
+  cpassword: "",
+};
 
 const Register = () => {
   const navigate = useNavigate();
-  //OTP Alert
-  const [show, setShow] = useState(false);
-  const handleClose = () => setShow(false);
-  //OTP Alert
-  let [addData, setAddData] = useState({name:'',password:'',cpassword:'',username:'',email:'',mobile:'',err:''});
-  let [nameerr ,setName] = useState(null);
-  let [usernameerr ,setUsername] = useState(null);
-  let [emailerr ,setEmail] = useState(null);
-  let [mobileerr ,setMobile] = useState(null);
-  let [passworderr ,setPassword] = useState(null);
-  let [cpassworderr ,setCpassword] = useState(null);
-  let [loading, setLoading] = useState(false);
-  let [otp, setOtp] = useState('');
-  let [otperr, setOtpErr] = useState(null);
-  let [err, setErr] = useState('');
-  let [msg, setMsg] = useState(1);
-  let [resend, setResend] = useState(1);
-  let [minute, setMinute] = useState(59);
-  let save = (e) => {
+  const [formData, setFormData] = useState(initialForm);
+  const [fieldErrors, setFieldErrors] = useState({});
+  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [showOtp, setShowOtp] = useState(false);
+  const [otp, setOtp] = useState("");
+  const [otpError, setOtpError] = useState("");
+  const [otpSuccess, setOtpSuccess] = useState(false);
+  const [resendAfter, setResendAfter] = useState(0);
+
+  useEffect(() => {
+    if (!showOtp || resendAfter <= 0) {
+      return undefined;
+    }
+
+    const timer = window.setTimeout(() => {
+      setResendAfter((current) => Math.max(current - 1, 0));
+    }, 1000);
+
+    return () => window.clearTimeout(timer);
+  }, [showOtp, resendAfter]);
+
+  const updateField = (event) => {
+    setError("");
+    setMessage("");
+    setFieldErrors((current) => ({ ...current, [event.target.name]: "" }));
+    setFormData((current) => ({
+      ...current,
+      [event.target.name]: event.target.value,
+    }));
+  };
+
+  const cleanMobile = formData.mobile.replace(/\D/g, "");
+
+  const validate = () => {
+    const errors = {};
+    if (formData.name.trim().length < 3) {
+      errors.name = "Name must be at least 3 characters.";
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email.trim())) {
+      errors.email = "Enter a valid email address.";
+    }
+    if (cleanMobile.length !== 10) {
+      errors.mobile = "Enter a 10 digit mobile number.";
+    }
+    if (formData.username.trim().length < 3) {
+      errors.username = "Username must be at least 3 characters.";
+    }
+    if (formData.password.length < 5) {
+      errors.password = "Password must be at least 5 characters.";
+    }
+    if (formData.password !== formData.cpassword) {
+      errors.cpassword = "Passwords do not match.";
+    }
+    setFieldErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  const payload = () => ({
+    mobile_number: cleanMobile,
+    name: formData.name.trim(),
+    email: formData.email.trim(),
+    username: formData.username.trim(),
+    password: formData.password,
+    confirm_password: formData.cpassword,
+  });
+
+  const sendOtp = async (event) => {
+    if (event) {
+      event.preventDefault();
+    }
+    setError("");
+    setMessage("");
+
+    if (!apiPath) {
+      setError("Frontend API base URL is missing. Check chikooza-ui/.env.");
+      return;
+    }
+
+    if (!validate()) {
+      return;
+    }
+
     setLoading(true);
-    e.preventDefault();
-    //setStatus(null);
-    if(addData.name === ''){
-      setName('Name is required');
+    try {
+      const response = await axios.post(apiUrl("sendOtp"), payload(), config);
+      const returnedOtp = response.data?.results?.otp;
+      setMessage(
+        returnedOtp
+          ? `OTP sent. Local MVP OTP is ${returnedOtp}.`
+          : "OTP sent. Check the delivery channel configured on the backend."
+      );
+      setShowOtp(true);
+      setOtp("");
+      setOtpError("");
+      setOtpSuccess(false);
+      setResendAfter(55);
+    } catch (err) {
+      setError(
+        err?.response?.data?.error ||
+          err?.response?.data?.message ||
+          "Unable to send OTP. Check whether username, email, or mobile already exists."
+      );
+    } finally {
+      setLoading(false);
     }
-    if(addData.username === ''){
-      setUsername('Username is required');
-    }
-    if(addData.password === ''){
-      setPassword('Password is required');
-    }
-    if(addData.cpassword === ''){
-      setCpassword('Confirm Password is required');
-    }
-    if(addData.password !== addData.cpassword){
-      setCpassword('Password and Confirm Password does not match');
-    }
-    if(!(RegExp(/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,15}/g).test(addData.email))){
-      setEmail('Email is required');
-    }
-    if((addData.mobile === '') || (addData.mobile.length !== 10)){
-      setMobile('Mobile is required');
-    }
-    if(!( (addData.name === '') || (addData.username === '') || (addData.password === '') || (addData.cpassword === '') || (addData.email === '') || (addData.mobile === '') || (addData.mobile.length !== 10) || (addData.password !== addData.cpassword) )){
-      let user = {
-        mobile_number : addData.mobile,
-        name : addData.name,
-        email : addData.email,
-        username : addData.username,
-        password : addData.password,
-        confirm_password : addData.cpassword,
-      };
-      let url = `${apiPath}users/sendOtp/`;
-      axios.post(url, user, config).then((res)=>{
-        setShow(true);
-        let mid = 59;
-        let timer = setInterval(()=>{
-          mid = mid-1;
-          if(mid === 55){
-            setResend(0);
-            clearInterval(timer);
-            setMinute(59);
-          }else{
-            setMinute(mid);
-          }
-        },1000);
-      }).catch((err)=>{
-        setErr(err.response?.data?.message || 'Unable to send OTP. Please try again.');
-      });
-    }
-    setLoading(false);
-  }
+  };
 
-  let resentOTP = () => {
-    let user = {
-      mobile_number : addData.mobile,
-      name : addData.name,
-      email : addData.email,
-      username : addData.username,
-      password : addData.password,
-      confirm_password : addData.cpassword,
-    };
-    let url = `${apiPath}users/sendOtp/`;
-    axios.post(url, user, config).then((res)=>{
-      //setOtpErr("Otp sent");
-      setResend(1);
-      let mid = 59;
-      let timer = setInterval(()=>{
-        mid = mid-1;
-        if(mid === 0){
-          setResend(0);
-          clearInterval(timer);
-          setMinute(59);
-        }else{
-          setMinute(mid);
-        }
-      },1000);
-    }).catch((err)=>{
-      setOtpErr(err.response?.data?.message || 'Unable to resend OTP. Please try again.');
-    });
-  }
+  const verifyOtp = async () => {
+    const cleanOtp = otp.replace(/\D/g, "");
+    if (cleanOtp.length !== 6) {
+      setOtpError("Enter the 6 digit OTP.");
+      return;
+    }
 
-  let inputCpassword = (e) => {
-    if(e.target.value===addData.password){
-      setCpassword(false);
-      setAddData({...addData,[e.target.name]:e.target.value});
-    }else{
-      setCpassword('Password not match');
-      setAddData({...addData,[e.target.name]:e.target.value});
+    setLoading(true);
+    setOtpError("");
+    try {
+      await axios.post(apiUrl("signUp"), { ...payload(), otp: cleanOtp }, config);
+      setOtpSuccess(true);
+      setMessage("Registration complete. You can now login.");
+      window.setTimeout(() => navigate("/login"), 1200);
+    } catch (err) {
+      setOtpError(
+        err?.response?.data?.error ||
+          err?.response?.data?.message ||
+          "OTP verification failed. Please try again."
+      );
+    } finally {
+      setLoading(false);
     }
-  }
-  let inputPassword = (e) => {
-    if(e.target.value.trim()===''){
-      setPassword('Password is required');
-      setAddData({...addData,[e.target.name]:e.target.value});
-    }else{
-      setPassword(false);
-      setAddData({...addData,[e.target.name]:e.target.value});
-    }
-  }
-  let inputUsername = (e) => {
-    if(e.target.value.trim()===''){
-      setUsername('Username is required');
-      setAddData({...addData,[e.target.name]:e.target.value});
-    }else{
-      setUsername(false);
-      setAddData({...addData,[e.target.name]:e.target.value});
-    }
-  }
-  let inputMobile = (e) => {
-    if(e.target.value.trim()==='' || e.target.value.length > 14 || isNaN(e.target.value)){
-      setMobile('Mobile is required or invalid');
-      setAddData({...addData,[e.target.name]:e.target.value});
-    }else{
-      setMobile(false);
-      setAddData({...addData,[e.target.name]:e.target.value});
-    }
-  }
-  let inputEmail = (e) => {
-    if(!(RegExp(/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,15}/g).test(e.target.value.trim()))){
-      setEmail('Email is required or invalid');
-      setAddData({...addData,[e.target.name]:e.target.value});
-    }else{
-      setEmail(false);
-      setAddData({...addData,[e.target.name]:e.target.value});
-    }
-  }
-  let inputName = (e) => {
-    if(e.target.value.trim()===''){
-      setName('Name is required');
-      setAddData({...addData,[e.target.name]:e.target.value});
-    }else{
-      setName(false);
-      setAddData({...addData,[e.target.name]:e.target.value});
-    }
-  }
-  let otpVerify = () => {
-    if(otp.trim() === '' || otp.length !== 6 || isNaN(otp)){
-      setOtpErr('OTP is required or invalid');
-    }else{
-      setOtpErr(false);
-      let user = {
-        mobile_number : addData.mobile,
-        name : addData.name,
-        email : addData.email,
-        username : addData.username,
-        password : addData.password,
-        confirm_password : addData.cpassword,
-        otp : otp,
-      };
-      let url = `${apiPath}users/signUp/`;
-      axios.post(url, user, config).then((res)=>{
-        setMsg(0)
-        setTimeout(successMsg, 3000);
-      }).catch((err)=>{
-        setOtpErr(err.response?.data?.error || 'OTP verification failed. Please try again.');
-        setShow(true);
-      });
-    }
-  }
-  function successMsg() {
-    navigate("/login");
-  }
+  };
 
   return (
-    <Row>
-    <Modal show={show} backdrop="static" keyboard={false} >
-        <Modal.Header>
-              <div
-            style={{ cursor: "pointer", zoom: "1.5",position: 'absolute', right: "1%"}}
-            onClick={handleClose}
-            className="text-end"
-              >
-                <MdCancel />
-            </div>
-      </Modal.Header>
-      {msg === 0?
-      <>
-      <Modal.Body>
-        <Alert color="success">
-          Registration successfully done
-        </Alert>
-      </Modal.Body>
-      <Modal.Footer>
-      </Modal.Footer>
-      </>
-      :
-      <>
-      <Modal.Body>
-              <FormGroup>
-          <Label for="exampleName">Please enter OTP</Label>
-          <div className="input-group input-group">
-            <span className="input-group-text" style={{color:'#fd5c63'}} id="basic-addon1"><FaMobile></FaMobile></span>
-            <input onChange={(e)=>{setOtp(e.target.value)}} name="otp" placeholder="OTP" type="text" maxLength="6" className="form-control" aria-label="OTP" aria-describedby="basic-addon1" />
+    <main className="marketing-page brand-page">
+      {/* U: OLD: registration used a dashboard card with immediate loading reset and fragile OTP timer.
+          U: NEW: brand-consistent auth page with a stable OTP modal and verified /users/sendOtp/ + /users/signUp/ flow. */}
+      <section className="auth-shell register-shell">
+        <div className="auth-story-panel">
+          <span className="home-eyebrow">Farmer registration</span>
+          <h1>Create your Chikooza farmer account.</h1>
+          <p>
+            Register once, verify OTP, then add your farms, flocks, daily data,
+            purchases, sales, reports, and private Farmer AI access.
+          </p>
+          <div className="brand-check-list">
+            <div>OTP verification is required before account creation.</div>
+            <div>Local MVP setup uses fixed OTP 123456 when configured.</div>
+            <div>After login, all farm data is scoped to your account.</div>
           </div>
-          <small id="otpHelp" className="text-danger">{otperr}</small>
-        </FormGroup>
-      </Modal.Body>
-      <Modal.Footer>
-      {resend===1?<p>Resend Otp in 0 : {minute}</p>:<Button className="btn" color="warning" type="submit" onClick={resentOTP}>Resend</Button>}
-        <Button className="btn" color="danger" type="submit" onClick={otpVerify}>OK</Button>
-      </Modal.Footer>
-      </>
-      }
-    </Modal>
-      <Col>
-        {/* --------------------------------------------------------------------------------*/}
-        {/* Card-1*/}
-        {/* --------------------------------------------------------------------------------*/}
-        <Card >
-          <CardTitle tag="h6" className="border-bottom p-3 mb-0">
-            <i className="bi bi-bell me-2"> </i>
-            Please Signup
-          </CardTitle>
-          <CardBody>
-            <Row className="mt-3">
-              <Col sm="12" md={{offset: 2,size: 8}}>
-                <div className={contentArea}>
-                  <div className='gridmargin'>
-                  {(err !== '') && <Alert color="danger">{err}</Alert>}
-                   <Form onSubmit={save}>
-                      <FormGroup>
-                        <Label for="exampleName">Name</Label>
-                        <div className="input-group input-group">
-                          <span className="input-group-text" style={{color:'#fd5c63'}} id="basic-addon1"><FaUserCircle></FaUserCircle></span>
-                          <input onChange={inputName} name="name" placeholder="Name" type="text" className="form-control" aria-label="Name" aria-describedby="basic-addon1" />
-                        </div>
-                        <small id="passwordHelp" className="text-danger">{nameerr}</small>
-                      </FormGroup>
-                      <FormGroup>
-                        <Label for="exampleEmail">Email</Label>
-                        <div className="input-group input-group">
-                          <span className="input-group-text" style={{color:'#fd5c63'}} id="basic-addon1"><FaMailBulk></FaMailBulk></span>
-                          <input onChange={inputEmail} name="email" placeholder="Email" type="email" className="form-control" aria-label="Email" aria-describedby="basic-addon1" />
-                        </div>
-                        <small id="passwordHelp" className="text-danger">{emailerr}</small>
-                      </FormGroup>
-                      <FormGroup>
-                        <Label for="exampleMobile">Mobile</Label>
-                        <div className="input-group input-group">
-                          <span className="input-group-text" style={{color:'#fd5c63'}} id="basic-addon1"><FaMobile></FaMobile></span>
-                          <span className="input-group-text">+91</span>
-                          <input onChange={inputMobile} name="mobile" placeholder="Mobile" type="text" maxLength="13" className="form-control" aria-label="Mobile" aria-describedby="basic-addon1" />
-                        </div>
+        </div>
 
-                        <small id="passwordHelp" className="text-danger">{mobileerr}</small>
-                      </FormGroup>
-                      <FormGroup>
-                        <Label for="exampleUsername">Username</Label>
-                        <div className="input-group input-group">
-                          <span className="input-group-text" style={{color:'#fd5c63'}} id="basic-addon1"><FaUser></FaUser></span>
-                          <input onChange={inputUsername} name="username" placeholder="Username" type="text" className="form-control" aria-label="Username" aria-describedby="basic-addon1" />
-                        </div>
-                        <small id="passwordHelp" className="text-danger">{usernameerr}</small>
-                      </FormGroup>
-                      <FormGroup>
-                        <Label for="examplePassword">Password</Label>
-                        <div className="input-group input-group">
-                          <span className="input-group-text" style={{color:'#fd5c63'}} id="basic-addon1"><FaLock></FaLock></span>
-                          <input onChange={inputPassword} name="password" placeholder="Password" type="password" className="form-control" aria-label="Password" aria-describedby="basic-addon1" />
-                        </div>
-                        <small id="passwordHelp" className="text-danger">{passworderr}</small>
-                      </FormGroup>
-                      <FormGroup>
-                        <Label for="exampleConfirmPassword">Confirm Password</Label>
-                        <div className="input-group input-group">
-                          <span className="input-group-text" style={{color:'#fd5c63'}} id="basic-addon1"><FaLock></FaLock></span>
-                          <input onChange={inputCpassword} name="cpassword" placeholder="Confirm Password" type="password" className="form-control" aria-label="cpassword" aria-describedby="basic-addon1" />
-                        </div>
-                        <small id="passwordHelp" className="text-danger">{cpassworderr}</small>
-                      </FormGroup>
-                      {loading?
-                        <Button className="btn" color="danger" type="submit" disabled  >
-                          Please wait...
-                          <span className="spinner-border spinner-border-sm" role="status" aria-hidden="true" />
-                        </Button>
-                        :
-                        <Button className="btn" color="danger" type="submit">Sign Up</Button>
-                      }
-                    </Form>
-                  </div>
-                </div>
-                <div className="button-group mt-4" style={{}}>
-                    Already Registered?
-                    <Link to="/login" className="btn rowlink">
-                    Login Here
-                    </Link>
-                </div>
-              </Col>
-            </Row>
+        <div className="auth-card brand-auth-card register-card">
+          <h2>Register</h2>
+          <p>Enter farmer details. You will verify OTP before the account is created.</p>
+          {error && <Alert color="danger">{error}</Alert>}
+          {message && <Alert color="success">{message}</Alert>}
+          <form className="auth-form" onSubmit={sendOtp}>
+            <div className="form-field">
+              <label htmlFor="register-name">Full name</label>
+              <input id="register-name" name="name" onChange={updateField} placeholder="Farmer name" type="text" value={formData.name} />
+              <small className="form-error">{fieldErrors.name}</small>
+            </div>
+            <div className="form-field">
+              <label htmlFor="register-email">Email</label>
+              <input autoComplete="email" id="register-email" name="email" onChange={updateField} placeholder="name@example.com" type="email" value={formData.email} />
+              <small className="form-error">{fieldErrors.email}</small>
+            </div>
+            <div className="form-field">
+              <label htmlFor="register-mobile">Mobile number</label>
+              <input id="register-mobile" inputMode="numeric" maxLength={10} name="mobile" onChange={updateField} placeholder="10 digit mobile number" type="tel" value={formData.mobile} />
+              <small className="form-error">{fieldErrors.mobile}</small>
+            </div>
+            <div className="form-field">
+              <label htmlFor="register-username">Username</label>
+              <input autoComplete="username" id="register-username" name="username" onChange={updateField} placeholder="Choose username" type="text" value={formData.username} />
+              <small className="form-error">{fieldErrors.username}</small>
+            </div>
+            <div className="form-field">
+              <label htmlFor="register-password">Password</label>
+              <input autoComplete="new-password" id="register-password" name="password" onChange={updateField} placeholder="Minimum 5 characters" type="password" value={formData.password} />
+              <small className="form-error">{fieldErrors.password}</small>
+            </div>
+            <div className="form-field">
+              <label htmlFor="register-cpassword">Confirm password</label>
+              <input autoComplete="new-password" id="register-cpassword" name="cpassword" onChange={updateField} placeholder="Confirm password" type="password" value={formData.cpassword} />
+              <small className="form-error">{fieldErrors.cpassword}</small>
+            </div>
+            <Button className="ck-button" disabled={loading} type="submit">
+              {loading ? "Sending OTP..." : "Send OTP"}
+            </Button>
+          </form>
+          <div className="auth-switch">
+            Already registered? <Link to="/login">Login here</Link>
+          </div>
+        </div>
+      </section>
 
-          </CardBody>
-        </Card>
-      </Col>
-    </Row>
+      <Modal className="otp-modal" show={showOtp} backdrop="static" keyboard={false} centered>
+        <Modal.Header>
+          <Modal.Title>Verify OTP</Modal.Title>
+          <Button className="btn-close" color="transparent" aria-label="Close" onClick={() => setShowOtp(false)} />
+        </Modal.Header>
+        <Modal.Body>
+          {otpSuccess ? (
+            <Alert color="success">Registration complete. Redirecting to login...</Alert>
+          ) : (
+            <>
+              <p>Enter the 6 digit OTP for {cleanMobile}.</p>
+              {otpError && <Alert color="danger">{otpError}</Alert>}
+              <div className="form-field">
+                <label htmlFor="register-otp">OTP</label>
+                <input
+                  id="register-otp"
+                  inputMode="numeric"
+                  maxLength={6}
+                  onChange={(event) => setOtp(event.target.value)}
+                  placeholder="123456"
+                  type="text"
+                  value={otp}
+                />
+              </div>
+            </>
+          )}
+        </Modal.Body>
+        {!otpSuccess && (
+          <Modal.Footer>
+            <Button className="ck-button-secondary" disabled={loading || resendAfter > 0} onClick={sendOtp} type="button">
+              {resendAfter > 0 ? `Resend in ${resendAfter}s` : "Resend OTP"}
+            </Button>
+            <Button className="ck-button" disabled={loading} onClick={verifyOtp} type="button">
+              {loading ? "Verifying..." : "Verify and register"}
+            </Button>
+          </Modal.Footer>
+        )}
+      </Modal>
+    </main>
   );
 };
+
 export default Register;

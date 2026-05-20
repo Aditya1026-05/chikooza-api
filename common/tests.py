@@ -1,8 +1,15 @@
 from unittest.mock import patch
 
-from django.test import SimpleTestCase, override_settings
+from django.http import HttpResponse
+from django.test import SimpleTestCase, TestCase, override_settings
 
-from common.utils import build_otp_response_payload, send_otp
+from common.base_models import PublicId, Users
+from common.middleware import AuthenticationErrorMessage
+from common.utils import (
+    build_otp_response_payload,
+    get_or_create_oauth_application,
+    send_otp,
+)
 
 
 class SendOtpTests(SimpleTestCase):
@@ -41,3 +48,32 @@ class OtpResponsePayloadTests(SimpleTestCase):
         payload = build_otp_response_payload(123456, "9999999999")
 
         self.assertEqual(payload, {"mobile_number": "9999999999", "otp": 123456})
+
+
+class AuthenticationErrorMiddlewareTests(SimpleTestCase):
+    def test_handles_plain_http_response_without_drf_data(self):
+        # U: OLD: OAuth HttpResponse errors crashed because middleware assumed `.data`.
+        # U: NEW: middleware converts plain auth responses into JSON safely.
+        middleware = AuthenticationErrorMessage(lambda request: HttpResponse('{"error": "invalid_client"}', status=401))
+        response = middleware(object())
+
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response["content-type"], "application/json")
+        self.assertIn(b"invalid_client", response.content)
+
+
+class OAuthApplicationTests(TestCase):
+    def test_creates_unhashed_server_owned_secret_for_password_grant(self):
+        user = Users.objects.create_user(
+            username="oauth-helper",
+            email="oauth-helper@example.com",
+            mobile_number=9092052099,
+            password="TestPass123",
+            public_id=PublicId.create_public_id(),
+        )
+
+        application = get_or_create_oauth_application(user)
+
+        self.assertFalse(application.hash_client_secret)
+        self.assertEqual(application.authorization_grant_type, application.GRANT_PASSWORD)
+        self.assertTrue(application.client_secret)

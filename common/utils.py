@@ -2,8 +2,10 @@ import datetime
 import logging
 import random
 import traceback
+from secrets import token_urlsafe
 
 from django.contrib.auth.models import User
+from django.core.exceptions import ImproperlyConfigured
 
 import requests
 from django.conf import settings
@@ -29,6 +31,7 @@ from common.constant import (
 )
 from dailydata.models import DailyData
 from flocks.models import Flock
+from oauth2_provider.models import Application
 
 logger = logging.getLogger(__name__)
 
@@ -87,30 +90,62 @@ def create_token(user, password, client_id, client_secret):
     """
     This function is used to create authenticate user token.
     """
+    if not client_secret:
+        raise ImproperlyConfigured("OAuth application client_secret is missing.")
+
     data = {
         "username": user,
         "password": password,
         "grant_type": "password",
         "client_id": client_id,
-        
-#MV-16-6-25- 17-10 comment hardcoded 
-         "client_secret":"abc123",
-       # "client_secret": client_secret
-#MV-16-6-25- 17-10 change end
-
+        # U: OLD: "abc123" was hardcoded, so real app credentials failed after signup/login.
+        # U: NEW: use the OAuth application secret generated for this user.
+        "client_secret": client_secret,
     }
-#MV-16-6-25- 17-10 added headers
-    headers = {'Content-type': 'application/x-www-form-urlencoded'}
-    token = requests.post(HOSTNAME + "o/token/", data=data , headers=headers)
-#MV-16-6-25- 17-10 comment hardcoded 
+    headers = {"Content-Type": "application/x-www-form-urlencoded"}
+    token = requests.post(HOSTNAME + "o/token/", data=data, headers=headers, timeout=10)
+    try:
+        token_data = token.json()
+    except ValueError as exc:
+        logger.error("OAuth token endpoint returned non-JSON response: %s", token.text[:300])
+        raise ImproperlyConfigured("OAuth token endpoint returned an invalid response.") from exc
+
+    if token.status_code >= 400:
+        logger.error("OAuth token endpoint failed: %s", token_data)
+        raise ValidationError({ERROR: token_data.get("error_description") or token_data.get("error") or "Token creation failed."})
+
     logger.info("Successfully get access_token, expires_in and token_type.")
     return {
-        "access_token": token.json().get("access_token"),
-        "expires_in": token.json().get("expires_in"),
-        "token_type": token.json().get("token_type"),
+        "access_token": token_data.get("access_token"),
+        "expires_in": token_data.get("expires_in"),
+        "token_type": token_data.get("token_type"),
     }
     
     
+def get_or_create_oauth_application(user):
+    """
+    Return a password-grant OAuth application whose secret is usable server-side.
+    """
+    application = Application.objects.filter(user=user).first()
+    secret_needs_rotation = not application or application.hash_client_secret
+
+    if application is None:
+        application = Application(user=user)
+
+    if secret_needs_rotation:
+        # U: OLD: django-oauth-toolkit 3 hashes generated client secrets by default,
+        # U: which means this backend can no longer read the raw secret for password-grant login.
+        # U: NEW: generate a server-owned secret and store it unhashed for this legacy OAuth flow.
+        application.client_secret = token_urlsafe(48)
+        application.hash_client_secret = False
+
+    application.authorization_grant_type = Application.GRANT_PASSWORD
+    application.client_type = Application.CLIENT_CONFIDENTIAL
+    application.name = application.name or "user"
+    application.redirect_uris = HOSTNAME
+    application.save()
+    return application
+
 
 
 def check_email_validate(email):

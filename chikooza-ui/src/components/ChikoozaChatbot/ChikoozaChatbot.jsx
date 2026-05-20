@@ -42,7 +42,7 @@ const ChikoozaChatbot = ({ defaultOpen = false, alwaysVisible = true }) => {
       {!showChatbot && (
         <div className="chatbot-label">
           <span>Chat with</span>
-          <span>Chikbot</span>
+          <span>AI</span>
         </div>
       )}
     </div>

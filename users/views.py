@@ -31,6 +31,7 @@ from common.utils import (
     check_user_existence_for_validation,
     create_token,
     get_detail,
+    get_or_create_oauth_application,
     otp_delete_after_five_minutes,
     success_response,
     validate_url_value,
@@ -170,12 +171,14 @@ class LoginView(viewsets.ViewSet):
                         raise ValidationError(
                             {ERROR: INVALID_CREDENTIALS}, status.HTTP_400_BAD_REQUEST
                         )
-                    user_detail = Application.objects.filter(user_id=user.id)
+                    # U: OLD: login assumed an old unhashed OAuth app secret already existed.
+                    # U: NEW: create or rotate the user's OAuth app so Django OAuth Toolkit 3 works.
+                    user_detail = get_or_create_oauth_application(user)
                     token = create_token(
                         user.username,
                         password,
-                        user_detail.first().client_id,
-                        user_detail.first().client_secret,
+                        user_detail.client_id,
+                        user_detail.client_secret,
                     )
                     token["public_id"] = user.public_id
                     token["name"] = user.first_name

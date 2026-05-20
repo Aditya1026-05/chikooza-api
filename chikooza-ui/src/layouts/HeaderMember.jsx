@@ -5,7 +5,6 @@ import {
   Collapse,
   Nav,
   NavItem,
-  UncontrolledDropdown,
   DropdownToggle,
   DropdownMenu,
   DropdownItem,
@@ -14,6 +13,7 @@ import {
 } from "reactstrap";
 //import { ReactComponent as LogoWhite } from "../assets/images/logos/adminprowhite.svg";
 import '../assets/css/header.css';
+import Logo from "../assets/images/logos/chikooza_logo.png";
 import { useEffect } from "react";
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
@@ -23,12 +23,20 @@ import { FaAngleDown } from "react-icons/fa";
 const Header = () => {
   const navigate = useNavigate();
   const [isOpen, setIsOpen] = React.useState(false);
+  const [activeMenu, setActiveMenu] = React.useState(null);
 
   const [dropdownOpen, setDropdownOpen] = React.useState(false);
 
   const toggle = () => setDropdownOpen((prevState) => !prevState);
+  const toggleMenu = (menu) => {
+    setActiveMenu((current) => (current === menu ? null : menu));
+  };
+  const closeMenus = () => {
+    setActiveMenu(null);
+  };
   const Handletoggle = () => {
     setIsOpen(!isOpen);
+    setActiveMenu(null);
   };
   useEffect(() => {
     if (localStorage.getItem('token') === null) {
@@ -55,11 +63,10 @@ const Header = () => {
   return (
     <Navbar light expand="md" className="fix-header chikooza-public-header">
       <div className="d-flex align-items-center">
-        {/* U: OLD: member header reused image logos from the legacy template.
-            U: NEW: use the same CSS-rendered Chikooza brand as the public header. */}
+        {/* U: OLD: member header used a temporary CSS "C" mark.
+            U: NEW: use the same real Chikooza wordmark as the public header. */}
         <Link to="/" className="navbar-brand chikooza-brand">
-          <span className="chikooza-brand-mark" aria-hidden="true">C</span>
-          <span className="chikooza-brand-text">Chikooza</span>
+          <img src={Logo} alt="Chikooza" className="chikooza-brand-logo" />
         </Link>
         {/* <Button
           color="primary"
@@ -87,79 +94,83 @@ const Header = () => {
       <Collapse navbar isOpen={isOpen}>
         <Nav className="me-auto" navbar>
           <NavItem>
-            <Link to="/" className="linkheader">
+            <Link to="/" className="linkheader" onClick={closeMenus}>
               Home
             </Link>
           </NavItem>
           <NavItem>
-            <Link to="/member" className="linkheader">
-              Member
+            <Link to="/member" className="linkheader" onClick={closeMenus}>
+              Dashboard
             </Link>
           </NavItem>
-          <UncontrolledDropdown inNavbar nav>
+          {/* U: OLD: independent uncontrolled dropdowns could stay open together and overlap.
+              U: NEW: control member-nav dropdowns with one active menu so opening Flock closes Farm. */}
+          <Dropdown inNavbar nav isOpen={activeMenu === "farm"} toggle={() => toggleMenu("farm")}>
             <DropdownToggle caret nav className="linkheader">
               Farm
             </DropdownToggle>
             <DropdownMenu end>
-              <DropdownItem className="linkheader">
-                <Link to="/addfarm" className="link">Add Farm</Link>
-              </DropdownItem>
-              <DropdownItem className="linkheader">
-                <Link to="/managefarm" className="link">View/Edit Farm</Link>
-              </DropdownItem>
+              {/* U: OLD: DropdownItem tag={Link} did not navigate reliably after making menus controlled.
+                  U: NEW: render real React Router links inside the dropdown menu. */}
+              <Link to="/addfarm" className="dropdown-item member-dropdown-link" onClick={closeMenus}>
+                Add Farm
+              </Link>
+              <Link to="/managefarm" className="dropdown-item member-dropdown-link" onClick={closeMenus}>
+                View/Edit Farm
+              </Link>
             </DropdownMenu>
-          </UncontrolledDropdown>
-          <UncontrolledDropdown inNavbar nav>
+          </Dropdown>
+          <Dropdown inNavbar nav isOpen={activeMenu === "flock"} toggle={() => toggleMenu("flock")}>
             <DropdownToggle caret nav className="linkheader">
               Flock
             </DropdownToggle>
             <DropdownMenu end>
-              <DropdownItem className="linkheader"><Link to="/addflock" className="link">Add Flock</Link></DropdownItem>
-              <DropdownItem className="linkheader"><Link to="/manageflock" className="link">View/Edit Flock</Link></DropdownItem>
-              <DropdownItem className="linkheader"><Link to="/flockdailydata" className="link">Flock Daily Data</Link></DropdownItem>
+              <Link to="/addflock" className="dropdown-item member-dropdown-link" onClick={closeMenus}>Add Flock</Link>
+              <Link to="/manageflock" className="dropdown-item member-dropdown-link" onClick={closeMenus}>View/Edit Flock</Link>
+              <Link to="/flockdailydata" className="dropdown-item member-dropdown-link" onClick={closeMenus}>Flock Daily Data</Link>
             </DropdownMenu>
-          </UncontrolledDropdown>
-          <UncontrolledDropdown inNavbar nav>
+          </Dropdown>
+          <Dropdown inNavbar nav isOpen={activeMenu === "sales"} toggle={() => toggleMenu("sales")}>
             <DropdownToggle caret nav className="linkheader">
               Sales
             </DropdownToggle>
             <DropdownMenu end>
-              <DropdownItem className="linkheader"><Link to="/flocksale" className="link">Flock Sale</Link></DropdownItem>
-              <DropdownItem className="linkheader"><Link to="/viewsale" className="link">View/Edit Sales</Link></DropdownItem>
+              <Link to="/flocksale" className="dropdown-item member-dropdown-link" onClick={closeMenus}>Flock Sale</Link>
+              <Link to="/viewsale" className="dropdown-item member-dropdown-link" onClick={closeMenus}>View/Edit Sales</Link>
             </DropdownMenu>
-          </UncontrolledDropdown>
-          <UncontrolledDropdown inNavbar nav>
+          </Dropdown>
+          <Dropdown inNavbar nav isOpen={activeMenu === "purchases"} toggle={() => toggleMenu("purchases")}>
             <DropdownToggle caret nav className="linkheader">
               Purchases
             </DropdownToggle>
             <DropdownMenu end>
-              <DropdownItem className="linkheader"><Link to="/addpurchase" className="link">Add Purchase</Link></DropdownItem>
-              <DropdownItem className="linkheader"><Link to="/listpurchase" className="link">View/Edit Purchase</Link></DropdownItem>
+              <Link to="/addpurchase" className="dropdown-item member-dropdown-link" onClick={closeMenus}>Add Purchase</Link>
+              <Link to="/listpurchase" className="dropdown-item member-dropdown-link" onClick={closeMenus}>View/Edit Purchase</Link>
             </DropdownMenu>
-          </UncontrolledDropdown>
-          <UncontrolledDropdown inNavbar nav>
+          </Dropdown>
+          <Dropdown inNavbar nav isOpen={activeMenu === "reports"} toggle={() => toggleMenu("reports")}>
             <DropdownToggle caret nav className="linkheader">
               Reports
             </DropdownToggle>
             <DropdownMenu end>
-              <DropdownItem className="linkheader"><Link to="/dailydatasheet" className="link">Daily Data Sheet</Link></DropdownItem>
-              <DropdownItem className="linkheader"><Link to="/flocksummary" className="link">Flock Summary</Link></DropdownItem>
+              <Link to="/dailydatasheet" className="dropdown-item member-dropdown-link" onClick={closeMenus}>Daily Data Sheet</Link>
+              <Link to="/flocksummary" className="dropdown-item member-dropdown-link" onClick={closeMenus}>Flock Summary</Link>
             </DropdownMenu>
-          </UncontrolledDropdown>
+          </Dropdown>
           <NavItem>
-            <Link to="/chatbot" className="linkheader linkheader-cta">
+            <Link to="/chatbot" className="linkheader linkheader-cta" onClick={closeMenus}>
               Farmer AI
             </Link>
           </NavItem>
         </Nav>
-        <Dropdown isOpen={dropdownOpen} toggle={toggle}>
-          <DropdownToggle color="transparent">
+        <Dropdown isOpen={dropdownOpen} toggle={toggle} className="member-user-menu">
+          <DropdownToggle color="transparent" className="member-user-toggle">
             Hi, {localStorage.getItem('fname')} <FaAngleDown></FaAngleDown>
             {/*<img src={user1} alt="profile" className="rounded-circle" width="30"></img>*/}
           </DropdownToggle>
-          <DropdownMenu>
-            <DropdownItem><Link to="/profile" className="link">Profile</Link></DropdownItem>
-            <DropdownItem><Link to="/changepassword" className="link">Change password</Link></DropdownItem>
+          <DropdownMenu end className="member-user-dropdown">
+            <DropdownItem><Link to="/profile" className="link" onClick={toggle}>Profile</Link></DropdownItem>
+            <DropdownItem><Link to="/changepassword" className="link" onClick={toggle}>Change password</Link></DropdownItem>
             <DropdownItem onClick={logout}>Logout</DropdownItem>
           </DropdownMenu>
         </Dropdown>
