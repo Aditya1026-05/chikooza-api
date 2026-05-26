@@ -3,6 +3,9 @@ import { Link } from "react-router-dom";
 import '../assets/css/header.css';
 import Logo from "../assets/images/logos/chikooza_logo.png";
 const Footer = () => {
+  const isLoggedIn = localStorage.getItem("token") !== null;
+  const homePath = isLoggedIn ? "/member" : "/";
+
   return (
     <>
       {/* U: OLD: footer used the legacy red brand block.
@@ -10,7 +13,7 @@ const Footer = () => {
       <footer className="chikooza-footer">
         <div className="chikooza-footer-inner">
           <div className="chikooza-footer-brand">
-            <Link to="/" className="navbar-brand chikooza-brand chikooza-footer-logo">
+            <Link to={homePath} className="navbar-brand chikooza-brand chikooza-footer-logo">
               <img src={Logo} alt="Chikooza" className="chikooza-brand-logo" />
             </Link>
             <p>
@@ -21,13 +24,19 @@ const Footer = () => {
           <div className="chikooza-footer-links">
             <div>
               <strong>Product</strong>
-              <Link to="/">Home</Link>
+              <Link to={homePath}>Home</Link>
               <Link to="/about">About</Link>
-              <Link to="/register">Register</Link>
+              {isLoggedIn ? (
+                <Link to="/contact">Contact</Link>
+              ) : (
+                <Link to="/register">Register</Link>
+              )}
             </div>
             <div>
               <strong>Farm Tools</strong>
-              <Link to="/login">Farmer login</Link>
+              <Link to={isLoggedIn ? "/member" : "/login"}>
+                {isLoggedIn ? "Farmer dashboard" : "Farmer login"}
+              </Link>
               <Link to="/chatbot">Farmer AI</Link>
               <Link to="/contact">Contact</Link>
             </div>

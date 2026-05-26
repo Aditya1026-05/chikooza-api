@@ -37,12 +37,22 @@ const ChikoozaChatbot = ({ defaultOpen = false, alwaysVisible = true }) => {
         aria-expanded={showChatbot}
         aria-label={showChatbot ? 'Close chatbot' : 'Open chatbot'}
       >
-        {showChatbot ? '×' : '💭'}
+        {showChatbot ? (
+          '×'
+        ) : (
+          <span className="chatbot-hen-mark" aria-hidden="true">
+            <span className="chatbot-hen-comb" />
+            <span className="chatbot-hen-eye chatbot-hen-eye-left" />
+            <span className="chatbot-hen-eye chatbot-hen-eye-right" />
+            <span className="chatbot-hen-brow chatbot-hen-brow-left" />
+            <span className="chatbot-hen-brow chatbot-hen-brow-right" />
+            <span className="chatbot-hen-beak" />
+          </span>
+        )}
       </button>
       {!showChatbot && (
         <div className="chatbot-label">
-          <span>Chat with</span>
-          <span>AI</span>
+          <span>Chikooza AI</span>
         </div>
       )}
     </div>

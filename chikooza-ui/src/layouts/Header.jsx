@@ -13,9 +13,9 @@ import Logo from "../assets/images/logos/chikooza_logo.png";
 const Header = () => {
   // const navigate = useNavigate();
   const [isOpen, setIsOpen] = React.useState(false);
-  // U: OLD: const [user, SetUser] = useState(localStorage.getItem('token') !== null ? false : true)
-  // U: NEW: derive auth state directly; no unused setter and no stale header state.
-  const isGuest = localStorage.getItem('token') === null;
+  // U: OLD: public pages changed the right CTA to Dashboard when a token existed.
+  // U: NEW: public marketing/info pages always show the public header; logged-in app
+  // U: navigation lives only in HeaderMember so farmers do not bounce back to landing pages.
   // const [dropdownOpen, setDropdownOpen] = React.useState(false);
 
   // const toggle = () => setDropdownOpen((prevState) => !prevState);
@@ -73,25 +73,16 @@ const Header = () => {
               Contact
             </NavLink>
           </NavItem>
-          {isGuest ?
-            <>
-              <NavItem>
-                <Link to="/login" className="linkheader linkheader-cta">
-                  Login
-                </Link>
-              </NavItem>
-              <NavItem>
-                <Link to="/register" className="linkheader linkheader-secondary">
-                  Start free
-                </Link>
-              </NavItem>
-            </>
-            : <NavItem>
-              <Link to="/member" className="linkheader linkheader-cta">
-                Dashboard
-              </Link>
-            </NavItem>
-          }
+          <NavItem>
+            <Link to="/login" className="linkheader linkheader-cta">
+              Login
+            </Link>
+          </NavItem>
+          <NavItem>
+            <Link to="/register" className="linkheader linkheader-secondary">
+              Register for free
+            </Link>
+          </NavItem>
         </Nav>
       </Collapse>
     </Navbar>

@@ -65,7 +65,7 @@ const Header = () => {
       <div className="d-flex align-items-center">
         {/* U: OLD: member header used a temporary CSS "C" mark.
             U: NEW: use the same real Chikooza wordmark as the public header. */}
-        <Link to="/" className="navbar-brand chikooza-brand">
+        <Link to="/member" className="navbar-brand chikooza-brand">
           <img src={Logo} alt="Chikooza" className="chikooza-brand-logo" />
         </Link>
         {/* <Button
@@ -94,13 +94,8 @@ const Header = () => {
       <Collapse navbar isOpen={isOpen}>
         <Nav className="me-auto" navbar>
           <NavItem>
-            <Link to="/" className="linkheader" onClick={closeMenus}>
-              Home
-            </Link>
-          </NavItem>
-          <NavItem>
             <Link to="/member" className="linkheader" onClick={closeMenus}>
-              Dashboard
+              Home
             </Link>
           </NavItem>
           {/* U: OLD: independent uncontrolled dropdowns could stay open together and overlap.

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { Alert, Button } from "reactstrap";
 import "../../assets/css/marketing.css";
 
@@ -21,6 +22,7 @@ const contactMethods = [
 ];
 
 const Contact = () => {
+  const isLoggedIn = localStorage.getItem("token") !== null;
   const [formData, setFormData] = useState({
     name: "",
     mobile: "",
@@ -55,6 +57,12 @@ const Contact = () => {
 
   return (
     <main className="marketing-page brand-page">
+      {isLoggedIn && (
+        <Link className="public-back-to-app" to="/member" aria-label="Back to logged-in app">
+          <span aria-hidden="true">←</span>
+          Back to app
+        </Link>
+      )}
       <section className="brand-hero contact-brand-hero">
         <div className="brand-hero-copy">
           <span className="home-eyebrow">Contact Chikooza</span>

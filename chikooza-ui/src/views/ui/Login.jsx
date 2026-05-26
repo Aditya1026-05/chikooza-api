@@ -85,15 +85,24 @@ const Login = () => {
       <section className="auth-shell">
         <div className="auth-story-panel">
           <span className="home-eyebrow">Farmer login</span>
-          <h1>Continue your flock records.</h1>
+          <h1>Return to today's flock work.</h1>
           <p>
-            Login to manage farms, flocks, daily records, purchases, sales,
-            reports, and the private Farmer AI assistant.
+            Open the same workspace where your farms, flocks, purchases, sales,
+            reports, and private Farmer AI stay connected to your account.
           </p>
           <div className="brand-check-list">
-            <div>OAuth token login is verified against the Django backend.</div>
-            <div>Your dashboard and AI assistant use your authenticated account.</div>
-            <div>New users can register with the local MVP OTP flow.</div>
+            <div>
+              <strong>Daily work</strong>
+              <span>Update mortality, feed, weight, and flock observations.</span>
+            </div>
+            <div>
+              <strong>Farm finance</strong>
+              <span>Review purchase and sale records from one dashboard.</span>
+            </div>
+            <div>
+              <strong>Private AI</strong>
+              <span>Ask questions only from your logged-in farmer data.</span>
+            </div>
           </div>
         </div>
 

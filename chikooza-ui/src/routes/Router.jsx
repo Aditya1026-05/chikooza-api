@@ -63,7 +63,9 @@ const ThemeRoutes = [
       { path: "/contact", exact: true, element: <Contact /> },
       { path: "/forgetpassword", exact: true, element: <ForgetPassword /> },
 // MV-2025-07-05-<8>  STARTS
-      { path: "/chatbot", exact: true, element: <Chatbot /> }
+      // U: OLD: /chatbot was also registered under the public layout, so Farmer AI
+      // U: could render with the public header. It now lives only in FullLayoutMember.
+      // { path: "/chatbot", exact: true, element: <Chatbot /> }
 // MV-2025-07-05-<8>  ENDS
     ],
   },

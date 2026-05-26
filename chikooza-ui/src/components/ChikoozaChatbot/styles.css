@@ -7,7 +7,7 @@
   right: 22px;
   /* U: OLD: launcher sat too close to the viewport bottom, cutting the label.
      U: NEW: lift the launcher so the chat label remains fully visible. */
-  bottom: 76px;
+  bottom: 32px;
   z-index: 1000;
   font-family: "Plus Jakarta Sans", sans-serif;
 }
@@ -23,32 +23,153 @@
   position: absolute;
   right: 0;
   bottom: 0;
-  width: 56px;
+  width: 58px;
   height: 56px;
-  border-radius: 18px;
+  border-radius: 999px;
   /* U: OLD: public chatbot used a red/pink gradient from the legacy template.
      U: NEW: use the same crimson/amber palette as the Chikooza product UI. */
   background:
-    radial-gradient(circle at 28% 24%, rgba(245, 158, 11, 0.95), transparent 26%),
-    linear-gradient(135deg, #b71c1c 0%, #dc2626 100%);
+    radial-gradient(circle at 28% 22%, rgba(255, 214, 165, 0.95), transparent 24%),
+    linear-gradient(135deg, #7f1d1d 0%, #b42318 58%, #dc2626 100%);
   color: white;
-  border: none;
-  font-size: 24px;
+  border: 2px solid #ffffff;
+  font-size: 20px;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  /* box-shadow: 0 4px 20px rgba(253, 47, 57, 0.25); */
-  transition: all 0.3s ease;
+  box-shadow: 0 16px 38px rgba(127, 29, 29, 0.34);
+  transition: box-shadow 0.25s ease, transform 0.25s ease;
+  z-index: 2;
 }
 
 .chatbot-toggle-button:hover {
-  transform: scale(1.1);
-  /* box-shadow: 0 6px 25px rgba(253, 47, 57, 0.35); */
+  box-shadow: 0 18px 44px rgba(127, 29, 29, 0.42);
+  transform: translateY(-2px);
 }
 
 .chatbot-toggle-button:active {
   transform: scale(0.95);
+}
+
+.chatbot-toggle-button::after {
+  animation: chatbotPulse 2.6s ease-in-out infinite;
+  border: 1px solid rgba(180, 35, 24, 0.3);
+  border-radius: inherit;
+  content: "";
+  inset: -8px;
+  position: absolute;
+  z-index: -1;
+}
+
+.chatbot-hen-mark {
+  background:
+    radial-gradient(circle at 50% 72%, #fff7ed 0 26%, transparent 27%),
+    linear-gradient(160deg, #ef4444 0%, #b42318 68%);
+  border: 2px solid #7f1d1d;
+  border-radius: 48% 52% 46% 50%;
+  box-shadow:
+    inset -4px -5px 0 rgba(127, 29, 29, 0.2),
+    inset 4px 4px 0 rgba(255, 255, 255, 0.16);
+  display: block;
+  height: 34px;
+  position: relative;
+  transform: rotate(-5deg);
+  width: 36px;
+}
+
+.chatbot-hen-comb {
+  background: #f97316;
+  border: 2px solid #7f1d1d;
+  border-bottom: 0;
+  border-radius: 999px 999px 0 0;
+  height: 12px;
+  left: 9px;
+  position: absolute;
+  top: -11px;
+  transform: rotate(-8deg);
+  width: 10px;
+}
+
+.chatbot-hen-comb::before,
+.chatbot-hen-comb::after {
+  background: inherit;
+  border: inherit;
+  border-bottom: 0;
+  border-radius: inherit;
+  content: "";
+  height: 10px;
+  position: absolute;
+  top: 2px;
+  width: 9px;
+}
+
+.chatbot-hen-comb::before {
+  left: -8px;
+  transform: rotate(-18deg);
+}
+
+.chatbot-hen-comb::after {
+  right: -8px;
+  transform: rotate(18deg);
+}
+
+.chatbot-hen-eye {
+  background: #ffffff;
+  border: 1.5px solid #41100d;
+  border-radius: 999px;
+  height: 8px;
+  position: absolute;
+  top: 11px;
+  width: 8px;
+}
+
+.chatbot-hen-eye::after {
+  background: #1f1715;
+  border-radius: 999px;
+  content: "";
+  height: 3px;
+  left: 2px;
+  position: absolute;
+  top: 2px;
+  width: 3px;
+}
+
+.chatbot-hen-eye-left {
+  left: 8px;
+}
+
+.chatbot-hen-eye-right {
+  right: 8px;
+}
+
+.chatbot-hen-brow {
+  background: #41100d;
+  border-radius: 999px;
+  height: 3px;
+  position: absolute;
+  top: 8px;
+  width: 12px;
+}
+
+.chatbot-hen-brow-left {
+  left: 6px;
+  transform: rotate(24deg);
+}
+
+.chatbot-hen-brow-right {
+  right: 6px;
+  transform: rotate(-24deg);
+}
+
+.chatbot-hen-beak {
+  border-left: 7px solid transparent;
+  border-right: 7px solid transparent;
+  border-top: 10px solid #f59e0b;
+  filter: drop-shadow(0 1px 0 #7c2d12);
+  left: 11px;
+  position: absolute;
+  top: 19px;
 }
 
 /* Main Chatbot Container */
@@ -61,7 +182,7 @@
   overflow: hidden;
   border: 1px solid rgba(183, 28, 28, 0.14);
   position: relative;
-  bottom: 74px;
+  bottom: 78px;
   right: 0;
 }
 
@@ -272,7 +393,7 @@
 @media (max-width: 768px) {
   .chikooza-chatbot-container {
     right: 14px;
-    bottom: 74px;
+    bottom: 28px;
   }
 
   .chatbot-wrapper {
@@ -289,14 +410,14 @@
   .chatbot-toggle-button {
     width: 52px;
     height: 52px;
-    font-size: 22px;
+    font-size: 18px;
   }
 }
 
 @media (max-width: 480px) {
   .chikooza-chatbot-container {
     right: 12px;
-    bottom: 72px;
+    bottom: 20px;
   }
 
   .chatbot-wrapper {
@@ -344,6 +465,17 @@
   100% { transform: rotate(360deg); }
 }
 
+@keyframes chatbotPulse {
+  0%, 100% {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+  45% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
 /* Custom Scrollbar for Better UX */
 * {
   scrollbar-width: thin;
@@ -352,23 +484,36 @@
 /* Add this to your existing styles - Updated chatbot label positioning */
 .chatbot-label {
   position: absolute;
-  right: -14px; /* Align with the lifted toggle button while giving text enough room. */
-  bottom: -44px;
-  text-align: center; /* Center the text horizontally */
-  color: #b71c1c;
-  font-weight: 600;
-  font-size: 14px;
-  line-height: 1.2;
+  right: 50px;
+  bottom: 5px;
+  text-align: center;
+  color: #7f1d1d;
+  font-weight: 850;
+  font-size: 13px;
+  letter-spacing: 0.01em;
+  line-height: 1;
   white-space: nowrap;
-  background: transparent;
-  padding: 5px 10px;
-  border-radius: 8px;
-  width: 84px;
+  background: #ffffff;
+  border: 1px solid rgba(183, 28, 28, 0.22);
+  box-shadow: 0 12px 30px rgba(58, 18, 14, 0.18);
+  padding: 0.78rem 0.95rem;
+  border-radius: 999px;
+  width: max-content;
   box-sizing: border-box;
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
+  min-height: 46px;
+  pointer-events: none;
+}
+
+.chatbot-label::before {
+  background: #b42318;
+  border-radius: 999px;
+  content: "";
+  height: 0.48rem;
+  margin-right: 0.48rem;
+  width: 0.48rem;
 }
 
 .chatbot-label span {
@@ -378,19 +523,22 @@
 /* Make the label responsive */
 @media (max-width: 768px) {
   .chatbot-label {
-    right: -16px;
-    bottom: -42px;
-    font-size: 13px;
-    width: 84px;
+    right: 46px;
+    bottom: 4px;
+    font-size: 12.5px;
+    min-height: 42px;
+    padding: 0.68rem 0.82rem;
+    width: max-content;
   }
 }
 
 @media (max-width: 480px) {
   .chatbot-label {
-    right: -16px;
-    bottom: -40px;
+    right: 44px;
+    bottom: 4px;
     font-size: 12px;
-    width: 82px;
+    min-height: 40px;
+    width: max-content;
   }
 }
 /*  MV-2025-07-05-<6>  ENDS */

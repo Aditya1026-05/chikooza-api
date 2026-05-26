@@ -160,15 +160,24 @@ const Register = () => {
       <section className="auth-shell register-shell">
         <div className="auth-story-panel">
           <span className="home-eyebrow">Farmer registration</span>
-          <h1>Create your Chikooza farmer account.</h1>
+          <h1>Start with a clean farmer workspace.</h1>
           <p>
-            Register once, verify OTP, then add your farms, flocks, daily data,
-            purchases, sales, reports, and private Farmer AI access.
+            Register once, verify OTP, and keep every farm, flock, daily entry,
+            purchase, sale, report, and AI answer under one account.
           </p>
           <div className="brand-check-list">
-            <div>OTP verification is required before account creation.</div>
-            <div>Local MVP setup uses fixed OTP 123456 when configured.</div>
-            <div>After login, all farm data is scoped to your account.</div>
+            <div>
+              <strong>Verified account</strong>
+              <span>Use OTP before the farmer workspace is created.</span>
+            </div>
+            <div>
+              <strong>Structured records</strong>
+              <span>Add farms first, then flocks, daily work, costs, and sales.</span>
+            </div>
+            <div>
+              <strong>Data ownership</strong>
+              <span>Your farm records stay scoped to your own login.</span>
+            </div>
           </div>
         </div>
 

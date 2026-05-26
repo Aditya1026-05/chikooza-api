@@ -20,8 +20,16 @@ const principles = [
 ];
 
 const About = () => {
+  const isLoggedIn = localStorage.getItem("token") !== null;
+
   return (
     <main className="marketing-page brand-page">
+      {isLoggedIn && (
+        <Link className="public-back-to-app" to="/member" aria-label="Back to logged-in app">
+          <span aria-hidden="true">←</span>
+          Back to app
+        </Link>
+      )}
       {/* U: OLD: About page used legacy cards, typo-heavy copy, and fake social blocks.
           U: NEW: match the Home page's brand/product story structure. */}
       <section className="brand-hero">
