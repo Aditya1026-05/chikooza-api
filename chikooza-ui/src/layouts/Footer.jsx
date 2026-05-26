@@ -2,6 +2,13 @@ import React from "react";
 import { Link } from "react-router-dom";
 import '../assets/css/header.css';
 import Logo from "../assets/images/logos/chikooza_logo.png";
+
+const scrollToTop = () => {
+  window.requestAnimationFrame(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: "smooth" });
+  });
+};
+
 const Footer = () => {
   return (
     <>
@@ -10,7 +17,7 @@ const Footer = () => {
       <footer className="chikooza-footer">
         <div className="chikooza-footer-inner">
           <div className="chikooza-footer-brand">
-            <Link to="/" className="navbar-brand chikooza-brand chikooza-footer-logo">
+            <Link to="/" className="navbar-brand chikooza-brand chikooza-footer-logo" onClick={scrollToTop}>
               <img src={Logo} alt="Chikooza" className="chikooza-brand-logo" />
             </Link>
             <p>
@@ -21,15 +28,15 @@ const Footer = () => {
           <div className="chikooza-footer-links">
             <div>
               <strong>Product</strong>
-              <Link to="/">Home</Link>
-              <Link to="/about">About</Link>
-              <Link to="/register">Register</Link>
+              <Link to="/" onClick={scrollToTop}>Home</Link>
+              <Link to="/about" onClick={scrollToTop}>About</Link>
+              <Link to="/register" onClick={scrollToTop}>Register</Link>
             </div>
             <div>
               <strong>Farm Tools</strong>
-              <Link to="/login">Farmer login</Link>
-              <Link to="/login">Farmer AI</Link>
-              <Link to="/contact">Contact</Link>
+              <Link to="/login" onClick={scrollToTop}>Farmer login</Link>
+              <Link to="/login" onClick={scrollToTop}>Farmer AI</Link>
+              <Link to="/contact" onClick={scrollToTop}>Contact</Link>
             </div>
             <div>
               <strong>Contact</strong>
