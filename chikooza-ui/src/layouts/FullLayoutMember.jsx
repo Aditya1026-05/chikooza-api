@@ -1,6 +1,6 @@
 import { Outlet } from "react-router-dom";
 import Header from "./HeaderMember";
-import Footer from "./Footer";
+import MemberFooter from "./MemberFooter";
 import { Container } from "reactstrap"
 const FullLayoutMember = () => {
   return (
@@ -82,7 +82,7 @@ const FullLayoutMember = () => {
           </Container>
         </div>
       </div>
-      <Footer />
+      <MemberFooter />
     </main>
   );
 };

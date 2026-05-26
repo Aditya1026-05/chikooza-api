@@ -27,6 +27,8 @@ const DayData = lazy(() => import("../views/ui/DayData.jsx"));
 const Home = lazy(() => import("../views/ui/Home.jsx"));
 const About = lazy(() => import("../views/ui/About.jsx"));
 const Contact = lazy(() => import("../views/ui/Contact.jsx"));
+const MemberAbout = lazy(() => import("../views/ui/MemberAbout.jsx"));
+const MemberContact = lazy(() => import("../views/ui/MemberContact.jsx"));
 const Profile = lazy(() => import("../views/ui/Profile.jsx"));
 const ChangePassword = lazy(() => import("../views/ui/ChangePassword.jsx"));
 const ForgetPassword = lazy(() => import("../views/ui/ForgetPassword.jsx"));
@@ -74,6 +76,8 @@ const ThemeRoutes = [
     element: <FullLayoutMember />,
     children: [
       { path: "/member", exact: true, element: <Member /> },
+      { path: "/member/about", exact: true, element: <MemberAbout /> },
+      { path: "/member/contact", exact: true, element: <MemberContact /> },
       { path: "/addflock", exact: true, element: <AddFlock /> },
       { path: "/addfarm", exact: true, element: <AddFarm /> },
       { path: "/managefarm", exact: true, element: <ManageFarm /> },
