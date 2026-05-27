@@ -10,18 +10,11 @@ const getAiApiUrl = () => {
   return `${baseUrl.replace(/\/?$/, "/")}ai/`;
 };
 
-const examples = [
-  "Total sales",
-  "Profit or loss",
-  "Current birds",
-  "Average FCR",
-];
-
 const initialMessages = [
   {
     id: "intro",
     sender: "bot",
-    text: "Ask a question about your farm records.",
+    text: "Ask about your farm records. I can handle rough English, for example: “profit for first flock”, “my total things”, “sales this month”, or “current birds”.",
   },
 ];
 
@@ -80,11 +73,16 @@ const FarmerAiChatbot = () => {
         err?.response?.data?.error ||
         err?.response?.data?.details ||
         "I could not answer that. Try asking about sales, purchases, birds, mortality, feed, weight, or FCR.";
+      const suggestion = err?.response?.data?.suggestion;
 
       setMessages((prev) =>
         prev.map((message) =>
           message.id === loadingId
-            ? { ...message, text: apiError, status: "error" }
+            ? {
+                ...message,
+                text: suggestion ? `${apiError}\n\nTry this: ${suggestion}` : apiError,
+                status: "error",
+              }
             : message
         )
       );
@@ -139,19 +137,6 @@ const FarmerAiChatbot = () => {
             ))}
           </div>
 
-          <div className="farmer-ai-examples" aria-label="Example questions">
-            {examples.map((example) => (
-              <button
-                key={example}
-                type="button"
-                onClick={() => askQuestion(example)}
-                disabled={isSending}
-              >
-                {example}
-              </button>
-            ))}
-          </div>
-
           <form className="farmer-ai-form" onSubmit={handleSubmit}>
             <label htmlFor="farmer-ai-question">Ask a question</label>
             <div>
@@ -159,7 +144,7 @@ const FarmerAiChatbot = () => {
                 id="farmer-ai-question"
                 value={draft}
                 onChange={(event) => setDraft(event.target.value)}
-                placeholder="Example: What is my total feed consumed?"
+                placeholder="Example: what is my total things i have?"
                 rows={2}
               />
               <Button type="submit" disabled={isSending || !draft.trim()}>

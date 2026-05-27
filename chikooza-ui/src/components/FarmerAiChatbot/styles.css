@@ -54,7 +54,7 @@
 .farmer-ai-chat {
   border-radius: 1rem;
   display: grid;
-  grid-template-rows: auto minmax(420px, 1fr) auto auto;
+  grid-template-rows: auto minmax(420px, 1fr) auto;
   min-height: min(760px, calc(100vh - 150px));
   overflow: hidden;
 }
@@ -100,6 +100,7 @@
 .farmer-ai-message p {
   line-height: 1.6;
   margin: 0;
+  white-space: pre-wrap;
 }
 
 .farmer-ai-message-bot {
@@ -113,31 +114,6 @@
   align-self: flex-end;
   background: #b42318;
   color: #ffffff;
-}
-
-.farmer-ai-examples {
-  background: #ffffff;
-  border-top: 1px solid #f0ddd8;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  padding: 0.85rem 1rem;
-}
-
-.farmer-ai-examples button {
-  background: #fff1ed;
-  border: 1px solid #efd7d1;
-  border-radius: 999px;
-  color: #9f201d;
-  cursor: pointer;
-  font-weight: 750;
-  padding: 0.45rem 0.75rem;
-}
-
-.farmer-ai-examples button:hover,
-.farmer-ai-examples button:focus {
-  background: #ffffff;
-  border-color: #d9aaa1;
 }
 
 .farmer-ai-form {

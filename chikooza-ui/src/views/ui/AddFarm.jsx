@@ -7,8 +7,36 @@ import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import Modal from 'react-bootstrap/Modal';
 
+const FARM_DRAFT_KEY = "chikooza-add-farm-draft";
+
+const farmSteps = [
+  { title: "Farm", helper: "Name and shed count" },
+  { title: "Location", helper: "Address and map point" },
+  { title: "Review", helper: "Check and save" },
+];
+
+const emptyFarmDraft = {
+  farmname: '',
+  address: '',
+  cityorvillage: '',
+  pincode: '',
+  country: 0,
+  numberofsheds: '',
+  state: 0,
+  coordinates: null,
+};
+
+const readFarmDraft = () => {
+  try {
+    return { ...emptyFarmDraft, ...JSON.parse(localStorage.getItem(FARM_DRAFT_KEY) || "{}") };
+  } catch {
+    return emptyFarmDraft;
+  }
+};
+
 const AddFarm = () => {
   const navigate = useNavigate();
+  const [farmStep, setFarmStep] = useState(0);
   const [show, setShow] = useState(false);
   const [quardinatesModel, setQuardinatesModel] = useState(false);
   // U: OLD: let [quardinates, setQuardinates] = useState(...)
@@ -27,7 +55,7 @@ const AddFarm = () => {
   let [country, setCountry] = useState([]);
   let [state, setState] = useState([]);
   let [loading, setLoading] = useState(false);
-  let [addData, setAddData] = useState({ farmname: '', address: '', cityorvillage: '', pincode: '', country: 0, numberofsheds: '', state: 0, coordinates: null });
+  let [addData, setAddData] = useState(readFarmDraft);
   let [farmnameError, setFarmnameError] = useState(null);
   let [addressError, setAddressError] = useState(null);
   let [cityorvillageError, setCityorvillageError] = useState(null);
@@ -38,6 +66,10 @@ const AddFarm = () => {
   let [err, setErr] = useState('');
   // U: OLD: let error = 0;
   // U: NEW: validation state is local to save() so stale renders cannot affect submission.
+
+  useEffect(() => {
+    localStorage.setItem(FARM_DRAFT_KEY, JSON.stringify(addData));
+  }, [addData]);
 
   useEffect(() => {
     let url = `${apiPath}state/`;
@@ -81,6 +113,7 @@ const AddFarm = () => {
       let url = `${apiPath}farm/`;
       // U: OLD: config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
       axios.post(url, farm, getAuthConfig()).then((res) => {
+        localStorage.removeItem(FARM_DRAFT_KEY);
         setLoading(false);
         setShow(true);
         setTimeout(successMsg, 3000);
@@ -127,6 +160,12 @@ const AddFarm = () => {
   let closeAll = () => {
     navigate('/member')
   }
+  const goNextStep = () => {
+    setFarmStep((currentStep) => Math.min(currentStep + 1, farmSteps.length - 1));
+  };
+  const goPreviousStep = () => {
+    setFarmStep((currentStep) => Math.max(currentStep - 1, 0));
+  };
   return (
     <Row>
       <Modal show={quardinatesModel} backdrop="static" keyboard={false} >
@@ -162,82 +201,126 @@ const AddFarm = () => {
                 <div className={contentArea}>
                   <div className='gridmargin'>
                     {(err !== '') && <Alert color="danger">{err}</Alert>}
+                    <div className="form-stepper" aria-label="Farm setup steps">
+                      {farmSteps.map((step, index) => (
+                        <button
+                          key={step.title}
+                          type="button"
+                          className={index === farmStep ? "is-active" : index < farmStep ? "is-complete" : ""}
+                          onClick={() => setFarmStep(index)}
+                        >
+                          <span>{index + 1}</span>
+                          <strong>{step.title}</strong>
+                          <small>{step.helper}</small>
+                        </button>
+                      ))}
+                    </div>
                     <Form onSubmit={save}>
-                      <FormGroup>
-                        <Label for="exampleName">Farm Name</Label>
-                        <div className="input-group input-group">
-                          <input onChange={farmnameChange} value={addData.farmname} name="farmname" placeholder="Farm Name" type="text" className="form-control" aria-label="Farm Name" aria-describedby="basic-addon1" />
+                      {farmStep === 0 && (
+                        <>
+                          <FormGroup>
+                            <Label for="exampleName">Farm Name</Label>
+                            <div className="input-group input-group">
+                              <input onChange={farmnameChange} value={addData.farmname} name="farmname" placeholder="Farm Name" type="text" className="form-control" aria-label="Farm Name" aria-describedby="basic-addon1" />
+                            </div>
+                            <small id="passwordHelp" className="text-danger">{farmnameError}</small>
+                          </FormGroup>
+                          <FormGroup>
+                            <Label for="exampleMobile">No. of sheds</Label>
+                            <div className="input-group input-group">
+                              <input onChange={numberofshedsChange} value={addData.numberofsheds} name="numberofsheds" placeholder="No. of sheds" type="number" className="form-control" aria-label="No. of sheds" aria-describedby="basic-addon1" />
+                            </div>
+                            <small id="passwordHelp" className="text-danger">{numberofshedsError}</small>
+                          </FormGroup>
+                        </>
+                      )}
+                      {farmStep === 1 && (
+                        <>
+                          <FormGroup>
+                            <Label for="exampleEmail">Address</Label>
+                            <div className="input-group input-group">
+                              <input onChange={addressChange} name="address" value={addData.address} placeholder="Address" type="text" className="form-control" aria-label="Address" aria-describedby="basic-addon1" />
+                            </div>
+                            <small id="passwordHelp" className="text-danger">{addressError}</small>
+                          </FormGroup>
+                          <FormGroup>
+                            <Label for="exampleCityOrVillage">City or Village</Label>
+                            <div className="input-group input-group">
+                              <input onChange={cityorvillageChange} name="cityorvillage" value={addData.cityorvillage} placeholder="City or Village" type="text" className="form-control" aria-label="City or Village" aria-describedby="basic-addon1" />
+                            </div>
+                            <small id="passwordHelp" className="text-danger">{cityorvillageError}</small>
+                          </FormGroup>
+                          <FormGroup>
+                            <Label for="exampleMobile">Pincode</Label>
+                            <div className="input-group input-group">
+                              <input onChange={pincodeChange} value={addData.pincode} name="pincode" placeholder="Pincode" type="text" className="form-control" aria-label="Pincode" aria-describedby="basic-addon1" />
+                            </div>
+                            <small id="passwordHelp" className="text-danger">{pincodeError}</small>
+                          </FormGroup>
+                          <FormGroup>
+                            <Label for="country">Country</Label>
+                            <Input id="country" onChange={countryChange} value={addData.country} name="country" type="select">
+                              <option value="0" disabled>Select Country</option>
+                              {
+                                country.map(item =>
+                                  <option key={item.public_id} value={item.public_id}>{item.name}</option>
+                                )
+                              }
+                            </Input>
+                            <small id="passwordHelp" className="text-danger">{countryError}</small>
+                          </FormGroup>
+                          <FormGroup>
+                            <Label for="state">State</Label>
+                            <Input id="state" onChange={stateChange} value={addData.state} name="state" type="select">
+                              <option value="0" disabled={true}>Select State</option>
+                              {
+                                state.map(item =>
+                                  <option key={item.public_id} value={item.public_id}>{item.name}</option>
+                                )
+                              }
+                            </Input>
+                            <small id="passwordHelp" className="text-danger">{stateError}</small>
+                          </FormGroup>
+                          <FormGroup>
+                            <Label for="exampleEmail">Coordinates</Label>
+                            <div className="input-group input-group">
+                              <input name="coordinates" value={addData.coordinates || ""} placeholder="Coordinates" className="form-control" aria-label="Username" aria-describedby="basic-addon1" disabled />
+                              <span onClick={() => setQuardinatesModel(true)} className="input-group-text location" style={{ color: '#fd5c63' }} id="basic-addon1"><FaMapMarkerAlt></FaMapMarkerAlt></span>
+                            </div>
+                          </FormGroup>
+                        </>
+                      )}
+                      {farmStep === 2 && (
+                        <div className="form-review-card">
+                          <span>Review farm</span>
+                          <dl>
+                            <div><dt>Name</dt><dd>{addData.farmname || "Not added"}</dd></div>
+                            <div><dt>Sheds</dt><dd>{addData.numberofsheds || "Not added"}</dd></div>
+                            <div><dt>Address</dt><dd>{addData.address || "Not added"}</dd></div>
+                            <div><dt>City/Village</dt><dd>{addData.cityorvillage || "Not added"}</dd></div>
+                            <div><dt>Pincode</dt><dd>{addData.pincode || "Not added"}</dd></div>
+                            <div><dt>Coordinates</dt><dd>{addData.coordinates || "Not added"}</dd></div>
+                          </dl>
                         </div>
-                        <small id="passwordHelp" className="text-danger">{farmnameError}</small>
-                      </FormGroup>
-                      <FormGroup>
-                        <Label for="exampleEmail">Address</Label>
-                        <div className="input-group input-group">
-                          <input onChange={addressChange} name="address" value={addData.address} placeholder="Address" type="text" className="form-control" aria-label="Address" aria-describedby="basic-addon1" />
-                        </div>
-                        <small id="passwordHelp" className="text-danger">{addressError}</small>
-                      </FormGroup>
-                      <FormGroup>
-                        <Label for="exampleCityOrVillage">City or Village</Label>
-                        <div className="input-group input-group">
-                          <input onChange={cityorvillageChange} name="cityorvillage" value={addData.cityorvillage} placeholder="City or Village" type="text" className="form-control" aria-label="City or Village" aria-describedby="basic-addon1" />
-                        </div>
-                        <small id="passwordHelp" className="text-danger">{cityorvillageError}</small>
-                      </FormGroup>
-                      <FormGroup>
-                        <Label for="exampleMobile">Pincode</Label>
-                        <div className="input-group input-group">
-                          <input onChange={pincodeChange} value={addData.pincode} name="pincode" placeholder="Pincode" type="text" className="form-control" aria-label="Pincode" aria-describedby="basic-addon1" />
-                        </div>
-                        <small id="passwordHelp" className="text-danger">{pincodeError}</small>
-                      </FormGroup>
-                      <FormGroup>
-                        <Label for="country">Country</Label>
-                        <Input id="country" onChange={countryChange} value={addData.country} name="country" type="select">
-                          <option value="0" disabled>Select Country</option>
-                          {
-                            country.map(item =>
-                              <option key={item.public_id} value={item.public_id}>{item.name}</option>
-                            )
-                          }
-                        </Input>
-                        <small id="passwordHelp" className="text-danger">{countryError}</small>
-                      </FormGroup>
-                      <FormGroup>
-                        <Label for="state">State</Label>
-                        <Input id="state" onChange={stateChange} value={addData.state} name="state" type="select">
-                          <option value="0" disabled={true}>Select State</option>
-                          {
-                            state.map(item =>
-                              <option key={item.public_id} value={item.public_id}>{item.name}</option>
-                            )
-                          }
-                        </Input>
-                        <small id="passwordHelp" className="text-danger">{stateError}</small>
-                      </FormGroup>
-                      <FormGroup>
-                        <Label for="exampleMobile">No. of sheds</Label>
-                        <div className="input-group input-group">
-                          <input onChange={numberofshedsChange} value={addData.numberofsheds} name="numberofsheds" placeholder="No. of sheds" type="number" className="form-control" aria-label="No. of sheds" aria-describedby="basic-addon1" />
-                        </div>
-                        <small id="passwordHelp" className="text-danger">{numberofshedsError}</small>
-                      </FormGroup>
-                      <FormGroup>
-                        <Label for="exampleEmail">Coordinates</Label>
-                        <div className="input-group input-group">
-                          <input name="coordinates" value={addData.coordinates} placeholder="Coordinates" className="form-control" aria-label="Username" aria-describedby="basic-addon1" disabled />
-                          <span onClick={() => setQuardinatesModel(true)} className="input-group-text location" style={{ color: '#fd5c63' }} id="basic-addon1"><FaMapMarkerAlt></FaMapMarkerAlt></span>
-                        </div>
-                      </FormGroup>
-                      {loading ?
-                        <Button className="btn" color="danger" type="submit" disabled  >
-                          Please wait...
-                          <span className="spinner-border spinner-border-sm" role="status" aria-hidden="true" />
-                        </Button>
-                        :
-                        <Button className="btn" color="danger" type="submit">Save</Button>
-                      }
-                      <Button className="btn ml-4" color="warning" type="button" onClick={closeAll} >Cancel</Button>
+                      )}
+                      <div className="form-wizard-actions">
+                        {farmStep > 0 && (
+                          <Button className="btn" color="secondary" type="button" onClick={goPreviousStep}>Back</Button>
+                        )}
+                        {farmStep < farmSteps.length - 1 && (
+                          <Button className="btn" color="danger" type="button" onClick={goNextStep}>Next</Button>
+                        )}
+                        {farmStep === farmSteps.length - 1 && (
+                          loading ?
+                            <Button className="btn" color="danger" type="submit" disabled  >
+                              Please wait...
+                              <span className="spinner-border spinner-border-sm" role="status" aria-hidden="true" />
+                            </Button>
+                            :
+                            <Button className="btn" color="danger" type="submit">Save</Button>
+                        )}
+                        <Button className="btn" color="warning" type="button" onClick={closeAll} >Cancel</Button>
+                      </div>
                     </Form>
                   </div>
                 </div>

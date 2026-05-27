@@ -3,6 +3,8 @@ from dataclasses import dataclass
 
 import httpx
 
+from common.groq_client import GroqChatClient
+
 PUBLIC_SITE_CONTEXT = """
 Chikooza is a poultry farm management MVP for farmers and farm operators.
 It helps users register/login, manage farms and flocks, record daily flock data,
@@ -57,6 +59,11 @@ class PublicSiteAssistant:
             "GROQ_API_BASE_URL",
             "https://api.groq.com/openai/v1",
         ).rstrip("/")
+        self.groq_client = GroqChatClient(
+            base_url=self.groq_base_url,
+            model=self.groq_model,
+            fallback_model=os.getenv("GROQ_FALLBACK_MODEL", ""),
+        )
         self.ollama_base_url = os.getenv(
             "OLLAMA_BASE_URL", "http://localhost:11434"
         ).rstrip("/")
@@ -87,7 +94,7 @@ class PublicSiteAssistant:
         if self.provider != "auto":
             return "fallback"
 
-        if self.groq_api_key:
+        if self.groq_client.has_keys:
             return "groq"
 
         if self.ollama_base_url and self.ollama_model:
@@ -96,30 +103,20 @@ class PublicSiteAssistant:
         return "fallback"
 
     def _answer_with_groq(self, query_text: str) -> PublicAssistantResponse:
-        if not self.groq_api_key:
-            raise RuntimeError("GROQ_API_KEY is not configured.")
-
-        payload = {
-            "model": self.groq_model,
-            "messages": self._messages(query_text),
-            "temperature": 0.2,
-            "max_tokens": 420,
-        }
-        response = httpx.post(
-            f"{self.groq_base_url}/chat/completions",
-            headers={
-                "Authorization": f"Bearer {self.groq_api_key}",
-                "Content-Type": "application/json",
-            },
-            json=payload,
+        # U: OLD: the public assistant posted directly with only GROQ_API_KEY.
+        # U: NEW: use the shared key-rotation client so public chat also keeps
+        # U: working when one free Groq key is rate-limited.
+        result = self.groq_client.chat(
+            self._messages(query_text),
+            model=self.groq_model,
+            temperature=0.2,
+            max_tokens=420,
             timeout=self.timeout,
         )
-        response.raise_for_status()
-        content = response.json()["choices"][0]["message"]["content"].strip()
         return PublicAssistantResponse(
-            result=content,
+            result=result.content,
             provider="groq",
-            model=self.groq_model,
+            model=result.model,
         )
 
     def _answer_with_ollama(self, query_text: str) -> PublicAssistantResponse:
