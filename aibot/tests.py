@@ -319,6 +319,66 @@ class ChikoozaModernAgentSecurityTests(SimpleTestCase):
         self.assertEqual(response["metric"], "ambiguous_flock")
         self.assertIn("Which flock", response["answer"])
 
+    def test_other_flock_followup_denies_when_only_one_exists(self):
+        service = ChikoozaTextToSQLService(user=self.user)
+        farm = SimpleNamespace(id=42, public_id=9001, name="Red Farm")
+        flock = SimpleNamespace(
+            id=77,
+            public_id=5001,
+            name="Alpha Batch",
+            farm_id=42,
+            farm=farm,
+        )
+        service._farms = lambda: [farm]
+        service._flocks = lambda: [flock]
+        history = [
+            {"role": "user", "content": "show the data for that flock"},
+            {"role": "assistant", "content": "Your flocks:\n1. Alpha Batch"},
+        ]
+
+        response = service.answer("any other flock i have or no?", history=history)
+
+        self.assertEqual(response["status"], "success")
+        self.assertEqual(response["metric"], "other_flocks")
+        self.assertIn("only have one flock", response["answer"])
+        self.assertIn("Alpha Batch", response["answer"])
+
+    def test_other_flock_followup_lists_remaining_flocks(self):
+        service = ChikoozaTextToSQLService(user=self.user)
+        red_farm = SimpleNamespace(id=42, public_id=9001, name="Red Farm")
+        blue_farm = SimpleNamespace(id=43, public_id=9002, name="Blue Farm")
+        alpha = SimpleNamespace(
+            id=77,
+            public_id=5001,
+            name="Alpha Batch",
+            farm_id=42,
+            farm=red_farm,
+            flock_size=100,
+            actual_birds=95,
+        )
+        beta = SimpleNamespace(
+            id=78,
+            public_id=5002,
+            name="Beta Batch",
+            farm_id=43,
+            farm=blue_farm,
+            flock_size=200,
+            actual_birds=190,
+        )
+        service._farms = lambda: [red_farm, blue_farm]
+        service._flocks = lambda: [alpha, beta]
+        history = [
+            {"role": "user", "content": "show Alpha Batch details"},
+            {"role": "assistant", "content": "Your flocks:\n1. Alpha Batch"},
+        ]
+
+        response = service.answer("any other flock i have?", history=history)
+
+        self.assertEqual(response["status"], "success")
+        self.assertEqual(response["metric"], "other_flocks")
+        self.assertIn("Beta Batch", response["answer"])
+        self.assertNotIn("Alpha Batch", response["answer"])
+
     def test_list_formatters_return_all_farm_and_flock_rows(self):
         service = ChikoozaTextToSQLService(user=self.user)
 

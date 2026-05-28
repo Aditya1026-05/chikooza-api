@@ -344,6 +344,10 @@ class ChikoozaTextToSQLService:
         self.executor = TenantSafeSQLExecutor()
 
     def answer(self, question: str, history: list | None = None) -> dict:
+        other_entity_response = self._other_entity_response(question, history=history)
+        if other_entity_response:
+            return other_entity_response
+
         entity_filter = self.resolve_entity_filters(question, history=history)
         if entity_filter.missing_response:
             return entity_filter.missing_response
@@ -869,6 +873,58 @@ class ChikoozaTextToSQLService:
         value = rows[0] if rows else {}
         return value.get("result", value)
 
+    def _other_entity_response(
+        self, question: str, history: list | None = None
+    ) -> dict | None:
+        query = normalize_ai_query(question)
+        label = self._other_entity_label(query)
+        if not label:
+            return None
+
+        objects = self._flocks() if label == "flock" else self._farms()
+        if not objects:
+            answer = (
+                f"You do not have any {label}s saved yet."
+                if label == "flock"
+                else "You do not have any farms saved yet."
+            )
+            return self._direct_entity_answer(label, answer, [], f"other_{label}s")
+
+        referenced = self._latest_entity_from_history(history, label, objects)
+        remaining = [
+            obj
+            for obj in objects
+            if not referenced or self._object_id(obj) != self._object_id(referenced)
+        ]
+
+        if not remaining:
+            name = (
+                self._object_name(referenced)
+                if referenced
+                else self._object_name(objects[0])
+            )
+            answer = (
+                f"No, you only have one {label}: {name}."
+                if name
+                else f"No, you only have one {label}."
+            )
+            return self._direct_entity_answer(label, answer, [], f"other_{label}s")
+
+        rows = [
+            (
+                self._object_to_flock_row(obj)
+                if label == "flock"
+                else self._object_to_farm_row(obj)
+            )
+            for obj in remaining
+        ]
+        answer = (
+            self._format_flock_list(rows)
+            if label == "flock"
+            else self._format_farm_list(rows)
+        )
+        return self._direct_entity_answer(label, answer, rows, f"other_{label}s")
+
     def _format_farm_list(self, rows: list[dict]) -> str:
         rows = [row for row in rows if row.get("farm_id")]
         if not rows:
@@ -917,6 +973,16 @@ class ChikoozaTextToSQLService:
                 f"{f' ({detail_text})' if detail_text else ''}"
             )
         return "Your flocks:\n" + "\n".join(lines)
+
+    def _other_entity_label(self, query: str) -> str | None:
+        has_other = bool(re.search(r"\b(?:other|another|any other|else)\b", query))
+        if not has_other:
+            return None
+        if re.search(r"\bflocks?\b", query):
+            return "flock"
+        if re.search(r"\bfarms?\b", query):
+            return "farm"
+        return None
 
     def _resolve_farm_reference(self, query: str, history: list | None = None):
         farms = self._farms()
@@ -1111,6 +1177,46 @@ class ChikoozaTextToSQLService:
             "route": TEXT_TO_SQL,
             "metric": f"ambiguous_{label}",
             "engine": "entity_filter",
+        }
+
+    def _direct_entity_answer(
+        self, label: str, answer: str, rows: list, metric: str
+    ) -> dict:
+        return {
+            "status": "success",
+            "data": rows,
+            "answer": answer,
+            "message": answer,
+            "rows": rows,
+            "query": None,
+            "params": [],
+            "route": TEXT_TO_SQL,
+            "metric": metric,
+            "engine": "entity_filter",
+        }
+
+    def _object_to_flock_row(self, flock) -> dict:
+        farm = getattr(flock, "farm", None)
+        return {
+            "flock_id": self._object_id(flock),
+            "flock_name": self._object_name(flock),
+            "farm_id": self._flock_farm_id(flock),
+            "farm_name": self._object_name(farm) if farm else "",
+            "hatch_date": getattr(flock, "hatch_date", None),
+            "flock_size": getattr(flock, "flock_size", None),
+            "actual_birds": getattr(flock, "actual_birds", None),
+            "flock_status": getattr(flock, "status", None),
+            "breed_name": getattr(getattr(flock, "breed", None), "name", None),
+        }
+
+    def _object_to_farm_row(self, farm) -> dict:
+        return {
+            "farm_id": self._object_id(farm),
+            "farm_name": self._object_name(farm),
+            "farm_city": getattr(farm, "city", None),
+            "farm_pin": getattr(farm, "pin", None),
+            "shed_count": getattr(farm, "shed_count", None),
+            "farm_status": getattr(farm, "status", None),
         }
 
     def _farms(self):
