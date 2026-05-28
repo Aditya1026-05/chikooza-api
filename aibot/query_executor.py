@@ -1,4 +1,5 @@
 from .intent_classifier import ChikoozaIntent
+from .insight_service import ChikoozaFarmInsightService
 
 
 class ChikoozaSafeQueryExecutor:
@@ -12,6 +13,10 @@ class ChikoozaSafeQueryExecutor:
     def __init__(self, deterministic_service, entity_resolver):
         self.deterministic_service = deterministic_service
         self.entity_resolver = entity_resolver
+        self.insight_service = ChikoozaFarmInsightService(
+            getattr(deterministic_service, "user", None),
+            deterministic_service=deterministic_service,
+        )
 
     def execute(
         self, intent: ChikoozaIntent, question: str, history: list | None = None
@@ -47,6 +52,16 @@ class ChikoozaSafeQueryExecutor:
                 "route": "TEXT_TO_SQL",
                 "metric": "conversation",
             }
+
+        if intent.intent == "capability_help":
+            return self.insight_service.capability_answer()
+
+        if intent.intent == "farm_progress_insight":
+            return self.insight_service.answer(
+                question,
+                history=history,
+                intent=intent,
+            )
 
         entity_resolution = self.entity_resolver.resolve(intent, question, history)
         if entity_resolution.response:

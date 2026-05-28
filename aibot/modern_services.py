@@ -150,6 +150,27 @@ class ChikoozaQueryRouter:
         "remaining",
         "else",
         "ones",
+        "progress",
+        "progressing",
+        "performance",
+        "performing",
+        "improve",
+        "improvement",
+        "advice",
+        "advise",
+        "insight",
+        "insights",
+        "assess",
+        "evaluate",
+        "review",
+        "risk",
+        "risks",
+        "problem",
+        "problems",
+        "issue",
+        "issues",
+        "healthy",
+        "health",
     }
     RAG_KEYWORDS = {
         "overview",
@@ -166,6 +187,16 @@ class ChikoozaQueryRouter:
         "why",
         "recommend",
         "suggest",
+        "advice",
+        "advise",
+        "improve",
+        "improvement",
+        "progress",
+        "progressing",
+        "performance",
+        "performing",
+        "assess",
+        "evaluate",
     }
     DESTRUCTIVE_KEYWORDS = {
         "drop",
@@ -197,6 +228,9 @@ class ChikoozaQueryRouter:
 
         if self._mentions_other_user(query, user_id):
             return BLOCKED
+
+        if self._looks_like_farmer_ai_chat(query):
+            return TEXT_TO_SQL
 
         if self._looks_like_account_summary(query):
             return TEXT_TO_SQL
@@ -251,6 +285,25 @@ class ChikoozaQueryRouter:
         return any(word in query for word in summary_words) and any(
             word in query for word in ownership_words
         )
+
+    def _looks_like_farmer_ai_chat(self, query: str) -> bool:
+        # U: NEW: allow conversational farmer questions to reach the intent
+        # U: layer instead of being blocked before Groq can understand intent.
+        patterns = (
+            r"\b(?:who are you|what can you do|how can you help|help me|"
+            r"what should i ask|how to use|what do you do)\b",
+            r"\bhow\s+(?:am i|are we|is my|is this|is that|is it)\b",
+            r"\bwhat\s+do\s+you\s+think\b",
+            r"\bwhat\s+should\s+i\b",
+            r"\b(?:what next|now what|next steps?|what to do next|tell me what to do)\b",
+            r"\b(?:explain|understand)\s+(?:this|that|it)\b",
+            r"\b(?:is this enough|is that enough|is it enough)\b",
+            r"\b(?:farm|flock|batch|birds?|it|this|that)\b.*"
+            r"\b(?:good|bad|better|worse|okay|ok|progressing|performing)\b",
+            r"\b(?:good|bad|better|worse|okay|ok|progressing|performing)\b.*"
+            r"\b(?:farm|flock|batch|birds?|it|this|that)\b",
+        )
+        return any(re.search(pattern, query) for pattern in patterns)
 
 
 class TenantSafeSQLExecutor:

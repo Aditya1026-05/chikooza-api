@@ -27,6 +27,8 @@ ALLOWED_INTENTS = {
     "feed_consumed",
     "average_weight",
     "average_fcr",
+    "farm_progress_insight",
+    "capability_help",
     "other_entity",
     "greeting",
     "unsupported",
@@ -125,6 +127,9 @@ Rules:
 - Profit/loss/net/earning use profit_loss.
 - Deaths/mortality/died use mortality.
 - Feed use feed_consumed. Weight use average_weight. FCR/feed conversion use average_fcr.
+- Progress, performance, health, advice, "how am I doing", "is this good",
+  "what should I improve", or similar farm-record interpretation uses farm_progress_insight.
+- "Who are you", "what can you do", "help", or usage questions use capability_help.
 - If not related to farm records, use unsupported.
 
 Owned context:
@@ -189,6 +194,7 @@ Return JSON only.
         if not entity_type and (
             self._looks_like_other_query(query)
             or (self._is_detail_query(query) and self._has_pronoun_reference(query))
+            or (self._is_insight_query(query) and self._has_pronoun_reference(query))
         ):
             entity_type = self._latest_entity_type_from_history(history) or ""
         scope = "other" if self._looks_like_other_query(query) else "current"
@@ -196,12 +202,21 @@ Return JSON only.
 
         if self._is_greeting(query):
             return self._intent("greeting", source=source)
+        if self._is_capability_query(query):
+            return self._intent("capability_help", source=source)
         if self._looks_like_other_query(query):
             return self._intent(
                 "other_entity",
                 entity_type=entity_type,
                 entity_reference=entity_reference,
                 scope="other",
+                source=source,
+            )
+        if self._is_insight_query(query):
+            return self._intent(
+                "farm_progress_insight",
+                entity_type=entity_type,
+                entity_reference=entity_reference,
                 source=source,
             )
         if self._is_summary_query(query):
@@ -387,6 +402,34 @@ Return JSON only.
                 "what do i have",
             )
         )
+
+    def _is_capability_query(self, query: str) -> bool:
+        return bool(
+            re.search(
+                r"\b(?:who are you|what can you do|how can you help|help me|help|"
+                r"what should i ask|how to use|what do you do)\b",
+                query,
+            )
+        )
+
+    def _is_insight_query(self, query: str) -> bool:
+        insight_patterns = (
+            r"\b(?:progress|progressing|performance|performing|doing|improve|"
+            r"improvement|advice|advise|suggest|recommend|recommendation|"
+            r"analyse|analyze|analysis|insight|insights|assess|evaluate|"
+            r"review|risk|risks|problem|problems|issue|issues|healthy|health)\b",
+            r"\b(?:good|bad|better|worse|okay|ok)\b.*\b(?:farm|flock|batch|birds?|it|this|that)\b",
+            r"\b(?:farm|flock|batch|birds?|it|this|that)\b.*\b(?:good|bad|better|worse|okay|ok)\b",
+            r"\bhow\s+(?:am i|are we|is my|is this|is that|is it)\b",
+            r"\bwhat\s+do\s+you\s+think\b",
+            r"\bwhat\s+should\s+i\b",
+            r"\b(?:what next|now what|next steps?|what to do next|tell me what to do)\b",
+            r"\b(?:explain|understand)\s+(?:this|that|it)\b",
+            r"\b(?:is this enough|is that enough|is it enough)\b",
+            r"\bwhat\s+is\s+wrong\b",
+            r"\banything\s+(?:wrong|bad|to improve)\b",
+        )
+        return any(re.search(pattern, query) for pattern in insight_patterns)
 
     def _is_count_query(self, query: str) -> bool:
         return any(

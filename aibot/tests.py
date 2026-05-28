@@ -7,6 +7,7 @@ from common.groq_client import GroqChatClient
 
 from .intent_agent import ChikoozaIntentAgentService
 from .intent_classifier import ChikoozaIntent, ChikoozaIntentClassifier
+from .insight_service import ChikoozaFarmInsightService
 from .llm_sql import (
     ChikoozaLLMTextToSQLService,
     ChikoozaSQLPromptBuilder,
@@ -78,6 +79,13 @@ class ChikoozaModernAgentSecurityTests(SimpleTestCase):
         route = router.route("hello", user_id=7)
 
         self.assertEqual(route, CONVERSATION)
+
+    def test_router_allows_conversational_farm_insight_questions(self):
+        router = ChikoozaQueryRouter()
+
+        route = router.route("how do you think my farm is progressing", user_id=7)
+
+        self.assertEqual(route, TEXT_TO_SQL)
 
     def test_vague_total_things_maps_to_summary_plan(self):
         service = ChikoozaTextToSQLService(user=self.user)
@@ -630,6 +638,105 @@ class FakeIntentClassifier:
         return self.intent
 
 
+class FakeDeterministicSnapshotService:
+    def __init__(self, user):
+        self.user = user
+        self.questions = []
+
+    def answer(self, question, history=None):
+        self.questions.append(question)
+        if "summary" in question:
+            return {
+                "status": "success",
+                "data": {
+                    "farm_count": 1,
+                    "flock_count": 1,
+                    "current_birds": 0,
+                    "total_sales": 1,
+                    "total_purchases": 0,
+                    "total_feed_consumed": 0,
+                    "total_mortality": 0,
+                    "average_fcr": 0,
+                },
+                "answer": (
+                    "Your account summary: 1 farms, 1 flocks, 0 current birds, "
+                    "Rs. 1.00 sales, Rs. 0.00 purchases, 0.00 kg feed consumed, "
+                    "0 total mortality, and 0.00 average FCR."
+                ),
+                "message": "summary",
+                "rows": [
+                    {
+                        "farm_count": 1,
+                        "flock_count": 1,
+                        "current_birds": 0,
+                        "total_sales": 1,
+                        "total_purchases": 0,
+                        "total_feed_consumed": 0,
+                        "total_mortality": 0,
+                        "average_fcr": 0,
+                    }
+                ],
+                "query": "SELECT summary",
+                "params": [7],
+                "route": TEXT_TO_SQL,
+                "metric": "farm_record_summary",
+            }
+        if "profit" in question or "loss" in question:
+            return {
+                "status": "success",
+                "data": {"result": 1},
+                "answer": (
+                    "Total sales: Rs. 1.00, total purchases: Rs. 0.00, "
+                    "flock cost: Rs. 0.00. Net result: Rs. 1.00 (profit)."
+                ),
+                "message": "profit",
+                "rows": [{"result": 1}],
+                "query": "SELECT profit",
+                "params": [7],
+                "route": TEXT_TO_SQL,
+                "metric": "profit_loss",
+            }
+        if "farms" in question:
+            return {
+                "status": "success",
+                "data": [{"farm_name": "Test Farm"}],
+                "answer": "Your farms:\n1. Test Farm (Pune, 411001), 1 sheds, active",
+                "message": "farms",
+                "rows": [{"farm_name": "Test Farm"}],
+                "query": "SELECT farms",
+                "params": [7],
+                "route": TEXT_TO_SQL,
+                "metric": "farm_list",
+            }
+        if "flocks" in question:
+            return {
+                "status": "success",
+                "data": [{"flock_name": "Test Flock"}],
+                "answer": "Your flocks:\n1. Test Flock (farm: Test Farm, size: 10)",
+                "message": "flocks",
+                "rows": [{"flock_name": "Test Flock"}],
+                "query": "SELECT flocks",
+                "params": [7],
+                "route": TEXT_TO_SQL,
+                "metric": "flock_list",
+            }
+        metric = "average_fcr" if "fcr" in question else "safe_metric"
+        return {
+            "status": "success",
+            "data": {"result": 0},
+            "answer": f"{question.title()}: 0.00.",
+            "message": "metric",
+            "rows": [{"result": 0}],
+            "query": "SELECT metric",
+            "params": [7],
+            "route": TEXT_TO_SQL,
+            "metric": metric,
+        }
+
+    def resolve_entity_filters(self, question, history=None):
+        return SimpleNamespace(farm_id=None, flock_id=None, missing_response=None)
+
+
 class FakeEntityResolver:
     def __init__(self, resolution=None):
         self.resolution = resolution or EntityResolution(
@@ -899,6 +1006,29 @@ class ChikoozaIntentArchitectureTests(SimpleTestCase):
     def setUp(self):
         self.user = SimpleNamespace(id=7, is_authenticated=True)
 
+    def test_rule_intent_classifier_detects_progress_insight(self):
+        classifier = ChikoozaIntentClassifier(
+            user=self.user,
+            groq_client=FakeGroqClient([]),
+        )
+
+        intent = classifier.classify(
+            "okay and now how do you think my farm is progressing"
+        )
+
+        self.assertEqual(intent.intent, "farm_progress_insight")
+        self.assertEqual(intent.entity_type, "farm")
+
+    def test_rule_intent_classifier_detects_capability_help(self):
+        classifier = ChikoozaIntentClassifier(
+            user=self.user,
+            groq_client=FakeGroqClient([]),
+        )
+
+        intent = classifier.classify("what can you do for me?")
+
+        self.assertEqual(intent.intent, "capability_help")
+
     def test_rule_intent_classifier_uses_history_for_pronoun_detail(self):
         classifier = ChikoozaIntentClassifier(
             user=self.user,
@@ -964,3 +1094,48 @@ class ChikoozaIntentArchitectureTests(SimpleTestCase):
         self.assertEqual(response["metric"], "total_sales")
         self.assertEqual(response["params"], [7, 42, 77])
         self.assertIn("total sales for first flock", response["canonical_question"])
+
+    def test_intent_agent_uses_safe_insight_for_conversational_progress(self):
+        deterministic = FakeDeterministicSnapshotService(user=self.user)
+        classifier = FakeIntentClassifier(
+            ChikoozaIntent(
+                intent="farm_progress_insight",
+                entity_type="farm",
+                source="test_intent",
+            )
+        )
+        agent = ChikoozaIntentAgentService(
+            user=self.user,
+            deterministic_service=deterministic,
+            classifier=classifier,
+        )
+
+        response = agent.answer("how do you think my farm is progressing?")
+
+        self.assertEqual(response["intent"], "farm_progress_insight")
+        self.assertEqual(response["metric"], "farm_progress_insight")
+        self.assertEqual(response["query"], None)
+        self.assertIn("cannot judge", response["answer"].lower())
+        self.assertIn("daily data", response["answer"].lower())
+        self.assertIn("show my farm summary", deterministic.questions)
+
+    def test_insight_service_can_use_groq_without_exposing_sql_authority(self):
+        client = FakeGroqClient(["Your farm has too little daily data to judge yet."])
+        deterministic = FakeDeterministicSnapshotService(user=self.user)
+        user = SimpleNamespace(id=7, is_authenticated=True, _meta=True)
+        deterministic.user = user
+        service = ChikoozaFarmInsightService(
+            user,
+            deterministic_service=deterministic,
+            groq_client=client,
+        )
+
+        response = service.answer("how am i doing?")
+
+        self.assertEqual(response["engine"], "safe_insight_groq")
+        self.assertEqual(
+            response["answer"], "Your farm has too little daily data to judge yet."
+        )
+        prompt = client.requests[0]["messages"][1]["content"].lower()
+        self.assertIn("safe farm snapshot", prompt)
+        self.assertNotIn("create sql", prompt)
