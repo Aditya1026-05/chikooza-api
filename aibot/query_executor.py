@@ -1,5 +1,6 @@
 from .intent_classifier import ChikoozaIntent
 from .insight_service import ChikoozaFarmInsightService
+from .multi_report_service import ChikoozaMultiReportService
 
 
 class ChikoozaSafeQueryExecutor:
@@ -17,6 +18,7 @@ class ChikoozaSafeQueryExecutor:
             getattr(deterministic_service, "user", None),
             deterministic_service=deterministic_service,
         )
+        self.multi_report_service = ChikoozaMultiReportService(deterministic_service)
 
     def execute(
         self, intent: ChikoozaIntent, question: str, history: list | None = None
@@ -58,6 +60,13 @@ class ChikoozaSafeQueryExecutor:
 
         if intent.intent == "farm_progress_insight":
             return self.insight_service.answer(
+                question,
+                history=history,
+                intent=intent,
+            )
+
+        if intent.intent == "multi_farm_report":
+            return self.multi_report_service.answer(
                 question,
                 history=history,
                 intent=intent,

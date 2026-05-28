@@ -211,7 +211,7 @@ class ChikoozaQueryRouter:
         "revoke",
     }
     GREETING_PATTERNS = (
-        r"^(hi|hello|hey|namaste|hii|helo|good morning|good afternoon|good evening)[!. ]*$",
+        r"^(hi|hello|hey|namaste|hii|helo|good morning|good afternoon|good evening)(?:[!. ]+.*)?$",
         r"^(thanks|thank you|ok|okay)[!. ]*$",
     )
 
@@ -1449,17 +1449,12 @@ class ChikoozaModernAgentService:
             }
 
         if route == CONVERSATION:
+            answer = self._conversation_answer(query_text)
             return {
                 "status": "success",
                 "data": None,
-                "answer": (
-                    "Hello. Ask me about your farm records, for example: 'show my farm summary', "
-                    "'what are my total sales?', 'current birds', 'profit or loss', or 'average FCR'."
-                ),
-                "message": (
-                    "Hello. Ask me about your farm records, for example: 'show my farm summary', "
-                    "'what are my total sales?', 'current birds', 'profit or loss', or 'average FCR'."
-                ),
+                "answer": answer,
+                "message": answer,
                 "rows": [],
                 "query": None,
                 "route": route,
@@ -1478,6 +1473,16 @@ class ChikoozaModernAgentService:
             ),
             "route": route,
         }
+
+    def _conversation_answer(self, query_text: str) -> str:
+        query = normalize_ai_query(query_text)
+        if re.match(r"^(thanks|thank you|ok|okay)[!. ]*$", query):
+            return "Okay. Ask your next farm question whenever you want."
+        return (
+            "Hello. I can help with your own Chikooza farm records, including farms, flocks, "
+            "sales, purchases, daily data, mortality, feed, weight, FCR, profit/loss, and "
+            "farm-wise or flock-wise reports."
+        )
 
     def _build_sql_service(self):
         fallback = ChikoozaTextToSQLService(user=self.user)

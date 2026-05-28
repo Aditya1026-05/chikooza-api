@@ -14,6 +14,7 @@ from .llm_sql import (
     EntityResolution,
     OWNER_PARAM,
 )
+from .multi_report_service import ChikoozaMultiReportService
 from .modern_services import (
     BLOCKED,
     CONVERSATION,
@@ -77,8 +78,10 @@ class ChikoozaModernAgentSecurityTests(SimpleTestCase):
         router = ChikoozaQueryRouter()
 
         route = router.route("hello", user_id=7)
+        casual_route = router.route("hello whats up", user_id=7)
 
         self.assertEqual(route, CONVERSATION)
+        self.assertEqual(casual_route, CONVERSATION)
 
     def test_router_allows_conversational_farm_insight_questions(self):
         router = ChikoozaQueryRouter()
@@ -588,7 +591,7 @@ class ChikoozaModernAgentSecurityTests(SimpleTestCase):
 
         self.assertEqual(response["status"], "success")
         self.assertEqual(response["route"], CONVERSATION)
-        self.assertIn("farm summary", response["answer"])
+        self.assertIn("farm records", response["answer"])
 
     def test_summary_answer_is_not_reduced_to_feed_only(self):
         service = ChikoozaTextToSQLService(user=self.user)
@@ -735,6 +738,74 @@ class FakeDeterministicSnapshotService:
 
     def resolve_entity_filters(self, question, history=None):
         return SimpleNamespace(farm_id=None, flock_id=None, missing_response=None)
+
+
+class FakeMultiReportExecutor:
+    def execute(self, plan):
+        if plan.metric == "farm_list":
+            return [
+                {
+                    "farm_id": 42,
+                    "farm_name": "Test Farm",
+                    "farm_city": "Pune",
+                    "farm_pin": "411001",
+                    "shed_count": 2,
+                    "farm_status": True,
+                }
+            ]
+        if plan.metric == "flock_list":
+            return [
+                {
+                    "flock_id": 77,
+                    "flock_name": "Test Flock",
+                    "farm_id": 42,
+                    "farm_name": "Test Farm",
+                    "hatch_date": "2026-01-01",
+                    "flock_size": 100,
+                    "actual_birds": 95,
+                    "flock_status": True,
+                    "breed_name": "Broiler",
+                }
+            ]
+        if plan.metric == "profit_loss":
+            return [
+                {
+                    "total_sales": 1000,
+                    "total_purchases": 250,
+                    "flock_cost": 100,
+                    "result": 650,
+                }
+            ]
+        if plan.metric == "farm_count":
+            return [{"result": 1}]
+        if plan.metric == "flock_count":
+            return [{"result": 1}]
+        if plan.metric == "total_sales":
+            return [{"result": 1000}]
+        if plan.metric == "total_purchases":
+            return [{"result": 250}]
+        if plan.metric == "current_birds":
+            return [{"result": 95}]
+        if plan.metric == "mortality":
+            return [{"result": 5}]
+        if plan.metric == "feed_consumed":
+            return [{"result": 120.5}]
+        if plan.metric in {"average_weight", "fcr"}:
+            return [{"result": 1.6}]
+        if plan.metric == "farm_record_summary":
+            return [
+                {
+                    "farm_count": 1,
+                    "flock_count": 1,
+                    "current_birds": 95,
+                    "total_sales": 1000,
+                    "total_purchases": 250,
+                    "total_feed_consumed": 120.5,
+                    "total_mortality": 5,
+                    "average_fcr": 1.6,
+                }
+            ]
+        return [{"result": 0}]
 
 
 class FakeEntityResolver:
@@ -1029,6 +1100,18 @@ class ChikoozaIntentArchitectureTests(SimpleTestCase):
 
         self.assertEqual(intent.intent, "capability_help")
 
+    def test_rule_intent_classifier_detects_multi_part_report(self):
+        classifier = ChikoozaIntentClassifier(
+            user=self.user,
+            groq_client=FakeGroqClient([]),
+        )
+
+        intent = classifier.classify(
+            "tell me how many farms and flocks i have, all sales, and inside each farm flock all their stuff individually"
+        )
+
+        self.assertEqual(intent.intent, "multi_farm_report")
+
     def test_rule_intent_classifier_uses_history_for_pronoun_detail(self):
         classifier = ChikoozaIntentClassifier(
             user=self.user,
@@ -1139,3 +1222,41 @@ class ChikoozaIntentArchitectureTests(SimpleTestCase):
         prompt = client.requests[0]["messages"][1]["content"].lower()
         self.assertIn("safe farm snapshot", prompt)
         self.assertNotIn("create sql", prompt)
+
+    def test_multi_report_service_answers_compound_account_and_breakdown_query(self):
+        deterministic = ChikoozaTextToSQLService(user=self.user)
+        deterministic.executor = FakeMultiReportExecutor()
+        service = ChikoozaMultiReportService(deterministic)
+
+        response = service.answer(
+            "okay now tell me about how many flocks i have how many farms i have "
+            "and all the sales. and then tell me about inside each of the farm,flock "
+            "all their stuff individually"
+        )
+
+        self.assertEqual(response["status"], "success")
+        self.assertEqual(response["metric"], "multi_farm_report")
+        self.assertIn("Account totals", response["answer"])
+        self.assertIn("Farm Count: 1", response["answer"])
+        self.assertIn("Flock Count: 1", response["answer"])
+        self.assertIn("Total Sales: Rs. 1,000.00", response["answer"])
+        self.assertIn("Farm-wise details", response["answer"])
+        self.assertIn("Flock-wise details", response["answer"])
+        self.assertIn("Test Farm", response["answer"])
+        self.assertIn("Test Flock", response["answer"])
+
+    def test_intent_agent_runs_multi_report_before_single_summary(self):
+        deterministic = ChikoozaTextToSQLService(user=self.user)
+        deterministic.executor = FakeMultiReportExecutor()
+        agent = ChikoozaIntentAgentService(
+            user=self.user,
+            deterministic_service=deterministic,
+        )
+
+        response = agent.answer(
+            "how many flocks i have, how many farms i have and all the sales inside each flock"
+        )
+
+        self.assertEqual(response["intent"], "multi_farm_report")
+        self.assertEqual(response["metric"], "multi_farm_report")
+        self.assertIn("Flock-wise details", response["answer"])

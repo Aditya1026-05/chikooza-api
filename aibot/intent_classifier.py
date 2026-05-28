@@ -27,6 +27,7 @@ ALLOWED_INTENTS = {
     "feed_consumed",
     "average_weight",
     "average_fcr",
+    "multi_farm_report",
     "farm_progress_insight",
     "capability_help",
     "other_entity",
@@ -70,6 +71,15 @@ class ChikoozaIntentClassifier:
         )
 
     def classify(self, question: str, history: list | None = None) -> ChikoozaIntent:
+        query = self._normalize(question)
+        if self._is_multi_query(query):
+            return self._intent(
+                "multi_farm_report",
+                entity_type=self._entity_type_from_text(query),
+                entity_reference=self._entity_reference_from_text(query, "current"),
+                source="rule_multi",
+            )
+
         provider = os.getenv("AIBOT_INTENT_PROVIDER", "auto").strip().lower()
         if provider in {"off", "false", "rule", "rules", "deterministic"}:
             return self._rule_classify(question, history=history, source="rule")
@@ -127,6 +137,8 @@ Rules:
 - Profit/loss/net/earning use profit_loss.
 - Deaths/mortality/died use mortality.
 - Feed use feed_consumed. Weight use average_weight. FCR/feed conversion use average_fcr.
+- If the farmer asks for multiple categories/metrics in one message, such as
+  counts plus sales plus farm/flock-wise details, use multi_farm_report.
 - Progress, performance, health, advice, "how am I doing", "is this good",
   "what should I improve", or similar farm-record interpretation uses farm_progress_insight.
 - "Who are you", "what can you do", "help", or usage questions use capability_help.
@@ -210,6 +222,13 @@ Return JSON only.
                 entity_type=entity_type,
                 entity_reference=entity_reference,
                 scope="other",
+                source=source,
+            )
+        if self._is_multi_query(query):
+            return self._intent(
+                "multi_farm_report",
+                entity_type=entity_type,
+                entity_reference=entity_reference,
                 source=source,
             )
         if self._is_insight_query(query):
@@ -377,7 +396,7 @@ Return JSON only.
         return re.sub(r"\s+", " ", (question or "").lower()).strip()
 
     def _is_greeting(self, query: str) -> bool:
-        return bool(re.match(r"^(hi|hello|hey|namaste|hii|helo)[!. ]*$", query))
+        return bool(re.match(r"^(hi|hello|hey|namaste|hii|helo)(?:[!. ]+.*)?$", query))
 
     def _looks_like_other_query(self, query: str) -> bool:
         return bool(
@@ -410,6 +429,49 @@ Return JSON only.
                 r"what should i ask|how to use|what do you do)\b",
                 query,
             )
+        )
+
+    def _is_multi_query(self, query: str) -> bool:
+        if not query:
+            return False
+
+        task_hits = 0
+        if self._is_count_query(query) and re.search(r"\bfarms?\b", query):
+            task_hits += 1
+        if self._is_count_query(query) and re.search(
+            r"\b(?:flocks?|batches?)\b", query
+        ):
+            task_hits += 1
+
+        task_patterns = (
+            r"\b(?:sale|sales|revenue|income|sold)\b",
+            r"\b(?:purchase|purchases|expense|expenses|spent|spend|costs?)\b",
+            r"\b(?:profit|loss|net|earning|earnings)\b",
+            r"\b(?:current birds?|birds? left|bird count)\b",
+            r"\b(?:mortality|deaths?|died|dead birds?)\b",
+            r"\bfeed\b",
+            r"\b(?:weight|body weight)\b",
+            r"\b(?:fcr|feed conversion)\b",
+        )
+        task_hits += sum(1 for pattern in task_patterns if re.search(pattern, query))
+
+        breakdown_hint = bool(
+            re.search(
+                r"\b(?:inside each|inside every|each of the|every farm|every flock|"
+                r"individually|individual|farm-wise|flock-wise|per farm|per flock|"
+                r"all their stuff|all details|complete report|full report)\b",
+                query,
+            )
+        )
+        connector_hint = bool(
+            re.search(r"\b(?:and|also|then|plus|along with)\b|,", query)
+        )
+        has_multiple_entities = bool(re.search(r"\bfarms?\b", query)) and bool(
+            re.search(r"\b(?:flocks?|batches?)\b", query)
+        )
+
+        return task_hits >= 2 and (
+            connector_hint or breakdown_hint or has_multiple_entities
         )
 
     def _is_insight_query(self, query: str) -> bool:
