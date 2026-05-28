@@ -251,6 +251,74 @@ class ChikoozaModernAgentSecurityTests(SimpleTestCase):
         self.assertEqual(response["metric"], "missing_flock")
         self.assertIn("Alpha Batch", response["answer"])
 
+    def test_followup_generic_flock_uses_only_owned_flock(self):
+        service = ChikoozaTextToSQLService(user=self.user)
+        farm = SimpleNamespace(id=42, public_id=9001, name="Red Farm")
+        flock = SimpleNamespace(
+            id=77,
+            public_id=5001,
+            name="Alpha Batch",
+            farm_id=42,
+            farm=farm,
+        )
+        service._farms = lambda: [farm]
+        service._flocks = lambda: [flock]
+        history = [
+            {"role": "user", "content": "total number of flocks i have"},
+            {"role": "assistant", "content": "Flock Count: 1."},
+        ]
+
+        plan = service.build_plan("i meant for the flock", history=history)
+
+        self.assertEqual(plan.metric, "flock_list")
+        self.assertEqual(plan.params, [7, 42, 77])
+
+    def test_followup_generic_flock_uses_history_when_multiple_exist(self):
+        service = ChikoozaTextToSQLService(user=self.user)
+        red_farm = SimpleNamespace(id=42, public_id=9001, name="Red Farm")
+        blue_farm = SimpleNamespace(id=43, public_id=9002, name="Blue Farm")
+        alpha = SimpleNamespace(
+            id=77,
+            public_id=5001,
+            name="Alpha Batch",
+            farm_id=42,
+            farm=red_farm,
+        )
+        beta = SimpleNamespace(
+            id=78,
+            public_id=5002,
+            name="Beta Batch",
+            farm_id=43,
+            farm=blue_farm,
+        )
+        service._farms = lambda: [red_farm, blue_farm]
+        service._flocks = lambda: [alpha, beta]
+        history = [
+            {"role": "user", "content": "show Beta Batch details"},
+            {"role": "assistant", "content": "Your flocks:\n1. Beta Batch"},
+        ]
+
+        plan = service.build_plan("sales for the same flock", history=history)
+
+        self.assertEqual(plan.metric, "total_sales")
+        self.assertEqual(plan.params, [7, 43, 78])
+
+    def test_followup_generic_flock_asks_clarification_when_ambiguous(self):
+        service = ChikoozaTextToSQLService(user=self.user)
+        red_farm = SimpleNamespace(id=42, public_id=9001, name="Red Farm")
+        blue_farm = SimpleNamespace(id=43, public_id=9002, name="Blue Farm")
+        service._farms = lambda: [red_farm, blue_farm]
+        service._flocks = lambda: [
+            SimpleNamespace(id=77, public_id=5001, name="Alpha Batch", farm_id=42),
+            SimpleNamespace(id=78, public_id=5002, name="Beta Batch", farm_id=43),
+        ]
+
+        response = service.answer("i meant for the flock", history=[])
+
+        self.assertEqual(response["status"], "success")
+        self.assertEqual(response["metric"], "ambiguous_flock")
+        self.assertIn("Which flock", response["answer"])
+
     def test_list_formatters_return_all_farm_and_flock_rows(self):
         service = ChikoozaTextToSQLService(user=self.user)
 
