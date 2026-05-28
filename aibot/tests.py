@@ -273,6 +273,34 @@ class ChikoozaModernAgentSecurityTests(SimpleTestCase):
         self.assertEqual(plan.metric, "flock_list")
         self.assertEqual(plan.params, [7, 42, 77])
 
+    def test_pronoun_data_followup_uses_recent_flock_context(self):
+        service = ChikoozaTextToSQLService(user=self.user)
+        farm = SimpleNamespace(id=42, public_id=9001, name="Red Farm")
+        flock = SimpleNamespace(
+            id=77,
+            public_id=5001,
+            name="Alpha Batch",
+            farm_id=42,
+            farm=farm,
+        )
+        service._farms = lambda: [farm]
+        service._flocks = lambda: [flock]
+        history = [
+            {"role": "user", "content": "how many flocks i have"},
+            {"role": "assistant", "content": "Flock Count: 1."},
+        ]
+
+        for question in (
+            "what data does it have",
+            "show me details about it",
+            "what info does this one have",
+        ):
+            with self.subTest(question=question):
+                plan = service.build_plan(question, history=history)
+
+                self.assertEqual(plan.metric, "flock_list")
+                self.assertEqual(plan.params, [7, 42, 77])
+
     def test_followup_generic_flock_uses_history_when_multiple_exist(self):
         service = ChikoozaTextToSQLService(user=self.user)
         red_farm = SimpleNamespace(id=42, public_id=9001, name="Red Farm")
@@ -342,6 +370,62 @@ class ChikoozaModernAgentSecurityTests(SimpleTestCase):
         self.assertEqual(response["metric"], "other_flocks")
         self.assertIn("only have one flock", response["answer"])
         self.assertIn("Alpha Batch", response["answer"])
+
+    def test_more_or_remaining_followup_uses_history_entity_type(self):
+        service = ChikoozaTextToSQLService(user=self.user)
+        farm = SimpleNamespace(id=42, public_id=9001, name="Red Farm")
+        flock = SimpleNamespace(
+            id=77,
+            public_id=5001,
+            name="Alpha Batch",
+            farm_id=42,
+            farm=farm,
+        )
+        service._farms = lambda: [farm]
+        service._flocks = lambda: [flock]
+        history = [
+            {"role": "user", "content": "show the data for that flock"},
+            {"role": "assistant", "content": "Your flocks:\n1. Alpha Batch"},
+        ]
+
+        for question in ("anything else?", "do i have more?", "remaining ones?"):
+            with self.subTest(question=question):
+                response = service.answer(question, history=history)
+
+                self.assertEqual(response["metric"], "other_flocks")
+                self.assertIn("only have one flock", response["answer"])
+
+    def test_other_followup_keeps_flock_context_when_answer_mentions_farm(self):
+        service = ChikoozaTextToSQLService(user=self.user)
+        farm = SimpleNamespace(id=42, public_id=9001, name="Red Farm")
+        flock = SimpleNamespace(
+            id=77,
+            public_id=5001,
+            name="Alpha Batch",
+            farm_id=42,
+            farm=farm,
+        )
+        service._farms = lambda: [farm]
+        service._flocks = lambda: [flock]
+        history = [
+            {"role": "user", "content": "show the data for that flock"},
+            {
+                "role": "assistant",
+                "content": "Your flocks:\n1. Alpha Batch (farm: Red Farm)",
+            },
+        ]
+
+        response = service.answer("anything else?", history=history)
+
+        self.assertEqual(response["metric"], "other_flocks")
+        self.assertIn("only have one flock", response["answer"])
+
+    def test_router_allows_vague_more_followups(self):
+        router = ChikoozaQueryRouter()
+
+        for question in ("do i have more?", "remaining ones?", "anything else?"):
+            with self.subTest(question=question):
+                self.assertEqual(router.route(question, user_id=7), TEXT_TO_SQL)
 
     def test_other_flock_followup_lists_remaining_flocks(self):
         service = ChikoozaTextToSQLService(user=self.user)

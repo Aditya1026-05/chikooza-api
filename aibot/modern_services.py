@@ -144,6 +144,12 @@ class ChikoozaQueryRouter:
         "information",
         "data",
         "all",
+        "more",
+        "another",
+        "other",
+        "remaining",
+        "else",
+        "ones",
     }
     RAG_KEYWORDS = {
         "overview",
@@ -399,13 +405,23 @@ class ChikoozaTextToSQLService:
         farm_id = entity_filter.farm_id
         flock_id = entity_filter.flock_id
 
+        if self._is_entity_detail_query(query, "flock", entity_filter):
+            return self._flock_list_plan(farm_id=farm_id, flock_id=flock_id)
+
+        if self._is_entity_detail_query(query, "farm", entity_filter):
+            return self._farm_list_plan(farm_id=farm_id)
+
         if self._is_summary_query(query):
+            if flock_id is not None:
+                return self._flock_list_plan(farm_id=farm_id, flock_id=flock_id)
+            if farm_id is not None:
+                return self._farm_list_plan(farm_id=farm_id)
             return self._summary_plan()
 
-        if any(word in query for word in ("profit", "loss", "net")):
+        if any(word in query for word in ("profit", "loss", "net", "earning")):
             return self._profit_plan(farm_id, flock_id)
 
-        if self._is_count_query(query) and "farm" in query:
+        if self._is_count_query(query) and re.search(r"\bfarms?\b", query):
             return self._aggregate_plan(
                 view="ai_farm_flock_data_view",
                 expression="COUNT(DISTINCT farm_id)",
@@ -416,7 +432,9 @@ class ChikoozaTextToSQLService:
                 extra_conditions=["farm_id IS NOT NULL"],
             )
 
-        if self._is_count_query(query) and "flock" in query:
+        if self._is_count_query(query) and re.search(
+            r"\b(?:flocks?|batches?)\b", query
+        ):
             return self._aggregate_plan(
                 view="ai_farm_flock_data_view",
                 expression="COUNT(DISTINCT flock_id)",
@@ -455,22 +473,16 @@ class ChikoozaTextToSQLService:
         if self._is_list_query(query, "flock"):
             return self._flock_list_plan(farm_id=farm_id, flock_id=flock_id)
 
-        if self._is_entity_detail_query(query, "farm", entity_filter):
-            return self._farm_list_plan(farm_id=farm_id)
-
-        if self._is_entity_detail_query(query, "flock", entity_filter):
-            return self._flock_list_plan(farm_id=farm_id, flock_id=flock_id)
-
         metric_map = (
             (
-                ("sale", "sales", "revenue"),
+                ("sale", "sales", "revenue", "income", "earning", "sold"),
                 "ai_sale_data_view",
                 "COALESCE(SUM(sale_amount), 0)",
                 "total_sales",
                 "money",
             ),
             (
-                ("purchase", "purchases", "expense", "expenses"),
+                ("purchase", "purchases", "expense", "expenses", "spent", "spend"),
                 "ai_purchase_data_view",
                 "COALESCE(SUM(purchase_amount), 0)",
                 "total_purchases",
@@ -484,21 +496,21 @@ class ChikoozaTextToSQLService:
                 "money",
             ),
             (
-                ("mortality", "deaths", "dead birds", "birds died"),
+                ("mortality", "deaths", "death", "dead birds", "birds died", "died"),
                 "ai_dailydata_data_view",
                 "COALESCE(SUM(birds_died), 0)",
                 "mortality",
                 "count",
             ),
             (
-                ("average weight", "bird weight", "weight"),
+                ("average weight", "bird weight", "body weight", "weight"),
                 "ai_dailydata_data_view",
                 "COALESCE(AVG(average_bird_weight), 0)",
                 "average_weight",
                 "decimal",
             ),
             (
-                ("current birds", "bird count", "birds", "bird"),
+                ("current birds", "bird count", "birds left", "birds", "bird"),
                 "ai_dailydata_data_view",
                 "COALESCE(SUM(birds_current), 0)",
                 "current_birds",
@@ -743,7 +755,19 @@ class ChikoozaTextToSQLService:
         return int(match.group(1)) if match else None
 
     def _is_count_query(self, query: str) -> bool:
-        return any(phrase in query for phrase in ("count", "how many", "number of"))
+        return bool(
+            any(
+                phrase in query
+                for phrase in (
+                    "count",
+                    "how many",
+                    "number of",
+                    "total number",
+                    "total no",
+                    "no of",
+                )
+            )
+        )
 
     def _is_list_query(self, query: str, label: str) -> bool:
         plural = f"{label}s"
@@ -753,9 +777,16 @@ class ChikoozaTextToSQLService:
             "list",
             "show",
             "display",
+            "give",
+            "tell",
             "which",
             "what",
             "all",
+            "data",
+            "info",
+            "information",
+            "record",
+            "records",
             "details",
             "detail",
             "have",
@@ -786,9 +817,13 @@ class ChikoozaTextToSQLService:
         if self._has_metric_intent(query):
             return False
         if label == "farm" and entity_filter.farm_id is not None:
-            return self._has_generic_entity_reference(query, "farm")
+            return self._has_generic_entity_reference(
+                query, "farm"
+            ) or self._has_detail_pronoun_reference(query)
         if label == "flock" and entity_filter.flock_id is not None:
-            return self._has_generic_entity_reference(query, "flock")
+            return self._has_generic_entity_reference(
+                query, "flock"
+            ) or self._has_detail_pronoun_reference(query)
         return False
 
     def _has_metric_intent(self, query: str) -> bool:
@@ -877,7 +912,7 @@ class ChikoozaTextToSQLService:
         self, question: str, history: list | None = None
     ) -> dict | None:
         query = normalize_ai_query(question)
-        label = self._other_entity_label(query)
+        label = self._other_entity_label(query, history=history)
         if not label:
             return None
 
@@ -974,15 +1009,22 @@ class ChikoozaTextToSQLService:
             )
         return "Your flocks:\n" + "\n".join(lines)
 
-    def _other_entity_label(self, query: str) -> str | None:
-        has_other = bool(re.search(r"\b(?:other|another|any other|else)\b", query))
+    def _other_entity_label(
+        self, query: str, history: list | None = None
+    ) -> str | None:
+        has_other = bool(
+            re.search(
+                r"\b(?:other|another|any other|more|any more|remaining|rest|left|else|baki|baaki)\b",
+                query,
+            )
+        )
         if not has_other:
             return None
-        if re.search(r"\bflocks?\b", query):
+        if re.search(r"\b(?:flocks?|batches?)\b", query):
             return "flock"
         if re.search(r"\bfarms?\b", query):
             return "farm"
-        return None
+        return self._latest_entity_label_from_history(history)
 
     def _resolve_farm_reference(self, query: str, history: list | None = None):
         farms = self._farms()
@@ -1028,12 +1070,18 @@ class ChikoozaTextToSQLService:
             if name and len(name) >= 3 and name.lower() in query:
                 return obj
 
-        if self._has_generic_entity_reference(query, label):
-            if len(objects) == 1:
-                return objects[0]
+        has_context_reference = self._has_generic_entity_reference(query, label) or (
+            self._has_detail_pronoun_reference(query)
+            and self._history_mentions_label(history, label)
+        )
+        if has_context_reference:
             history_object = self._latest_entity_from_history(history, label, objects)
             if history_object:
                 return history_object
+            if self._history_mentions_label(history, label) and len(objects) == 1:
+                return objects[0]
+            if len(objects) == 1 and self._has_generic_entity_reference(query, label):
+                return objects[0]
             if len(objects) > 1:
                 return "ambiguous"
 
@@ -1067,9 +1115,9 @@ class ChikoozaTextToSQLService:
         if label == "flock":
             return bool(
                 re.search(
-                    r"\b(?:the|that|this|same|my|our)\s+flock\b"
-                    r"|\bfor\s+(?:the\s+)?flock\b"
-                    r"|\bflock\s+(?:data|details|information|record|records)\b",
+                    r"\b(?:the|that|this|same|my|our)\s+(?:flock|batch)\b"
+                    r"|\bfor\s+(?:the\s+)?(?:flock|batch)\b"
+                    r"|\b(?:flock|batch)\s+(?:data|details|information|info|record|records)\b",
                     query,
                 )
             )
@@ -1083,6 +1131,18 @@ class ChikoozaTextToSQLService:
                 )
             )
         return False
+
+    def _has_detail_pronoun_reference(self, query: str) -> bool:
+        return bool(
+            re.search(
+                r"\b(?:it|that|this|same one|that one|this one|one)\b",
+                query,
+            )
+            and re.search(
+                r"\b(?:data|details?|info|information|records?|show|tell|give|about|have)\b",
+                query,
+            )
+        )
 
     def _latest_entity_from_history(
         self, history: list | None, label: str, objects: list
@@ -1100,6 +1160,37 @@ class ChikoozaTextToSQLService:
             ordinal = self._ordinal_for_phrase(content, label)
             if ordinal and 1 <= ordinal <= len(objects):
                 return objects[ordinal - 1]
+        return None
+
+    def _history_mentions_label(self, history: list | None, label: str) -> bool:
+        if not history:
+            return False
+        if label == "flock":
+            pattern = r"\b(?:flocks?|batches?|broiler batch)\b"
+        elif label == "farm":
+            pattern = r"\bfarms?\b(?!\s*:)"
+        else:
+            return False
+        return any(
+            re.search(pattern, normalize_ai_query(str(item.get("content", ""))))
+            for item in history[-12:]
+        )
+
+    def _latest_entity_label_from_history(self, history: list | None) -> str | None:
+        if not history:
+            return None
+        for item in reversed(history[-12:]):
+            content = normalize_ai_query(str(item.get("content", "")))
+            if not content:
+                continue
+            if re.search(
+                r"\byour\s+flocks?\b|\bflock count\b|\b(?:flocks?|batches?)\b", content
+            ):
+                return "flock"
+            if re.search(
+                r"\byour\s+farms?\b|\bfarm count\b|\bfarms?\b(?!\s*:)", content
+            ):
+                return "farm"
         return None
 
     def _has_named_entity_reference(self, query: str, label: str) -> bool:
