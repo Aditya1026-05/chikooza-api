@@ -474,6 +474,10 @@ class ChikoozaLLMTextToSQLService:
                 reason="Broad account summary query.",
             )
 
+        deterministic = self._known_deterministic_answer(question, history)
+        if deterministic:
+            return deterministic
+
         if not self.is_available:
             return self._fallback_answer(
                 question, history, reason="Groq is not configured."
@@ -682,6 +686,20 @@ If the farmer used a rough phrase like "flock 1" but Entity Context resolved it 
         response["engine"] = "rule_based_fallback"
         response["fallback_reason"] = reason
         return response
+
+    def _known_deterministic_answer(
+        self, question: str, history: list[dict] | None
+    ) -> dict | None:
+        if isinstance(self.fallback_service, ChikoozaTextToSQLService) and not hasattr(
+            self.user, "_meta"
+        ):
+            return None
+        response = self.fallback_service.answer(question, history=history)
+        if response.get("status") == "success":
+            response["engine"] = "rule_based_fallback"
+            response["fallback_reason"] = "Deterministic Chikooza farm-data query."
+            return response
+        return None
 
     def _deterministic_answer(self, plan: SQLPlan, rows: list[dict]) -> str:
         if not rows:

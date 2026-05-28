@@ -79,6 +79,22 @@ class SQLPlan:
     result_type: str
 
 
+@dataclass(frozen=True)
+class EntityFilterResolution:
+    farm_id: int | None = None
+    flock_id: int | None = None
+    missing_response: dict | None = None
+
+
+@dataclass(frozen=True)
+class ResolvedEntityReference:
+    id: int
+    name: str = ""
+    public_id: int | None = None
+    farm_id: int | None = None
+    farm: object | None = None
+
+
 class ChikoozaQueryRouter:
     """
     U: Port of the BizBot router idea from utkarsh-goel-21/chatbot, adapted for
@@ -328,6 +344,10 @@ class ChikoozaTextToSQLService:
         self.executor = TenantSafeSQLExecutor()
 
     def answer(self, question: str, history: list | None = None) -> dict:
+        entity_filter = self.resolve_entity_filters(question)
+        if entity_filter.missing_response:
+            return entity_filter.missing_response
+
         plan = self.build_plan(question)
         if not plan:
             return {
@@ -351,10 +371,10 @@ class ChikoozaTextToSQLService:
             }
 
         value = rows[0] if rows else {}
-        answer = self._format_answer(plan, value)
+        answer = self._format_answer(plan, rows)
         return {
             "status": "success",
-            "data": value.get("result", value),
+            "data": self._response_data(plan, rows),
             "answer": answer,
             "message": answer,
             "rows": rows,
@@ -369,8 +389,11 @@ class ChikoozaTextToSQLService:
         if not query:
             return None
 
-        farm_id = self._extract_filter_id(query, "farm")
-        flock_id = self._extract_filter_id(query, "flock")
+        entity_filter = self.resolve_entity_filters(query)
+        if entity_filter.missing_response:
+            return None
+        farm_id = entity_filter.farm_id
+        flock_id = entity_filter.flock_id
 
         if self._is_summary_query(query):
             return self._summary_plan()
@@ -421,6 +444,12 @@ class ChikoozaTextToSQLService:
                 flock_id=flock_id,
                 extra_conditions=["purchase_date IS NOT NULL"],
             )
+
+        if self._is_list_query(query, "farm"):
+            return self._farm_list_plan()
+
+        if self._is_list_query(query, "flock"):
+            return self._flock_list_plan(farm_id=farm_id)
 
         metric_map = (
             (
@@ -496,6 +525,27 @@ class ChikoozaTextToSQLService:
 
         return None
 
+    def resolve_entity_filters(self, question: str) -> EntityFilterResolution:
+        query = normalize_ai_query(question)
+        farm_resolution = self._resolve_farm_reference(query)
+        flock_resolution = self._resolve_flock_reference(query)
+
+        if farm_resolution == "not_found":
+            return EntityFilterResolution(
+                missing_response=self._missing_entity_response("farm", self._farms())
+            )
+        if flock_resolution == "not_found":
+            return EntityFilterResolution(
+                missing_response=self._missing_entity_response("flock", self._flocks())
+            )
+
+        farm_id = self._object_id(farm_resolution) if farm_resolution else None
+        flock_id = self._object_id(flock_resolution) if flock_resolution else None
+        if flock_resolution and farm_id is None:
+            farm_id = self._flock_farm_id(flock_resolution)
+
+        return EntityFilterResolution(farm_id=farm_id, flock_id=flock_id)
+
     def _aggregate_plan(
         self,
         view: str,
@@ -515,6 +565,54 @@ class ChikoozaTextToSQLService:
             params=params,
             metric=metric,
             result_type=result_type,
+        )
+
+    def _farm_list_plan(self) -> SQLPlan:
+        sql = """
+            SELECT DISTINCT
+                farm_id,
+                farm_name,
+                farm_city,
+                farm_pin,
+                shed_count,
+                farm_status
+            FROM ai_farm_flock_data_view
+            WHERE owner_id = %s
+              AND farm_id IS NOT NULL
+            ORDER BY farm_name
+            LIMIT 100
+        """
+        return SQLPlan(
+            sql=re.sub(r"\s+", " ", sql).strip(),
+            params=[self.user.id],
+            metric="farm_list",
+            result_type="table",
+        )
+
+    def _flock_list_plan(self, farm_id: int | None = None) -> SQLPlan:
+        where_sql, params = self._where_clause(farm_id=farm_id)
+        sql = f"""
+            SELECT DISTINCT
+                flock_id,
+                flock_name,
+                farm_id,
+                farm_name,
+                hatch_date,
+                flock_size,
+                actual_birds,
+                flock_status,
+                breed_name
+            FROM ai_farm_flock_data_view
+            WHERE {where_sql}
+              AND flock_id IS NOT NULL
+            ORDER BY farm_name, flock_name
+            LIMIT 100
+        """
+        return SQLPlan(
+            sql=re.sub(r"\s+", " ", sql).strip(),
+            params=params,
+            metric="flock_list",
+            result_type="table",
         )
 
     def _profit_plan(self, farm_id: int | None, flock_id: int | None) -> SQLPlan:
@@ -622,10 +720,54 @@ class ChikoozaTextToSQLService:
     def _is_count_query(self, query: str) -> bool:
         return any(phrase in query for phrase in ("count", "how many", "number of"))
 
+    def _is_list_query(self, query: str, label: str) -> bool:
+        plural = f"{label}s"
+        if label not in query and plural not in query:
+            return False
+        list_words = (
+            "list",
+            "show",
+            "display",
+            "which",
+            "what",
+            "all",
+            "details",
+            "detail",
+            "have",
+        )
+        metric_words = (
+            "sale",
+            "sales",
+            "revenue",
+            "purchase",
+            "expense",
+            "cost",
+            "profit",
+            "loss",
+            "mortality",
+            "feed",
+            "fcr",
+            "weight",
+            "bird",
+            "birds",
+        )
+        return any(word in query for word in list_words) and not any(
+            word in query for word in metric_words
+        )
+
     def _is_summary_query(self, query: str) -> bool:
         return is_broad_summary_query(query)
 
-    def _format_answer(self, plan: SQLPlan, row: dict) -> str:
+    def _format_answer(self, plan: SQLPlan, rows_or_row) -> str:
+        rows = rows_or_row if isinstance(rows_or_row, list) else [rows_or_row]
+        row = rows[0] if rows else {}
+
+        if plan.metric == "farm_list":
+            return self._format_farm_list(rows)
+
+        if plan.metric == "flock_list":
+            return self._format_flock_list(rows)
+
         if plan.metric == "profit_loss":
             total_sales = float(row.get("total_sales") or 0)
             total_purchases = float(row.get("total_purchases") or 0)
@@ -662,6 +804,223 @@ class ChikoozaTextToSQLService:
         if plan.result_type == "decimal":
             return f"{label.title()}: {float(value or 0):,.2f}."
         return f"{label.title()}: {value or 0}."
+
+    def _response_data(self, plan: SQLPlan, rows: list[dict]):
+        if plan.result_type == "table":
+            return rows
+        value = rows[0] if rows else {}
+        return value.get("result", value)
+
+    def _format_farm_list(self, rows: list[dict]) -> str:
+        rows = [row for row in rows if row.get("farm_id")]
+        if not rows:
+            return "You do not have any farms saved yet. Add a farm first, then I can answer farm-wise questions."
+
+        lines = []
+        for index, row in enumerate(rows, start=1):
+            location = ", ".join(
+                str(part)
+                for part in (row.get("farm_city"), row.get("farm_pin"))
+                if part not in (None, "")
+            )
+            shed_text = (
+                f", {row.get('shed_count')} sheds"
+                if row.get("shed_count") not in (None, "")
+                else ""
+            )
+            status = "active" if row.get("farm_status") else "inactive"
+            lines.append(
+                f"{index}. {row.get('farm_name') or 'Unnamed farm'}"
+                f"{f' ({location})' if location else ''}{shed_text}, {status}"
+            )
+        return "Your farms:\n" + "\n".join(lines)
+
+    def _format_flock_list(self, rows: list[dict]) -> str:
+        rows = [row for row in rows if row.get("flock_id")]
+        if not rows:
+            return "You do not have any flocks saved yet. Add a flock under a farm first, then I can answer flock-wise questions."
+
+        lines = []
+        for index, row in enumerate(rows, start=1):
+            details = [
+                f"farm: {row.get('farm_name')}" if row.get("farm_name") else "",
+                f"size: {row.get('flock_size')}" if row.get("flock_size") else "",
+                (
+                    f"actual birds: {row.get('actual_birds')}"
+                    if row.get("actual_birds") not in (None, "")
+                    else ""
+                ),
+                f"hatch date: {row.get('hatch_date')}" if row.get("hatch_date") else "",
+                f"breed: {row.get('breed_name')}" if row.get("breed_name") else "",
+            ]
+            detail_text = ", ".join(detail for detail in details if detail)
+            lines.append(
+                f"{index}. {row.get('flock_name') or 'Unnamed flock'}"
+                f"{f' ({detail_text})' if detail_text else ''}"
+            )
+        return "Your flocks:\n" + "\n".join(lines)
+
+    def _resolve_farm_reference(self, query: str):
+        farms = self._farms()
+        return self._resolve_entity_reference(query, "farm", farms)
+
+    def _resolve_flock_reference(self, query: str):
+        flocks = self._flocks()
+        return self._resolve_entity_reference(query, "flock", flocks)
+
+    def _resolve_entity_reference(self, query: str, label: str, objects: list):
+        if not objects and not self._can_query_entity_tables():
+            raw_reference = self._raw_entity_reference(query, label)
+            if raw_reference:
+                return raw_reference
+
+        if not objects and self._has_explicit_entity_reference(query, label):
+            return "not_found"
+
+        numeric_match = re.search(rf"\b{label}\s*(?:id|#)?\s*(\d+)\b", query)
+        if numeric_match:
+            number = int(numeric_match.group(1))
+            exact = self._find_owned_object_by_id(objects, number)
+            if exact:
+                return exact
+            if 1 <= number <= len(objects):
+                return objects[number - 1]
+            return "not_found"
+
+        ordinal = self._ordinal_for_phrase(query, label)
+        if ordinal:
+            if 1 <= ordinal <= len(objects):
+                return objects[ordinal - 1]
+            return "not_found"
+
+        for obj in objects:
+            name = self._object_name(obj)
+            if name and len(name) >= 3 and name.lower() in query:
+                return obj
+
+        if self._has_named_entity_reference(query, label):
+            return "not_found"
+
+        return None
+
+    def _raw_entity_reference(self, query: str, label: str):
+        numeric_match = re.search(rf"\b{label}\s*(?:id|#)?\s*(\d+)\b", query)
+        if numeric_match:
+            number = int(numeric_match.group(1))
+            return ResolvedEntityReference(
+                id=number, public_id=number, name=f"{label} {number}"
+            )
+
+        ordinal = self._ordinal_for_phrase(query, label)
+        if ordinal:
+            return ResolvedEntityReference(
+                id=ordinal, public_id=ordinal, name=f"{label} {ordinal}"
+            )
+        return None
+
+    def _has_explicit_entity_reference(self, query: str, label: str) -> bool:
+        return bool(
+            re.search(rf"\b{label}\s*(?:id|#)?\s*\d+\b", query)
+            or self._ordinal_for_phrase(query, label)
+        )
+
+    def _has_named_entity_reference(self, query: str, label: str) -> bool:
+        if label == "flock":
+            return bool(
+                re.search(
+                    r"\b(?:for|of|in|about)\s+[a-z0-9 ]*(?:flock|batch|broiler)\b",
+                    query,
+                )
+            )
+        if label == "farm":
+            return bool(re.search(r"\b(?:for|of|in|about)\s+[a-z0-9 ]*farm\b", query))
+        return False
+
+    def _find_owned_object_by_id(self, objects: list, number: int):
+        for obj in objects:
+            if self._object_id(obj) == number or self._object_public_id(obj) == number:
+                return obj
+        return None
+
+    def _ordinal_for_phrase(self, query: str, label: str) -> int | None:
+        ordinals = {
+            "first": 1,
+            "1st": 1,
+            "second": 2,
+            "2nd": 2,
+            "third": 3,
+            "3rd": 3,
+            "fourth": 4,
+            "4th": 4,
+            "fifth": 5,
+            "5th": 5,
+        }
+        for word, value in ordinals.items():
+            if re.search(rf"\b(?:{word}\s+{label}|{label}\s+{word})\b", query):
+                return value
+        return None
+
+    def _missing_entity_response(self, label: str, objects: list) -> dict:
+        names = [self._object_name(obj) for obj in objects if self._object_name(obj)]
+        available = ", ".join(names) if names else "none yet"
+        answer = (
+            f"I could not find that {label} in your account. "
+            f"Available {label}s: {available}. "
+            f"Ask using the {label} name, or use first/second {label} based on your list."
+        )
+        return {
+            "status": "success",
+            "data": {f"available_{label}s": names},
+            "answer": answer,
+            "message": answer,
+            "rows": [],
+            "query": None,
+            "params": [],
+            "route": TEXT_TO_SQL,
+            "metric": f"missing_{label}",
+            "engine": "entity_filter",
+        }
+
+    def _farms(self):
+        from farm.models import Farm
+
+        if not self._can_query_entity_tables():
+            return []
+        return list(Farm.objects.filter(user_id=self.user.id).order_by("id")[:100])
+
+    def _flocks(self):
+        from flocks.models import Flock
+
+        if not self._can_query_entity_tables():
+            return []
+        return list(
+            Flock.objects.filter(user_id=self.user.id)
+            .select_related("farm")
+            .order_by("id")[:100]
+        )
+
+    def _can_query_entity_tables(self) -> bool:
+        return (
+            hasattr(self.user, "_meta") and getattr(self.user, "id", None) is not None
+        )
+
+    def _object_id(self, obj) -> int | None:
+        value = getattr(obj, "id", None)
+        return int(value) if value is not None else None
+
+    def _object_public_id(self, obj) -> int | None:
+        value = getattr(obj, "public_id", None)
+        return int(value) if value is not None else None
+
+    def _object_name(self, obj) -> str:
+        return str(getattr(obj, "name", "") or "").strip()
+
+    def _flock_farm_id(self, flock) -> int | None:
+        farm_id = getattr(flock, "farm_id", None)
+        if farm_id is not None:
+            return int(farm_id)
+        farm = getattr(flock, "farm", None)
+        return self._object_id(farm) if farm else None
 
 
 class ChikoozaModernAgentService:

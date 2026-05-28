@@ -148,6 +148,145 @@ class ChikoozaModernAgentSecurityTests(SimpleTestCase):
         self.assertIsNotNone(plan)
         self.assertEqual(plan.metric, "mortality")
 
+    def test_list_farms_and_flocks_use_deterministic_plans(self):
+        service = ChikoozaTextToSQLService(user=self.user)
+
+        farm_plan = service.build_plan("list all farms i have")
+        flock_plan = service.build_plan("list all the flocks i have")
+
+        self.assertEqual(farm_plan.metric, "farm_list")
+        self.assertEqual(farm_plan.params, [7])
+        self.assertIn("ai_farm_flock_data_view", farm_plan.sql)
+        self.assertEqual(flock_plan.metric, "flock_list")
+        self.assertEqual(flock_plan.params, [7])
+        self.assertIn("ai_farm_flock_data_view", flock_plan.sql)
+
+    def test_entity_filters_resolve_to_owned_farm_and_flock_position(self):
+        service = ChikoozaTextToSQLService(user=self.user)
+        farm = SimpleNamespace(id=42, public_id=9001, name="Red Farm")
+        flock = SimpleNamespace(
+            id=77,
+            public_id=5001,
+            name="Alpha Batch",
+            farm_id=42,
+            farm=farm,
+        )
+        service._farms = lambda: [farm]
+        service._flocks = lambda: [flock]
+
+        farm_plan = service.build_plan("sales for farm 1")
+        flock_plan = service.build_plan("profit for first flock")
+
+        self.assertEqual(farm_plan.metric, "total_sales")
+        self.assertEqual(farm_plan.params, [7, 42])
+        self.assertEqual(flock_plan.metric, "profit_loss")
+        self.assertIn(77, flock_plan.params)
+        self.assertNotIn(1, flock_plan.params)
+
+    def test_entity_filters_resolve_named_flocks(self):
+        service = ChikoozaTextToSQLService(user=self.user)
+        farm = SimpleNamespace(id=42, public_id=9001, name="Red Farm")
+        flock = SimpleNamespace(
+            id=77,
+            public_id=5001,
+            name="Alpha Batch",
+            farm_id=42,
+            farm=farm,
+        )
+        service._farms = lambda: [farm]
+        service._flocks = lambda: [flock]
+
+        plan = service.build_plan("feed consumed for Alpha Batch")
+
+        self.assertEqual(plan.metric, "feed_consumed")
+        self.assertEqual(plan.params, [7, 42, 77])
+
+    def test_named_batch_from_another_account_returns_clarification(self):
+        service = ChikoozaTextToSQLService(user=self.user)
+        farm = SimpleNamespace(id=42, public_id=9001, name="Red Farm")
+        flock = SimpleNamespace(
+            id=77,
+            public_id=5001,
+            name="Alpha Batch",
+            farm_id=42,
+            farm=farm,
+        )
+        service._farms = lambda: [farm]
+        service._flocks = lambda: [flock]
+
+        response = service.answer("sales for Beta Private Batch")
+
+        self.assertEqual(response["status"], "success")
+        self.assertEqual(response["metric"], "missing_flock")
+        self.assertIn("Alpha Batch", response["answer"])
+
+    def test_named_farm_from_another_account_returns_clarification(self):
+        service = ChikoozaTextToSQLService(user=self.user)
+        farm = SimpleNamespace(id=42, public_id=9001, name="Red Farm")
+        service._farms = lambda: [farm]
+        service._flocks = lambda: []
+
+        response = service.answer("sales for Blue Valley Farm")
+
+        self.assertEqual(response["status"], "success")
+        self.assertEqual(response["metric"], "missing_farm")
+        self.assertIn("Red Farm", response["answer"])
+
+    def test_missing_flock_reference_returns_clarification(self):
+        service = ChikoozaTextToSQLService(user=self.user)
+        farm = SimpleNamespace(id=42, public_id=9001, name="Red Farm")
+        flock = SimpleNamespace(
+            id=77,
+            public_id=5001,
+            name="Alpha Batch",
+            farm_id=42,
+            farm=farm,
+        )
+        service._farms = lambda: [farm]
+        service._flocks = lambda: [flock]
+
+        response = service.answer("profit for second flock")
+
+        self.assertEqual(response["status"], "success")
+        self.assertEqual(response["metric"], "missing_flock")
+        self.assertIn("Alpha Batch", response["answer"])
+
+    def test_list_formatters_return_all_farm_and_flock_rows(self):
+        service = ChikoozaTextToSQLService(user=self.user)
+
+        farm_answer = service._format_answer(
+            SQLPlan("SELECT", [7], "farm_list", "table"),
+            [
+                {
+                    "farm_id": 42,
+                    "farm_name": "Red Farm",
+                    "farm_city": "Pune",
+                    "farm_pin": "411001",
+                    "shed_count": 3,
+                    "farm_status": True,
+                }
+            ],
+        )
+        flock_answer = service._format_answer(
+            SQLPlan("SELECT", [7], "flock_list", "table"),
+            [
+                {
+                    "flock_id": 77,
+                    "flock_name": "Alpha Batch",
+                    "farm_name": "Red Farm",
+                    "hatch_date": "2026-01-01",
+                    "flock_size": 1000,
+                    "actual_birds": 990,
+                    "breed_name": "Broiler",
+                }
+            ],
+        )
+
+        self.assertIn("Red Farm", farm_answer)
+        self.assertIn("3 sheds", farm_answer)
+        self.assertIn("Alpha Batch", flock_answer)
+        self.assertIn("actual birds: 990", flock_answer)
+
     def test_sql_executor_rejects_missing_tenant_filter(self):
         executor = TenantSafeSQLExecutor()
         plan = SQLPlan(
@@ -395,6 +534,34 @@ class ChikoozaLLMSQLServiceTests(SimpleTestCase):
 
         self.assertEqual(result["engine"], "rule_based_fallback")
         self.assertEqual(result["metric"], "farm_record_summary")
+        self.assertEqual(client.requests, [])
+
+    def test_llm_service_bypasses_groq_for_known_farm_data_questions(self):
+        client = FakeGroqClient([])
+        fallback = SimpleNamespace(
+            answer=lambda question, history=None: {
+                "status": "success",
+                "data": [{"flock_name": "Alpha Batch"}],
+                "answer": "Your flocks:\n1. Alpha Batch",
+                "message": "Your flocks:\n1. Alpha Batch",
+                "rows": [{"flock_name": "Alpha Batch"}],
+                "query": "SELECT flock list",
+                "params": [7],
+                "route": TEXT_TO_SQL,
+                "metric": "flock_list",
+            }
+        )
+        service = ChikoozaLLMTextToSQLService(
+            user=self.user,
+            groq_client=client,
+            fallback_service=fallback,
+            entity_resolver=FakeEntityResolver(),
+        )
+
+        result = service.answer("list all the flocks i have")
+
+        self.assertEqual(result["engine"], "rule_based_fallback")
+        self.assertEqual(result["metric"], "flock_list")
         self.assertEqual(client.requests, [])
 
     def test_llm_deterministic_formatter_handles_summary_rows(self):

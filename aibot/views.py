@@ -15,6 +15,7 @@ from .models import AIChatLog
 import logging
 import json
 import uuid
+from django.core.serializers.json import DjangoJSONEncoder
 
 logger = logging.getLogger(__name__)
 
@@ -88,7 +89,7 @@ class AIChatViewSet(viewsets.ViewSet):
             )
 
         except Exception as e:
-            logger.error(f"Unexpected error: {str(e)}")
+            logger.exception("Unexpected Farmer AI error")
             return Response(
                 {"error": "Processing failed"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -98,7 +99,7 @@ class AIChatViewSet(viewsets.ViewSet):
         log_data = {
             "user_id": request.user.id,
             "query": request.chat_data["cleaned_query"],
-            "response": json.dumps(result),
+            "response": json.dumps(result, cls=DjangoJSONEncoder),
             "status": result["status"],
             "query_id": request.chat_data["query_id"],
         }
@@ -109,7 +110,7 @@ class AIChatViewSet(viewsets.ViewSet):
             AIChatLog.objects.create(
                 user=request.user,
                 query=request.chat_data["cleaned_query"],
-                response=json.dumps(result),
+                response=json.dumps(result, cls=DjangoJSONEncoder),
                 query_id=request.chat_data["query_id"],
             )
         except Exception as e:
