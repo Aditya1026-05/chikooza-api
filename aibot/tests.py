@@ -5,6 +5,8 @@ from django.test import SimpleTestCase
 
 from common.groq_client import GroqChatClient
 
+from .intent_agent import ChikoozaIntentAgentService
+from .intent_classifier import ChikoozaIntent, ChikoozaIntentClassifier
 from .llm_sql import (
     ChikoozaLLMTextToSQLService,
     ChikoozaSQLPromptBuilder,
@@ -618,6 +620,16 @@ class FakeGroqClient:
         return SimpleNamespace(content=content, model=kwargs.get("model", "fake-model"))
 
 
+class FakeIntentClassifier:
+    def __init__(self, intent):
+        self.intent = intent
+        self.calls = []
+
+    def classify(self, question, history=None):
+        self.calls.append({"question": question, "history": history})
+        return self.intent
+
+
 class FakeEntityResolver:
     def __init__(self, resolution=None):
         self.resolution = resolution or EntityResolution(
@@ -881,3 +893,74 @@ class GroqChatClientTests(SimpleTestCase):
 
         self.assertEqual(result.content, "ok")
         self.assertEqual(calls, ["Bearer first", "Bearer second"])
+
+
+class ChikoozaIntentArchitectureTests(SimpleTestCase):
+    def setUp(self):
+        self.user = SimpleNamespace(id=7, is_authenticated=True)
+
+    def test_rule_intent_classifier_uses_history_for_pronoun_detail(self):
+        classifier = ChikoozaIntentClassifier(
+            user=self.user,
+            groq_client=FakeGroqClient([]),
+        )
+        history = [
+            {"role": "user", "content": "how many flocks i have"},
+            {"role": "assistant", "content": "Flock Count: 1."},
+        ]
+
+        intent = classifier.classify("what data does it have", history=history)
+
+        self.assertEqual(intent.intent, "flock_details")
+        self.assertEqual(intent.entity_type, "flock")
+        self.assertEqual(intent.entity_reference, "it")
+
+    def test_rule_intent_classifier_uses_history_for_other_followup(self):
+        classifier = ChikoozaIntentClassifier(
+            user=self.user,
+            groq_client=FakeGroqClient([]),
+        )
+        history = [
+            {"role": "assistant", "content": "Your flocks:\n1. Alpha Batch"},
+        ]
+
+        intent = classifier.classify("anything else?", history=history)
+
+        self.assertEqual(intent.intent, "other_entity")
+        self.assertEqual(intent.entity_type, "flock")
+        self.assertEqual(intent.scope, "other")
+
+    def test_intent_agent_uses_intent_before_safe_query_executor(self):
+        deterministic = ChikoozaTextToSQLService(user=self.user)
+        farm = SimpleNamespace(id=42, public_id=9001, name="Red Farm")
+        flock = SimpleNamespace(
+            id=77,
+            public_id=5001,
+            name="Alpha Batch",
+            farm_id=42,
+            farm=farm,
+        )
+        deterministic._farms = lambda: [farm]
+        deterministic._flocks = lambda: [flock]
+        deterministic.executor = SimpleNamespace(execute=lambda plan: [{"result": 12}])
+        classifier = FakeIntentClassifier(
+            ChikoozaIntent(
+                intent="sales_total",
+                entity_type="flock",
+                entity_reference="first",
+                source="test_intent",
+            )
+        )
+        agent = ChikoozaIntentAgentService(
+            user=self.user,
+            deterministic_service=deterministic,
+            classifier=classifier,
+        )
+
+        response = agent.answer("how much did this batch sell for?")
+
+        self.assertEqual(response["intent"], "sales_total")
+        self.assertEqual(response["intent_source"], "test_intent")
+        self.assertEqual(response["metric"], "total_sales")
+        self.assertEqual(response["params"], [7, 42, 77])
+        self.assertIn("total sales for first flock", response["canonical_question"])

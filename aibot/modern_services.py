@@ -405,18 +405,22 @@ class ChikoozaTextToSQLService:
         farm_id = entity_filter.farm_id
         flock_id = entity_filter.flock_id
 
+        if self._is_summary_query(query):
+            if flock_id is not None and self._has_explicit_entity_reference(
+                query, "flock"
+            ):
+                return self._flock_list_plan(farm_id=farm_id, flock_id=flock_id)
+            if farm_id is not None and self._has_explicit_entity_reference(
+                query, "farm"
+            ):
+                return self._farm_list_plan(farm_id=farm_id)
+            return self._summary_plan()
+
         if self._is_entity_detail_query(query, "flock", entity_filter):
             return self._flock_list_plan(farm_id=farm_id, flock_id=flock_id)
 
         if self._is_entity_detail_query(query, "farm", entity_filter):
             return self._farm_list_plan(farm_id=farm_id)
-
-        if self._is_summary_query(query):
-            if flock_id is not None:
-                return self._flock_list_plan(farm_id=farm_id, flock_id=flock_id)
-            if farm_id is not None:
-                return self._farm_list_plan(farm_id=farm_id)
-            return self._summary_plan()
 
         if any(word in query for word in ("profit", "loss", "net", "earning")):
             return self._profit_plan(farm_id, flock_id)
@@ -819,11 +823,11 @@ class ChikoozaTextToSQLService:
         if label == "farm" and entity_filter.farm_id is not None:
             return self._has_generic_entity_reference(
                 query, "farm"
-            ) or self._has_detail_pronoun_reference(query)
+            ) or self._has_detail_reference(query)
         if label == "flock" and entity_filter.flock_id is not None:
             return self._has_generic_entity_reference(
                 query, "flock"
-            ) or self._has_detail_pronoun_reference(query)
+            ) or self._has_detail_reference(query)
         return False
 
     def _has_metric_intent(self, query: str) -> bool:
@@ -1144,6 +1148,14 @@ class ChikoozaTextToSQLService:
             )
         )
 
+    def _has_detail_reference(self, query: str) -> bool:
+        return bool(
+            re.search(
+                r"\b(?:data|details?|info|information|records?|show|tell|give|about)\b",
+                query,
+            )
+        )
+
     def _latest_entity_from_history(
         self, history: list | None, label: str, objects: list
     ):
@@ -1419,6 +1431,18 @@ class ChikoozaModernAgentService:
         provider = os.getenv("AIBOT_SQL_LLM_PROVIDER", "auto").strip().lower()
         if provider in {"off", "false", "rule", "rules", "deterministic"}:
             return fallback
+
+        if provider not in {"legacy_sql", "groq_sql", "old_sql"}:
+            try:
+                from .intent_agent import ChikoozaIntentAgentService
+
+                return ChikoozaIntentAgentService(
+                    user=self.user,
+                    deterministic_service=fallback,
+                )
+            except Exception:
+                logger.exception("Could not initialize intent-based Farmer AI agent.")
+                return fallback
 
         try:
             from .llm_sql import ChikoozaLLMTextToSQLService
