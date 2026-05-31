@@ -6,7 +6,8 @@ from rest_framework import status, viewsets
 from rest_framework.response import Response
 
 from common.constant import ERROR, FLOCK_DOES_NOT_EXIST, PURCHASE_DOES_NOT_EXIST
-from common.utils import get_detail, list_response, success_response, validate_url_value
+from common.tenanting import is_admin_request, request_account_user
+from common.utils import error_response, get_detail, list_response, success_response, validate_url_value
 from flocks.models import Flock
 from purchase.models import Purchase
 from purchase.serializers import (
@@ -22,9 +23,15 @@ def _purchase_queryset_for_request(request):
     """
     U: Scope purchase records to the authenticated farmer unless an admin is explicitly requesting data.
     """
-    if getattr(request.user, "is_superuser", False):
+    if is_admin_request(request):
         return Purchase.objects.all()
-    return Purchase.objects.filter(user=request.user.users)
+    return Purchase.objects.filter(user=request_account_user(request))
+
+
+def _flock_queryset_for_request(request):
+    if is_admin_request(request):
+        return Flock.objects.all()
+    return Flock.objects.filter(user=request_account_user(request))
 
 
 class PurchaseView(viewsets.ViewSet):
@@ -105,8 +112,13 @@ class PurchaseView(viewsets.ViewSet):
     @classmethod
     def list(cls, request):
         try:
+            # U: OLD: another farmer's flock id returned 200 with an empty list.
+            # U: NEW: validate the flock through the tenant/admin scope first.
+            flock = _flock_queryset_for_request(request).get(
+                public_id=request.GET.get("flock_public_id")
+            )
             purchase = _purchase_queryset_for_request(request).filter(
-                flock__public_id=request.GET.get("flock_public_id")
+                flock=flock
             )
             if request.GET.get('filter') == 'feed':
                 # U: OLD: list used flock_public_id only, so another farmer's flock purchases were visible.
@@ -119,6 +131,10 @@ class PurchaseView(viewsets.ViewSet):
                 status.HTTP_200_OK,
             )
 
+        except Flock.DoesNotExist:
+            return error_response(
+                {ERROR: FLOCK_DOES_NOT_EXIST}, status.HTTP_404_NOT_FOUND
+            )
         except Purchase.DoesNotExist:
             return Response({ERROR: PURCHASE_DOES_NOT_EXIST}, status.HTTP_404_NOT_FOUND)
 
@@ -139,24 +155,27 @@ class QuantityView(viewsets.ViewSet):
     }
 
     def list(cls, request):
-        serializer = QuantitySerializer(data=request.GET)
-        if serializer.is_valid(raise_exception=True):
-            serializer_data = serializer.validated_data
-            purchases = _purchase_queryset_for_request(request).filter(
-                flock__public_id=serializer_data["flock"].get("public_id"),
-                # U: OLD: quantity summed feed by flock id only.
-                # U: NEW: use the same authenticated farmer scope as purchase list/detail.
-                type="Feed",
-                date__lte=serializer_data["date"],
-            )
-            quantity = 0
-            for purchase in purchases:
-                if purchase.quantity is None:
-                    purchase.quantity = 0
-                    quantity = quantity + purchase.quantity
-                else:
-                    purchase.quantity = purchase.quantity
-                    quantity = quantity + purchase.quantity
-            return get_detail(
-                "Quantity of Feed", {"quantity": quantity}, status.HTTP_200_OK
+        try:
+            serializer = QuantitySerializer(data=request.GET)
+            if serializer.is_valid(raise_exception=True):
+                serializer_data = serializer.validated_data
+                flock = _flock_queryset_for_request(request).get(
+                    public_id=serializer_data["flock"].get("public_id")
+                )
+                purchases = _purchase_queryset_for_request(request).filter(
+                    flock=flock,
+                    # U: OLD: quantity silently returned 0 for another farmer's flock.
+                    # U: NEW: reject inaccessible flock ids before summing.
+                    type="Feed",
+                    date__lte=serializer_data["date"],
+                )
+                quantity = 0
+                for purchase in purchases:
+                    quantity += purchase.quantity or 0
+                return get_detail(
+                    "Quantity of Feed", {"quantity": quantity}, status.HTTP_200_OK
+                )
+        except Flock.DoesNotExist:
+            return error_response(
+                {ERROR: FLOCK_DOES_NOT_EXIST}, status.HTTP_404_NOT_FOUND
             )

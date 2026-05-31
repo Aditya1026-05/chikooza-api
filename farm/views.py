@@ -13,6 +13,7 @@ from common.constant import (
     STATE_DOES_NOT_EXIST,
 )
 from common.utils import get_detail, success_response, validate_url_value
+from common.tenanting import is_admin_request, request_account_user
 from farm.models import Country, Farm, State
 from farm.serializers import (
     AddFarmSerializer,
@@ -29,9 +30,9 @@ def _farm_queryset_for_request(request):
     """
     U: Scope farm records to the authenticated farmer unless an admin explicitly requests data.
     """
-    if getattr(request.user, "is_superuser", False):
+    if is_admin_request(request):
         return Farm.objects.all()
-    return Farm.objects.filter(user=request.user.users)
+    return Farm.objects.filter(user=request_account_user(request))
 
 
 class FarmView(viewsets.ViewSet):

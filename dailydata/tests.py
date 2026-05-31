@@ -7,7 +7,16 @@ from rest_framework import status
 
 from common.base_models import Users
 from dailydata.models import DailyData, DarknessTime, FeedAvailability, FlockVaccination, Vaccines
-from dailydata.views import DailyDataView, FlockVaccinationView, PDFView
+from dailydata.views import (
+    DailyDataAverageFeedBirdsView,
+    DailyDataDetailView,
+    DailyDataFCRView,
+    DailyDataLastDateView,
+    DailyDataListView,
+    DailyDataView,
+    FlockVaccinationView,
+    PDFView,
+)
 from farm.models import Country, Farm, State
 from flocks.models import Breed, Flock
 
@@ -155,6 +164,64 @@ class DailyDataTenantIsolationTests(TestCase):
                 query={
                     "flock_public_id": self.other_flock.public_id,
                     "date": self.day.isoformat(),
+                },
+            )
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_detail_list_rejects_other_users_flock(self):
+        response = DailyDataDetailView.list(
+            self._request(
+                self.owner,
+                query={"flock_public_id": self.other_flock.public_id},
+            )
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_report_list_rejects_other_users_flock(self):
+        response = DailyDataListView.list(
+            self._request(
+                self.owner,
+                query={"flock_public_id": self.other_flock.public_id},
+            )
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_last_date_rejects_other_users_flock(self):
+        response = DailyDataLastDateView().retrieve(
+            self._request(self.owner),
+            pk=self.other_flock.public_id,
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_average_feed_rejects_other_users_flock(self):
+        response = DailyDataAverageFeedBirdsView().list(
+            self._request(
+                self.owner,
+                query={
+                    "flock_public_id": self.other_flock.public_id,
+                    "date": self.day,
+                    "current_bird_count": 90,
+                    "feed_intake": 10,
+                },
+            )
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_fcr_rejects_other_users_flock(self):
+        response = DailyDataFCRView.list(
+            self._request(
+                self.owner,
+                query={
+                    "flock_public_id": self.other_flock.public_id,
+                    "date": self.day,
+                    "average_feed": 100,
+                    "average_bird_weight": 50,
                 },
             )
         )

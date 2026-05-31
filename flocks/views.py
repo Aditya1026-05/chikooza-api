@@ -22,6 +22,7 @@ from common.utils import (
     success_response,
     validate_url_value, validation_return_response,
 )
+from common.tenanting import is_admin_request, request_account_user
 from farm.models import Farm
 from flocks.models import Breed, Flock, Hatchery, Integrator
 from flocks.serializers import (
@@ -44,9 +45,15 @@ def _flock_queryset_for_request(request):
     """
     U: Scope flock records to the authenticated farmer unless an admin explicitly requests data.
     """
-    if getattr(request.user, "is_superuser", False):
+    if is_admin_request(request):
         return Flock.objects.all()
-    return Flock.objects.filter(user=request.user.users)
+    return Flock.objects.filter(user=request_account_user(request))
+
+
+def _farm_queryset_for_request(request):
+    if is_admin_request(request):
+        return Farm.objects.all()
+    return Farm.objects.filter(user=request_account_user(request))
 
 
 class FlockView(viewsets.ViewSet):
@@ -100,18 +107,17 @@ class FlockView(viewsets.ViewSet):
     def retrieve(cls, request, pk):
         try:
             validate_url_value(pk, "farmPublicId")
-            if Farm.objects.filter(user=request.user.users, public_id=pk).exists():
-                farm = Farm.objects.get(public_id=pk)
-                flocks = Flock.objects.filter(farm=farm)
-                return list_response(
-                    "Flocks List",
-                    flocks.count(),
-                    "flock_list",
-                    GetFlockSerializer(flocks, many=True).data,
-                    status.HTTP_200_OK,
-                )
-
-            return Response({ERROR: FARM_DOES_NOT_EXIST}, status.HTTP_404_NOT_FOUND)
+            # U: OLD: farm existence was checked by owner, then reloaded
+            # U: globally. NEW: load through the tenant/admin scoped queryset.
+            farm = _farm_queryset_for_request(request).get(public_id=pk)
+            flocks = _flock_queryset_for_request(request).filter(farm=farm)
+            return list_response(
+                "Flocks List",
+                flocks.count(),
+                "flock_list",
+                GetFlockSerializer(flocks, many=True).data,
+                status.HTTP_200_OK,
+            )
         except Farm.DoesNotExist:
             return Response({ERROR: FARM_DOES_NOT_EXIST}, status.HTTP_404_NOT_FOUND)
 
@@ -124,8 +130,8 @@ class FlockView(viewsets.ViewSet):
             if serializer.is_valid(raise_exception=True):
                 serializer_data = serializer.validated_data
                 today_date = datetime.date.today()
-                hatch_date = serializer_data["hatch_date"]
-                if hatch_date > today_date:
+                hatch_date = serializer_data.get("hatch_date")
+                if hatch_date and hatch_date > today_date:
                     return error_response(
                         {ERROR: "Flock hatch date cannot be greater than today's date."},
                         status.HTTP_404_NOT_FOUND,
@@ -219,14 +225,16 @@ class FlockDetailView(viewsets.ViewSet):
 
     @classmethod
     def retrieve(cls, request, pk):
-        validate_url_value(pk, "flockPublicId")
-        if Flock.objects.filter(user=request.user.users, public_id=pk).exists():
-            flocks = Flock.objects.get(user=request.user.users, public_id=pk)
-
+        try:
+            validate_url_value(pk, "flockPublicId")
+            # U: OLD: detail used request.user.users directly and skipped the
+            # U: shared admin/staff tenant gate.
+            flocks = _flock_queryset_for_request(request).get(public_id=pk)
             return get_detail(
                 "Flocks Detail", GetFlockSerializer(flocks).data, status.HTTP_200_OK
             )
-        return error_response(FLOCK_DOES_NOT_EXIST, status.HTTP_404_NOT_FOUND)
+        except Flock.DoesNotExist:
+            return error_response(FLOCK_DOES_NOT_EXIST, status.HTTP_404_NOT_FOUND)
 
 
 class FlockSummaryView(viewsets.ViewSet):

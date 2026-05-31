@@ -8,7 +8,7 @@ from common.base_models import Users
 from farm.models import Country, Farm, State
 from flocks.models import Breed, Flock
 from flocks.services import AddFlockService
-from flocks.views import FlockSummaryView, FlockView
+from flocks.views import FlockDetailView, FlockSummaryView, FlockView
 
 
 class FlockTenantIsolationTests(TestCase):
@@ -86,6 +86,22 @@ class FlockTenantIsolationTests(TestCase):
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
         self.assertEqual(self.other_flock.name, "Other Flock")
+
+    def test_list_rejects_other_users_farm(self):
+        response = FlockView().retrieve(
+            self._request(self.owner),
+            pk=self.other_farm.public_id,
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_detail_rejects_other_users_flock(self):
+        response = FlockDetailView.retrieve(
+            self._request(self.owner),
+            pk=self.other_flock.public_id,
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
     def test_summary_scopes_flock_to_authenticated_user(self):
         response = FlockSummaryView.retrieve(

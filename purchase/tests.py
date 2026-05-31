@@ -10,7 +10,7 @@ from farm.models import Country, Farm, State
 from flocks.models import Breed, Flock
 from purchase.models import Purchase
 from purchase.services import AddPurchaseService
-from purchase.views import PurchaseView
+from purchase.views import PurchaseView, QuantityView
 
 
 class PurchaseTenantIsolationTests(TestCase):
@@ -109,7 +109,7 @@ class PurchaseTenantIsolationTests(TestCase):
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
-    def test_list_scopes_purchases_to_authenticated_user(self):
+    def test_list_rejects_other_users_flock(self):
         response = PurchaseView.list(
             self._request(
                 self.owner,
@@ -117,9 +117,22 @@ class PurchaseTenantIsolationTests(TestCase):
             )
         )
 
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_list_returns_only_owned_flock_purchases(self):
+        response = PurchaseView.list(
+            self._request(
+                self.owner,
+                query={"flock_public_id": str(self.owner_flock.public_id)},
+            )
+        )
+
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data[APP_RESULT][TOTAL_RECORDS], 0)
-        self.assertEqual(response.data[APP_RESULT]["purchase_list"], [])
+        self.assertEqual(response.data[APP_RESULT][TOTAL_RECORDS], 1)
+        self.assertEqual(
+            response.data[APP_RESULT]["purchase_list"][0]["public_id"],
+            self.owner_purchase.public_id,
+        )
 
     def test_update_scopes_purchase_to_authenticated_user(self):
         response = PurchaseView.partial_update(
@@ -150,3 +163,16 @@ class PurchaseTenantIsolationTests(TestCase):
                     },
                 }
             )
+
+    def test_quantity_rejects_other_users_flock(self):
+        response = QuantityView().list(
+            self._request(
+                self.owner,
+                query={
+                    "flock_public_id": self.other_flock.public_id,
+                    "date": date(2026, 1, 12),
+                },
+            )
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)

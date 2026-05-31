@@ -26,6 +26,7 @@ from common.utils import (
     list_response,
     success_response,
 )
+from common.tenanting import is_admin_request, request_account_user
 from dailydata.models import DailyData, FlockVaccination, Vaccines, DarknessTime, FeedAvailability
 from dailydata.serializers import (
     CreateDailyDataSerializer,
@@ -61,27 +62,27 @@ def _flock_queryset_for_request(request):
     """
     U: Scope flock records to the authenticated farmer unless an admin explicitly requests data.
     """
-    if getattr(request.user, "is_superuser", False):
+    if is_admin_request(request):
         return Flock.objects.all()
-    return Flock.objects.filter(user=request.user.users)
+    return Flock.objects.filter(user=request_account_user(request))
 
 
 def _dailydata_queryset_for_request(request):
     """
     U: Scope daily data rows to the authenticated farmer unless an admin explicitly requests data.
     """
-    if getattr(request.user, "is_superuser", False):
+    if is_admin_request(request):
         return DailyData.objects.all()
-    return DailyData.objects.filter(user=request.user.users)
+    return DailyData.objects.filter(user=request_account_user(request))
 
 
 def _flock_vaccination_queryset_for_request(request):
     """
     U: Scope flock vaccination rows through the authenticated farmer's flocks.
     """
-    if getattr(request.user, "is_superuser", False):
+    if is_admin_request(request):
         return FlockVaccination.objects.all()
-    return FlockVaccination.objects.filter(flock__user=request.user.users)
+    return FlockVaccination.objects.filter(flock__user=request_account_user(request))
 
 
 

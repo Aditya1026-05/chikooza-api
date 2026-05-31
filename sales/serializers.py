@@ -70,7 +70,8 @@ class GetSalesSerializer(serializers.ModelSerializer):
 
     def get_current_bird_count(self, obj):
         cbc = 0
-        count = DailyData.objects.filter(flock=obj.flock).last().current_bird_count
+        latest_daily_data = DailyData.objects.filter(flock=obj.flock).order_by("date").last()
+        count = latest_daily_data.current_bird_count if latest_daily_data else obj.flock.actual_birds
         sales = Sales.objects.filter(flock=obj.flock)
         for sale in sales:
             cbc += sale.lifting_count

@@ -49,6 +49,12 @@ class FarmTenantIsolationTests(TestCase):
             data=data or {},
         )
 
+    def _staff_request(self, user):
+        return SimpleNamespace(
+            user=SimpleNamespace(users=user, is_superuser=False, is_staff=True),
+            data={},
+        )
+
     def test_list_returns_only_authenticated_users_farms(self):
         response = FarmView().list(self._request(self.owner))
 
@@ -56,6 +62,14 @@ class FarmTenantIsolationTests(TestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn(self.owner_farm.public_id, farm_ids)
         self.assertNotIn(self.other_farm.public_id, farm_ids)
+
+    def test_staff_can_list_all_farms_for_admin_control(self):
+        response = FarmView().list(self._staff_request(self.owner))
+
+        farm_ids = [farm["public_id"] for farm in response.data[APP_RESULT]]
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn(self.owner_farm.public_id, farm_ids)
+        self.assertIn(self.other_farm.public_id, farm_ids)
 
     def test_retrieve_rejects_other_users_farm(self):
         response = FarmView().retrieve(

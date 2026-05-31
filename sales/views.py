@@ -9,6 +9,7 @@ from rest_framework.response import Response
 
 from common.constant import ERROR, FLOCK_DOES_NOT_EXIST, LIFTING_COUNT_NOT_VALID, SALES_DOES_NOT_EXIST, \
     DAILY_DATA_DOES_NOT_EXIST
+from common.tenanting import is_admin_request, request_account_user
 from common.utils import get_detail, error_response, validate_url_value, list_response, success_response, daterange, \
     validation_return_response
 from dailydata.models import DailyData
@@ -22,18 +23,18 @@ def _flock_queryset_for_request(request):
     """
     U: Scope flock records to the authenticated farmer unless an admin explicitly requests data.
     """
-    if getattr(request.user, "is_superuser", False):
+    if is_admin_request(request):
         return Flock.objects.all()
-    return Flock.objects.filter(user=request.user.users)
+    return Flock.objects.filter(user=request_account_user(request))
 
 
 def _sales_queryset_for_request(request):
     """
     U: Scope sales records through the authenticated farmer's flocks.
     """
-    if getattr(request.user, "is_superuser", False):
+    if is_admin_request(request):
         return Sales.objects.all()
-    return Sales.objects.filter(flock__user=request.user.users)
+    return Sales.objects.filter(flock__user=request_account_user(request))
 
 
 # Create your views here.
@@ -169,10 +170,17 @@ class GraphView(viewsets.ViewSet):
         try:
             if pk == '1':
                 # U: OLD: Flock.objects.filter(user=request.user) used the OAuth user wrapper and skipped tenant scoping.
+                flock = None
                 flocks = _flock_queryset_for_request(request)
                 for res in flocks:
                     if DailyData.objects.filter(flock=res).count() > 5:
                         flock = res
+                        break
+                if flock is None:
+                    return error_response(
+                        {ERROR: DAILY_DATA_DOES_NOT_EXIST},
+                        status.HTTP_404_NOT_FOUND,
+                    )
             else:
                 # U: OLD: Flock.objects.get(public_id=pk)
                 flock = _flock_queryset_for_request(request).get(public_id=pk)
@@ -182,7 +190,7 @@ class GraphView(viewsets.ViewSet):
             date = []
             fcr = []
             weight = []
-            daily_datas = DailyData.objects.filter(flock=flock)
+            daily_datas = DailyData.objects.filter(flock=flock).order_by("date")
 
             if daily_datas.count() <=1:
                 raise validation_return_response(ERROR, 'Please Enter more daily data to see the progress.')

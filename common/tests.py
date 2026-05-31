@@ -2,11 +2,14 @@ from unittest.mock import patch
 
 from django.http import HttpResponse
 from django.test import SimpleTestCase, TestCase, override_settings
+from rest_framework import status
 
 from common.base_models import PublicId, Users
+from common.constant import APP_RESULT, ERROR, MESSAGE
 from common.middleware import AuthenticationErrorMessage
 from common.utils import (
     build_otp_response_payload,
+    error_response,
     get_or_create_oauth_application,
     send_otp,
 )
@@ -60,6 +63,19 @@ class AuthenticationErrorMiddlewareTests(SimpleTestCase):
         self.assertEqual(response.status_code, 401)
         self.assertEqual(response["content-type"], "application/json")
         self.assertIn(b"invalid_client", response.content)
+
+
+class ApiErrorResponseTests(SimpleTestCase):
+    def test_error_response_exposes_readable_message_and_structured_details(self):
+        response = error_response(
+            {ERROR: "Flock Does Not exist."},
+            status.HTTP_404_NOT_FOUND,
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertEqual(response.data[MESSAGE], "Flock Does Not exist.")
+        self.assertEqual(response.data[ERROR], "Flock Does Not exist.")
+        self.assertEqual(response.data[APP_RESULT], {ERROR: "Flock Does Not exist."})
 
 
 class OAuthApplicationTests(TestCase):

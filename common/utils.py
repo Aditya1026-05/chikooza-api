@@ -1,6 +1,7 @@
 import datetime
 import logging
 import random
+import sys
 import traceback
 from secrets import token_urlsafe
 
@@ -253,10 +254,35 @@ def delete_response(message, status_code):
 
 
 def error_response(message, status_code):
-    logger.error(
-        "Get error response in error_response method: %s", traceback.format_exc()
+    # U: OLD: errors returned message as either a string or nested dict, so the
+    # U: frontend could not reliably show the exact API error.
+    # U: NEW: always expose a readable `message` and `error`, while preserving
+    # U: structured details under `results` for callers that need field data.
+    readable_message = message
+    if isinstance(message, dict):
+        readable_message = (
+            message.get(ERROR)
+            or message.get(MESSAGE)
+            or next(iter(message.values()), RECORD_NOT_FOUND)
+        )
+    if status_code >= 500:
+        logger.error(
+            "API error response %s: %s",
+            status_code,
+            readable_message,
+            exc_info=bool(sys.exc_info()[0]),
+        )
+    else:
+        logger.info("API error response %s: %s", status_code, readable_message)
+    return Response(
+        {
+            "status": status_code,
+            MESSAGE: readable_message,
+            ERROR: readable_message,
+            APP_RESULT: message if isinstance(message, dict) else {},
+        },
+        status=status_code,
     )
-    return Response({"status": status_code, MESSAGE: message}, status=status_code)
 
 
 def check_update_email_validate(email, public_id):
