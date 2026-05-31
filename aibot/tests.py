@@ -897,6 +897,28 @@ class FakeMultiReportExecutor:
         return [{"result": 0}]
 
 
+class FakeTrendExecutor(FakeMultiReportExecutor):
+    def execute(self, plan):
+        if plan.metric == "mortality_trend":
+            return [
+                {"period": "2026-05-01", "result": 1},
+                {"period": "2026-05-02", "result": 3},
+            ]
+        if plan.metric == "best_flock_profit":
+            return [
+                {
+                    "flock_id": 77,
+                    "flock_name": "Alpha Batch",
+                    "farm_name": "Red Farm",
+                    "total_sales": 5000,
+                    "total_purchases": 1000,
+                    "flock_cost": 500,
+                    "result": 3500,
+                }
+            ]
+        return super().execute(plan)
+
+
 class FakeEntityResolver:
     def __init__(self, resolution=None):
         self.resolution = resolution or EntityResolution(
@@ -1228,6 +1250,21 @@ class ChikoozaIntentArchitectureTests(SimpleTestCase):
         self.assertEqual(farm_intent.entity_type, "farm")
         self.assertEqual(farm_intent.entity_reference, "this")
 
+    def test_rule_intent_classifier_detects_trend_comparison_and_best_flock(self):
+        classifier = ChikoozaIntentClassifier(
+            user=self.user,
+            groq_client=FakeGroqClient([]),
+        )
+
+        comparison = classifier.classify("compare sales this month with last month")
+        trend = classifier.classify("is mortality increasing")
+        best = classifier.classify("which flock performed best")
+
+        self.assertEqual(comparison.intent, "comparison_report")
+        self.assertEqual(trend.intent, "trend_report")
+        self.assertEqual(best.intent, "best_flock_report")
+        self.assertEqual(best.entity_type, "flock")
+
     def test_rule_intent_classifier_uses_history_for_pronoun_detail(self):
         classifier = ChikoozaIntentClassifier(
             user=self.user,
@@ -1523,3 +1560,54 @@ class ChikoozaIntentArchitectureTests(SimpleTestCase):
         self.assertIn("Test Farm", response["answer"])
         self.assertNotIn("Account totals", response["answer"])
         self.assertNotIn("Flock-wise details", response["answer"])
+
+    def test_intent_agent_answers_month_comparison_report(self):
+        deterministic = ChikoozaTextToSQLService(user=self.user)
+        deterministic.executor = FakeTrendExecutor()
+        agent = ChikoozaIntentAgentService(
+            user=self.user,
+            deterministic_service=deterministic,
+        )
+
+        with patch.object(
+            ChikoozaTextToSQLService,
+            "_today",
+            return_value=date(2026, 5, 31),
+        ):
+            response = agent.answer("compare sales this month with last month")
+
+        self.assertEqual(response["intent"], "comparison_report")
+        self.assertEqual(response["metric"], "comparison_report")
+        self.assertIn("this month vs last month", response["answer"])
+        self.assertEqual(response["data"]["items"][0]["current_range"]["start"], "2026-05-01")
+        self.assertEqual(response["data"]["items"][0]["previous_range"]["start"], "2026-04-01")
+
+    def test_intent_agent_answers_mortality_trend_report(self):
+        deterministic = ChikoozaTextToSQLService(user=self.user)
+        deterministic.executor = FakeTrendExecutor()
+        agent = ChikoozaIntentAgentService(
+            user=self.user,
+            deterministic_service=deterministic,
+        )
+
+        response = agent.answer("is mortality increasing")
+
+        self.assertEqual(response["intent"], "trend_report")
+        self.assertEqual(response["metric"], "trend_report")
+        self.assertEqual(response["data"]["direction"], "increasing")
+        self.assertIn("Mortality trend", response["answer"])
+
+    def test_intent_agent_answers_best_flock_report(self):
+        deterministic = ChikoozaTextToSQLService(user=self.user)
+        deterministic.executor = FakeTrendExecutor()
+        agent = ChikoozaIntentAgentService(
+            user=self.user,
+            deterministic_service=deterministic,
+        )
+
+        response = agent.answer("which flock performed best")
+
+        self.assertEqual(response["intent"], "best_flock_report")
+        self.assertEqual(response["metric"], "best_flock_report")
+        self.assertIn("Alpha Batch", response["answer"])
+        self.assertIn("Rs. 3,500.00", response["answer"])

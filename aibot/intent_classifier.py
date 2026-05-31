@@ -28,6 +28,9 @@ ALLOWED_INTENTS = {
     "average_weight",
     "average_fcr",
     "multi_farm_report",
+    "comparison_report",
+    "trend_report",
+    "best_flock_report",
     "farm_progress_insight",
     "capability_help",
     "other_entity",
@@ -149,6 +152,9 @@ Rules:
 - Feed use feed_consumed. Weight use average_weight. FCR/feed conversion use average_fcr.
 - If the farmer asks for multiple categories/metrics in one message, such as
   counts plus sales plus farm/flock-wise details, use multi_farm_report.
+- Compare/versus questions such as this month vs last month use comparison_report.
+- Trend/increasing/decreasing questions use trend_report.
+- Best/worst/top flock performance questions use best_flock_report.
 - Progress, performance, health, advice, "how am I doing", "is this good",
   "what should I improve", or similar farm-record interpretation uses farm_progress_insight.
 - "Who are you", "what can you do", "help", or usage questions use capability_help.
@@ -244,6 +250,27 @@ Return JSON only.
         if self._is_multi_query(query):
             return self._intent(
                 "multi_farm_report",
+                entity_type=entity_type,
+                entity_reference=entity_reference,
+                source=source,
+            )
+        if self._is_best_flock_query(query):
+            return self._intent(
+                "best_flock_report",
+                entity_type="flock",
+                entity_reference=entity_reference,
+                source=source,
+            )
+        if self._is_comparison_query(query):
+            return self._intent(
+                "comparison_report",
+                entity_type=entity_type,
+                entity_reference=entity_reference,
+                source=source,
+            )
+        if self._is_trend_query(query):
+            return self._intent(
+                "trend_report",
                 entity_type=entity_type,
                 entity_reference=entity_reference,
                 source=source,
@@ -548,6 +575,31 @@ Return JSON only.
             r"\banything\s+(?:wrong|bad|to improve)\b",
         )
         return any(re.search(pattern, query) for pattern in insight_patterns)
+
+    def _is_comparison_query(self, query: str) -> bool:
+        return bool(
+            re.search(
+                r"\b(?:compare|comparison|versus|vs\.?|against|better than|worse than)\b",
+                query,
+            )
+        )
+
+    def _is_trend_query(self, query: str) -> bool:
+        return bool(
+            re.search(
+                r"\b(?:trend|trends|increasing|decreasing|increase|decrease|rising|falling|going up|going down)\b",
+                query,
+            )
+        )
+
+    def _is_best_flock_query(self, query: str) -> bool:
+        return bool(
+            re.search(
+                r"\b(?:best|top|worst|lowest|highest)\b.*\b(?:flock|flocks|batch|batches|performance|performing)\b"
+                r"|\b(?:which|what)\s+(?:flock|batch)\b.*\b(?:best|top|worst|perform)\b",
+                query,
+            )
+        )
 
     def _is_count_query(self, query: str) -> bool:
         return any(
