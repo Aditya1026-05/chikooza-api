@@ -12,7 +12,15 @@ const App = () => {
     window.scrollTo({ top: 0, left: 0, behavior: "auto" });
   }, [location.pathname]);
 
-  return <div className="dark">{routing}</div>;
+  return (
+    <div className="dark app-shell">
+      {/* U: NEW: keyboard users can jump past repeated navigation on every route. */}
+      <a className="ck-skip-link" href="#main-content">
+        Skip to main content
+      </a>
+      {routing}
+    </div>
+  );
 };
 
 export default App;

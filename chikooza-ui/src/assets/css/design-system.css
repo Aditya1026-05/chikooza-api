@@ -1,0 +1,802 @@
+/* U: NEW: Chikooza design-system layer.
+   Keep shared visual decisions here so pages do not drift into separate
+   red palettes, button shapes, form spacing, and accessibility behavior. */
+:root {
+  color-scheme: light;
+
+  --ck-red-950: #3b0a07;
+  --ck-red-900: #61110d;
+  --ck-red-850: #7f1d1d;
+  --ck-red-800: #8f1d17;
+  --ck-red-700: #9f201d;
+  --ck-red-650: #b32620;
+  --ck-red-600: #b42318;
+  --ck-red-500: #dc2626;
+  --ck-red-100: #fee2e2;
+  --ck-red-75: #fff1ed;
+  --ck-red-50: #fff8f4;
+
+  --ck-amber-600: #d97706;
+  --ck-amber-500: #f59e0b;
+  --ck-amber-100: #ffedd5;
+
+  --ck-green-700: #166534;
+  --ck-green-100: #dcfce7;
+
+  --ck-ink: #231615;
+  --ck-ink-soft: #41100d;
+  --ck-text: #33211d;
+  --ck-text-muted: #67504c;
+  --ck-text-subtle: #8a6f68;
+  --ck-surface: #ffffff;
+  --ck-surface-warm: #fffaf7;
+  --ck-surface-cream: #fff8f4;
+  --ck-page: #fff7f3;
+  --ck-border: #f0ddd8;
+  --ck-border-strong: #d9aaa1;
+  --ck-focus: rgba(220, 38, 38, 0.28);
+
+  --ck-radius-xs: 0.5rem;
+  --ck-radius-sm: 0.75rem;
+  --ck-radius-md: 1rem;
+  --ck-radius-lg: 1.35rem;
+  --ck-radius-xl: 1.75rem;
+  --ck-radius-pill: 999px;
+
+  --ck-space-1: 0.25rem;
+  --ck-space-2: 0.5rem;
+  --ck-space-3: 0.75rem;
+  --ck-space-4: 1rem;
+  --ck-space-5: 1.25rem;
+  --ck-space-6: 1.5rem;
+  --ck-space-8: 2rem;
+  --ck-space-10: 2.5rem;
+  --ck-space-12: 3rem;
+
+  --ck-shadow-sm: 0 8px 22px rgba(69, 34, 29, 0.07);
+  --ck-shadow-md: 0 14px 38px rgba(69, 34, 29, 0.09);
+  --ck-shadow-lg: 0 24px 70px rgba(127, 29, 29, 0.16);
+  --ck-transition: 160ms ease;
+
+  /* U: NEW: aliases for older selectors while the codebase is gradually cleaned. */
+  --ck-primary: var(--ck-red-600);
+  --ck-primary-hot: var(--ck-red-500);
+  --ck-primary-strong: var(--ck-red-850);
+  --ck-primary-soft: var(--ck-red-100);
+  --ck-accent: var(--ck-amber-500);
+  --ck-rust: #c2410c;
+  --ck-muted: var(--ck-text-muted);
+  --ck-card: rgba(255, 255, 255, 0.92);
+  --ck-shadow: var(--ck-shadow-lg);
+  --ck-forest: var(--ck-primary);
+  --ck-leaf: var(--ck-primary-hot);
+  --ck-mint: var(--ck-primary-soft);
+  --ck-cream: var(--ck-surface-cream);
+  --ck-wheat: var(--ck-accent);
+  --ck-coral: var(--ck-rust);
+  --ck-clay: var(--ck-primary-strong);
+
+  --bs-body-font-family: "Plus Jakarta Sans", sans-serif;
+  --bs-body-color: var(--ck-text);
+  --bs-body-bg: var(--ck-page);
+  --bs-primary: var(--ck-red-600);
+  --bs-danger: var(--ck-red-650);
+  --bs-success: var(--ck-green-700);
+  --bs-warning: var(--ck-amber-500);
+  --bs-border-color: var(--ck-border);
+  --bs-border-radius: var(--ck-radius-sm);
+  --bs-link-color: var(--ck-red-600);
+  --bs-link-hover-color: var(--ck-red-850);
+}
+
+html {
+  background: var(--ck-page);
+  min-width: 320px;
+  scroll-behavior: smooth;
+  text-rendering: optimizeLegibility;
+  -webkit-text-size-adjust: 100%;
+}
+
+body,
+#root {
+  min-height: 100vh;
+}
+
+body {
+  background:
+    radial-gradient(circle at 0% 0%, rgba(180, 35, 24, 0.08), transparent 32rem),
+    linear-gradient(180deg, #fffdfb 0%, var(--ck-page) 54%, #fff1ed 100%);
+  color: var(--ck-text);
+}
+
+body,
+button,
+input,
+select,
+textarea {
+  font-family: "Plus Jakarta Sans", sans-serif;
+}
+
+::selection {
+  background: var(--ck-red-100);
+  color: var(--ck-red-950);
+}
+
+a {
+  color: var(--ck-red-600);
+  text-underline-offset: 0.18em;
+  transition: color var(--ck-transition), background-color var(--ck-transition), border-color var(--ck-transition), transform var(--ck-transition);
+}
+
+a:hover {
+  color: var(--ck-red-850);
+}
+
+button,
+[role="button"],
+input,
+select,
+textarea,
+a {
+  -webkit-tap-highlight-color: rgba(180, 35, 24, 0.16);
+}
+
+button:not(:disabled),
+[role="button"]:not(:disabled),
+summary,
+select {
+  cursor: pointer;
+}
+
+:focus {
+  outline: none;
+}
+
+:focus-visible {
+  border-radius: 0.35rem;
+  outline: 3px solid var(--ck-focus);
+  outline-offset: 3px;
+}
+
+.app-shell {
+  min-height: 100vh;
+}
+
+.ck-skip-link {
+  background: var(--ck-red-850);
+  border-radius: 0 0 var(--ck-radius-sm) 0;
+  color: #ffffff;
+  font-weight: 850;
+  left: 0;
+  padding: 0.75rem 1rem;
+  position: fixed;
+  top: 0;
+  transform: translateY(-120%);
+  z-index: 2000;
+}
+
+.ck-skip-link:focus {
+  color: #ffffff;
+  transform: translateY(0);
+}
+
+#main-content {
+  scroll-margin-top: 6rem;
+}
+
+#main-content:focus {
+  outline: none;
+}
+
+.pageWrapper {
+  min-height: calc(100vh - 82px);
+  width: 100%;
+}
+
+.contentArea {
+  background:
+    radial-gradient(circle at 100% 0%, rgba(180, 35, 24, 0.06), transparent 28rem),
+    linear-gradient(180deg, var(--ck-surface-cream) 0%, var(--ck-surface-warm) 50%, #fff4ef 100%);
+  color: var(--ck-text);
+  min-width: 0;
+}
+
+.public-content-area {
+  background: var(--ck-page);
+}
+
+.container,
+.container-fluid {
+  min-width: 0;
+}
+
+.contentArea > .container-fluid {
+  max-width: 1440px;
+  padding: clamp(1rem, 2.4vw, 2rem) !important;
+}
+
+.row {
+  min-width: 0;
+}
+
+.card,
+.modal-content,
+.dropdown-menu,
+.ck-card,
+.auth-card,
+.brand-form-card,
+.brand-auth-card,
+.report-page,
+.member-dashboard-hero,
+.member-workflow-card,
+.member-context-card,
+.member-continue-card,
+.member-selector-card,
+.member-chart-card,
+.farmer-ai-chat,
+.farmer-ai-empty {
+  border-color: var(--ck-border) !important;
+  border-radius: var(--ck-radius-md);
+  box-shadow: var(--ck-shadow-sm);
+}
+
+.card,
+.modal-content,
+.dropdown-menu,
+.ck-card,
+.auth-card,
+.brand-form-card,
+.brand-auth-card,
+.member-dashboard-hero,
+.member-workflow-card,
+.member-context-card,
+.member-selector-card,
+.member-chart-card,
+.farmer-ai-chat,
+.farmer-ai-empty {
+  background: var(--ck-surface);
+}
+
+.card-title,
+.modal-title,
+.ck-section-title,
+.member-card-heading strong,
+.report-page__title {
+  color: var(--ck-ink);
+  font-weight: 850;
+  letter-spacing: -0.035em;
+}
+
+.card-body,
+.modal-body {
+  padding: clamp(1rem, 2vw, 1.45rem);
+}
+
+.btn,
+.ck-button,
+.ck-button-secondary,
+.buttonclass,
+.home-primary-action,
+.home-secondary-action,
+.report-export-button,
+.report-reset-button,
+.farmer-ai-login-link {
+  align-items: center;
+  border-radius: var(--ck-radius-pill) !important;
+  display: inline-flex;
+  font-weight: 800;
+  gap: 0.45rem;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0.72rem 1.08rem;
+  text-decoration: none;
+  transition: background-color var(--ck-transition), border-color var(--ck-transition), box-shadow var(--ck-transition), color var(--ck-transition), transform var(--ck-transition);
+}
+
+.btn:hover,
+.ck-button:hover,
+.ck-button-secondary:hover,
+.buttonclass:hover,
+.home-primary-action:hover,
+.home-secondary-action:hover,
+.report-export-button:hover,
+.report-reset-button:hover,
+.farmer-ai-login-link:hover {
+  transform: translateY(-1px);
+}
+
+.btn:active,
+.ck-button:active,
+.ck-button-secondary:active,
+.buttonclass:active,
+.home-primary-action:active,
+.home-secondary-action:active,
+.report-export-button:active,
+.report-reset-button:active,
+.farmer-ai-login-link:active {
+  transform: translateY(0);
+}
+
+.btn-danger,
+.btn-primary,
+.btn-success,
+.ck-button,
+.buttonclass,
+.home-primary-action,
+.report-export-button,
+.farmer-ai-form .btn,
+.farmer-ai-login-link {
+  background: var(--ck-red-600) !important;
+  border-color: var(--ck-red-600) !important;
+  box-shadow: 0 12px 26px rgba(180, 35, 24, 0.16);
+  color: #ffffff !important;
+}
+
+.btn-danger:hover,
+.btn-primary:hover,
+.btn-success:hover,
+.ck-button:hover,
+.buttonclass:hover,
+.home-primary-action:hover,
+.report-export-button:hover,
+.farmer-ai-form .btn:hover,
+.farmer-ai-login-link:hover {
+  background: var(--ck-red-800) !important;
+  border-color: var(--ck-red-800) !important;
+  color: #ffffff !important;
+}
+
+.btn-secondary,
+.btn-warning,
+.btn-outline-secondary,
+.ck-button-secondary,
+.home-secondary-action,
+.report-reset-button {
+  background: #ffffff !important;
+  border: 1px solid rgba(180, 35, 24, 0.28) !important;
+  box-shadow: none;
+  color: var(--ck-red-700) !important;
+}
+
+.btn-secondary:hover,
+.btn-warning:hover,
+.btn-outline-secondary:hover,
+.ck-button-secondary:hover,
+.home-secondary-action:hover,
+.report-reset-button:hover {
+  background: var(--ck-red-75) !important;
+  border-color: var(--ck-red-600) !important;
+  color: var(--ck-red-850) !important;
+}
+
+.btn-outline-danger,
+.btn-outline-primary,
+.btn-outline-success {
+  background: #ffffff;
+  border-color: rgba(180, 35, 24, 0.32);
+  color: var(--ck-red-700);
+}
+
+.btn-outline-danger:hover,
+.btn-outline-primary:hover,
+.btn-outline-success:hover {
+  background: var(--ck-red-600);
+  border-color: var(--ck-red-600);
+  color: #ffffff;
+}
+
+.btn:disabled,
+.btn.disabled,
+.ck-button:disabled,
+.ck-button-secondary:disabled,
+.report-export-button:disabled,
+button:disabled {
+  box-shadow: none;
+  cursor: not-allowed;
+  opacity: 0.62;
+  transform: none;
+}
+
+.btn-close {
+  border-radius: var(--ck-radius-xs) !important;
+}
+
+.btn.btn-close,
+.btn-close {
+  background-color: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  height: 1em;
+  min-height: auto;
+  padding: 0.25em;
+  transform: none !important;
+  width: 1em;
+}
+
+.form-label,
+label,
+.form-field label {
+  color: var(--ck-ink);
+  font-weight: 800;
+}
+
+.form-control,
+.form-select,
+.inputclass,
+.form-field input,
+.form-field textarea,
+.farmer-ai-form textarea,
+input:not([type="checkbox"]):not([type="radio"]),
+select,
+textarea {
+  background-color: #fffdfb;
+  border: 1px solid rgba(180, 35, 24, 0.2);
+  border-radius: var(--ck-radius-sm);
+  color: var(--ck-ink);
+  min-height: 44px;
+  transition: border-color var(--ck-transition), box-shadow var(--ck-transition), background-color var(--ck-transition);
+}
+
+.form-control:focus,
+.form-select:focus,
+.inputclass:focus,
+.form-field input:focus,
+.form-field textarea:focus,
+.farmer-ai-form textarea:focus,
+input:not([type="checkbox"]):not([type="radio"]):focus,
+select:focus,
+textarea:focus {
+  background-color: #ffffff;
+  border-color: var(--ck-red-500);
+  box-shadow: 0 0 0 0.22rem rgba(220, 38, 38, 0.14);
+}
+
+.form-control:disabled,
+.form-select:disabled,
+input:disabled,
+select:disabled,
+textarea:disabled {
+  background-color: #f7eee9;
+  border-color: #ead3cc;
+  color: var(--ck-text-subtle);
+  opacity: 1;
+}
+
+.form-control::placeholder,
+.form-field input::placeholder,
+.form-field textarea::placeholder,
+textarea::placeholder {
+  color: #9b837d;
+}
+
+.input-group-text {
+  background: var(--ck-red-75);
+  border-color: rgba(180, 35, 24, 0.2);
+  color: var(--ck-red-700);
+  font-weight: 750;
+}
+
+.form-error,
+.invalid-feedback {
+  color: #b91c1c;
+  font-size: 0.82rem;
+}
+
+.alert {
+  border-radius: var(--ck-radius-md);
+  line-height: 1.55;
+}
+
+.alert-danger {
+  background-color: var(--ck-red-100);
+  border-color: #fca5a5;
+  color: var(--ck-red-850);
+}
+
+.alert-success {
+  background-color: var(--ck-green-100);
+  border-color: #86efac;
+  color: #14532d;
+}
+
+.alert-info,
+.alert-secondary {
+  background-color: var(--ck-red-75);
+  border-color: var(--ck-border);
+  color: var(--ck-ink-soft);
+}
+
+.table-responsive {
+  border: 1px solid rgba(180, 35, 24, 0.1);
+  border-radius: var(--ck-radius-md);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.table {
+  --bs-table-bg: #ffffff;
+  --bs-table-striped-bg: rgba(220, 38, 38, 0.045);
+  --bs-table-hover-bg: rgba(220, 38, 38, 0.075);
+  border-color: rgba(180, 35, 24, 0.1);
+  color: var(--ck-text);
+  margin-bottom: 0;
+}
+
+.table th {
+  color: var(--ck-red-700);
+  font-size: 0.78rem;
+  font-weight: 850;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.table td {
+  color: var(--ck-text);
+  vertical-align: middle;
+}
+
+.modal-content {
+  overflow: hidden;
+}
+
+.modal-header,
+.modal-footer {
+  border-color: rgba(180, 35, 24, 0.12);
+}
+
+.dropdown-menu {
+  padding: 0.45rem;
+}
+
+.dropdown-item {
+  border-radius: var(--ck-radius-sm);
+  min-height: 40px;
+}
+
+.dropdown-item:hover,
+.dropdown-item:focus {
+  background: var(--ck-red-75);
+  color: var(--ck-red-850);
+}
+
+.nav-tabs {
+  border-bottom-color: rgba(180, 35, 24, 0.14);
+  gap: 0.35rem;
+}
+
+.nav-tabs .nav-link {
+  border-radius: var(--ck-radius-pill);
+  color: var(--ck-text-muted);
+  font-weight: 750;
+}
+
+.nav-tabs .nav-link.active {
+  background: var(--ck-red-75);
+  border-color: var(--ck-border);
+  color: var(--ck-red-700);
+}
+
+.form-stepper button,
+.member-workflow-steps article,
+.member-mini-stats div,
+.form-review-card,
+.form-prerequisite-card,
+.form-helper-panel,
+.report-empty-state,
+.member-empty-state {
+  background: var(--ck-surface-cream);
+  border-color: var(--ck-border);
+}
+
+.form-stepper button.is-active {
+  border-color: var(--ck-red-600);
+  box-shadow: 0 0 0 4px rgba(180, 35, 24, 0.08);
+}
+
+.form-stepper button.is-complete span,
+.member-workflow-index {
+  background: var(--ck-red-650);
+  color: #ffffff;
+}
+
+.member-workflow-steps article.is-complete .member-workflow-index {
+  background: var(--ck-green-700);
+}
+
+.member-continue-card {
+  background: linear-gradient(112deg, var(--ck-red-800), var(--ck-red-650) 58%, #d0604d) !important;
+}
+
+.chikooza-public-header {
+  min-height: 76px;
+}
+
+.chikooza-brand-logo {
+  max-height: 38px;
+}
+
+.chikooza-menu-button {
+  min-width: 44px;
+}
+
+.chikooza-footer {
+  background:
+    radial-gradient(circle at 8% 12%, rgba(180, 35, 24, 0.2), transparent 18rem),
+    var(--ck-ink);
+}
+
+.chikooza-footer-links a:focus-visible,
+.chikooza-footer-logo:focus-visible {
+  outline-color: rgba(255, 255, 255, 0.7);
+}
+
+.ck-page {
+  display: grid;
+  gap: clamp(1rem, 2vw, 1.5rem);
+}
+
+.ck-page-header {
+  background: #ffffff;
+  border: 1px solid var(--ck-border);
+  border-radius: var(--ck-radius-lg);
+  box-shadow: var(--ck-shadow-sm);
+  padding: clamp(1rem, 3vw, 1.75rem);
+}
+
+.ck-page-header span,
+.ck-kicker,
+.home-eyebrow,
+.report-page__eyebrow,
+.member-card-heading span {
+  color: var(--ck-red-700);
+  font-weight: 850;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.ck-grid {
+  display: grid;
+  gap: clamp(1rem, 2vw, 1.5rem);
+}
+
+.ck-empty-state {
+  background: var(--ck-surface-cream);
+  border: 1px dashed rgba(180, 35, 24, 0.36);
+  border-radius: var(--ck-radius-lg);
+  color: var(--ck-text-muted);
+  padding: clamp(1rem, 3vw, 1.5rem);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@media (max-width: 992px) {
+  .contentArea > .container-fluid {
+    padding: 1rem !important;
+  }
+
+  .table {
+    min-width: 720px;
+  }
+}
+
+@media (max-width: 767px) {
+  .pageWrapper {
+    min-height: auto;
+  }
+
+  .contentArea > .container-fluid {
+    padding: 0.85rem !important;
+  }
+
+  .chikooza-public-header {
+    min-height: 66px;
+  }
+
+  .chikooza-public-header .navbar-collapse {
+    background: rgba(255, 253, 251, 0.98);
+    border: 1px solid rgba(180, 35, 24, 0.12);
+    border-radius: var(--ck-radius-md);
+    box-shadow: var(--ck-shadow-sm);
+    margin-top: 0.75rem;
+    padding: 0.55rem;
+  }
+
+  .chikooza-public-header .navbar-nav {
+    gap: 0.2rem;
+  }
+
+  .linkheader {
+    min-height: 44px;
+    width: 100%;
+  }
+
+  .form-stepper {
+    grid-template-columns: 1fr !important;
+  }
+
+  .form-stepper button {
+    min-height: auto;
+  }
+
+  .form-wizard-actions,
+  .report-actions,
+  .home-actions,
+  .ck-actions,
+  .farmer-ai-form div {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .form-wizard-actions .btn,
+  .report-actions .btn,
+  .report-export-button,
+  .report-reset-button,
+  .ck-button,
+  .ck-button-secondary,
+  .home-primary-action,
+  .home-secondary-action,
+  .farmer-ai-form .btn {
+    width: 100%;
+  }
+
+  .modal-dialog {
+    margin: 0.75rem;
+  }
+
+  .modal-content,
+  .card,
+  .auth-card,
+  .brand-form-card,
+  .brand-auth-card,
+  .report-page,
+  .member-dashboard-hero,
+  .member-workflow-card,
+  .member-context-card,
+  .member-selector-card,
+  .member-chart-card,
+  .farmer-ai-chat {
+    border-radius: var(--ck-radius-md);
+  }
+
+  .chikooza-footer-inner,
+  .chikooza-footer-bottom {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .contentArea > .container-fluid {
+    padding: 0.65rem !important;
+  }
+
+  .card-body,
+  .modal-body {
+    padding: 1rem;
+  }
+
+  .btn,
+  .ck-button,
+  .ck-button-secondary,
+  .buttonclass,
+  .home-primary-action,
+  .home-secondary-action {
+    min-height: 46px;
+    width: 100%;
+  }
+
+  .chikooza-brand-logo {
+    max-height: 32px;
+    max-width: 190px;
+  }
+}

@@ -4,7 +4,7 @@ import MemberFooter from "./MemberFooter";
 import { Container } from "reactstrap"
 const FullLayoutMember = () => {
   return (
-    <main>
+    <div className="app-layout">
       {/********header**********/}
       <Header />
       <div className="pageWrapper d-lg-flex">
@@ -13,7 +13,7 @@ const FullLayoutMember = () => {
           <Sidebar />
         </aside>*/}
         {/********Content Area**********/}
-        <div className="contentArea">
+        <div className="contentArea" id="main-content" tabIndex="-1">
           {/********Middle Content**********/}
           <Container className="p-4" fluid>
             {/* <Row>
@@ -83,7 +83,7 @@ const FullLayoutMember = () => {
         </div>
       </div>
       <MemberFooter />
-    </main>
+    </div>
   );
 };
 

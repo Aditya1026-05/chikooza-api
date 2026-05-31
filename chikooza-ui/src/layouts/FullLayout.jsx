@@ -5,7 +5,7 @@ import Footer from "./Footer";
 
 const FullLayout = () => {
   return (
-    <main>
+    <div className="app-layout">
       {/********header**********/}
       <Header />
       <div className="pageWrapper d-lg-flex">
@@ -16,13 +16,13 @@ const FullLayout = () => {
         {/********Content Area**********/}
         {/* U: OLD: public routes were wrapped in a dashboard breadcrumb card.
             U: NEW: public/auth pages render as modern full-width product pages. */}
-        <div className="contentArea public-content-area">
+        <div className="contentArea public-content-area" id="main-content" tabIndex="-1">
           {/********Middle Content**********/}
           <Outlet />
         </div>
       </div>
       <Footer />
-    </main>
+    </div>
   );
 };
 

@@ -26,7 +26,7 @@ const Header = () => {
   //   document.getElementById("sidebarArea").classList.toggle("showSidebar");
   // };
   return (
-    <Navbar light expand="md" className="fix-header chikooza-public-header">
+    <Navbar light expand="md" className="fix-header chikooza-public-header" aria-label="Public navigation">
       <div className="d-flex align-items-center">
         {/* U: OLD: header used a temporary CSS "C" mark that looked generic.
             U: NEW: restore the real Chikooza wordmark for a more professional brand header. */}
@@ -47,6 +47,9 @@ const Header = () => {
           size="sm"
           className="d-sm-block d-md-none chikooza-menu-button"
           onClick={Handletoggle}
+          aria-controls="public-navigation"
+          aria-expanded={isOpen}
+          aria-label={isOpen ? "Close public navigation" : "Open public navigation"}
         >
           {isOpen ? (
             <i className="bi bi-x fs-5"></i>
@@ -56,7 +59,7 @@ const Header = () => {
         </Button>
       </div>
 
-      <Collapse navbar isOpen={isOpen}>
+      <Collapse navbar isOpen={isOpen} id="public-navigation">
         <Nav className="me-auto" navbar>
           <NavItem>
             <NavLink to="/" className={({ isActive }) => `linkheader ${isActive ? "linkheader-active" : ""}`}>

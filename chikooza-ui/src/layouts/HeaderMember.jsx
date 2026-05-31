@@ -61,7 +61,7 @@ const Header = () => {
   //   document.getElementById("sidebarArea").classList.toggle("showSidebar");
   // };
   return (
-    <Navbar light expand="md" className="fix-header chikooza-public-header">
+    <Navbar light expand="md" className="fix-header chikooza-public-header" aria-label="Farmer workspace navigation">
       <div className="d-flex align-items-center">
         {/* U: OLD: member header used a temporary CSS "C" mark.
             U: NEW: use the same real Chikooza wordmark as the public header. */}
@@ -82,6 +82,9 @@ const Header = () => {
           size="sm"
           className="d-sm-block d-md-none chikooza-menu-button"
           onClick={Handletoggle}
+          aria-controls="member-navigation"
+          aria-expanded={isOpen}
+          aria-label={isOpen ? "Close farmer workspace navigation" : "Open farmer workspace navigation"}
         >
           {isOpen ? (
             <i className="bi bi-x fs-5"></i>
@@ -91,7 +94,7 @@ const Header = () => {
         </Button>
       </div>
 
-      <Collapse navbar isOpen={isOpen}>
+      <Collapse navbar isOpen={isOpen} id="member-navigation">
         <Nav className="me-auto" navbar>
           <NavItem>
             <Link to="/member" className="linkheader" onClick={closeMenus}>
@@ -159,7 +162,7 @@ const Header = () => {
           </NavItem>
         </Nav>
         <Dropdown isOpen={dropdownOpen} toggle={toggle} className="member-user-menu">
-          <DropdownToggle color="transparent" className="member-user-toggle">
+          <DropdownToggle color="transparent" className="member-user-toggle" aria-label="Open farmer account menu">
             Hi, {localStorage.getItem('fname')} <FaAngleDown></FaAngleDown>
             {/*<img src={user1} alt="profile" className="rounded-circle" width="30"></img>*/}
           </DropdownToggle>

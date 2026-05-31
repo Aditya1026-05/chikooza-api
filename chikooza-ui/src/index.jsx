@@ -13,6 +13,8 @@ import Loader from "./layouts/loader/Loader";
 // import "primereact/resources/themes/lara-light-indigo/theme.css";
 // import "primereact/resources/primereact.min.css";
 import "primeicons/primeicons.css";
+// U: NEW: last global stylesheet for Chikooza tokens and shared component standards.
+import "./assets/css/design-system.css";
 // U: OLD: PrimeFlex utilities were imported globally but are not used by the current UI.
 // import "primeflex/primeflex.css";
 
