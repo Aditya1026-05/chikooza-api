@@ -79,12 +79,33 @@ const AddPurchase = () => {
     let [quantityerr, setQuantityerr] = useState('');
     let [flockerr, setFlockerr] = useState('');
     let [typeerr, setTypeerr] = useState('');
+    const [existingPurchases, setExistingPurchases] = useState([]);
+    const [purchaseReviewLoading, setPurchaseReviewLoading] = useState(false);
     let navigate = useNavigate()
     const location = useLocation();
     const prefillFarmId = String(location.state?.farmPublicId || "0");
     const prefillFlockId = String(location.state?.flockPublicId || "0");
     const hasFarmPrerequisite = farms.some((farm) => String(farm.public_id) !== "0");
     const hasFlockOptions = flocks.some((item) => String(item.flock_public_id) !== "0");
+    const selectedFlockRecord = flocks.find((item) => String(item.flock_public_id) === String(addData.flock_public_id));
+    const purchaseReviewTotal = existingPurchases.reduce((total, item) => total + Number(item.cost || 0), 0);
+
+    const loadExistingPurchases = (flockPublicId) => {
+        if (!flockPublicId || String(flockPublicId) === "0") {
+            setExistingPurchases([]);
+            return;
+        }
+
+        setPurchaseReviewLoading(true);
+        axios.get(`${apiPath}purchase/?flock_public_id=${flockPublicId}`, getAuthConfig()).then((res) => {
+            setExistingPurchases(res.data.results.purchase_list || []);
+        }).catch((err) => {
+            setExistingPurchases([]);
+            handleUnauthorized(err, navigate);
+        }).finally(() => {
+            setPurchaseReviewLoading(false);
+        });
+    };
 
     useEffect(() => {
         // U: NEW: long purchase forms are draft-saved locally so a farmer can
@@ -135,6 +156,7 @@ const AddPurchase = () => {
                     setFlockerr(hasPrefillFlock ? '' : 'Please select a flock');
                     if (hasPrefillFlock) {
                         setPurchaseStep((currentStep) => Math.max(currentStep, 1));
+                        loadExistingPurchases(prefillFlockId);
                     }
                 }).catch((err) => {
                     if (!cancelled) {
@@ -156,6 +178,7 @@ const AddPurchase = () => {
     }, [navigate, prefillFarmId, prefillFlockId])
     let changeFarm = (e) => {
         setAddData({ ...addData, farm_public_id: e.target.value, flock_public_id: "0" });
+        setExistingPurchases([]);
         // U: OLD: e.target.value === 0 compared a string to a number.
         if (e.target.value === "0") {
             //setFarm_public_iderr('Please select farm');
@@ -183,10 +206,12 @@ const AddPurchase = () => {
             setFlockerr('Flock is not valid');
             setAddData({ ...addData, flock_public_id: "0" });
             setShowForm(0);
+            setExistingPurchases([]);
         } else {
             setFlockerr('');
             setAddData({ ...addData, flock_public_id: e.target.value });
             setShowForm(1);
+            loadExistingPurchases(e.target.value);
         }
     }
     const validateSelectionStep = () => {
@@ -320,6 +345,7 @@ const AddPurchase = () => {
         if (validateSelectionStep() && validatePurchaseDetails()) {
             setLoading(true)
             let url = `${apiPath}purchase/`;
+            const savedFlockPublicId = addData.flock_public_id;
             axios.post(url, addData, getAuthConfig()).then((res) => {
                 setShow(true);
                 setLoading(false);
@@ -327,6 +353,7 @@ const AddPurchase = () => {
                     setShow(false);
                 }), 3000);
                 resetPurchaseForm({ keepSelection: true });
+                loadExistingPurchases(savedFlockPublicId);
             }).catch((err) => {
                 setLoading(false);
                 setErr('Something went wrong. Please try again');
@@ -487,6 +514,47 @@ const AddPurchase = () => {
                                                             <Link to="/addflock">Add flock</Link>
                                                         </div>
                                                         : null}
+                                                    {showForm === 1 && (
+                                                        <>
+                                                            <div className="record-review-toolbar">
+                                                                <div>
+                                                                    <span>Saved purchases</span>
+                                                                    <strong>{selectedFlockRecord?.flock_name || "Selected flock"}</strong>
+                                                                    <p>{existingPurchases.length} purchase{existingPurchases.length === 1 ? "" : "s"} saved, Rs. {purchaseReviewTotal.toFixed(2)} total cost.</p>
+                                                                </div>
+                                                                <Button color="danger" outline type="button" onClick={() => navigate("/listpurchase", { state: { farmPublicId: addData.farm_public_id, flockPublicId: addData.flock_public_id } })}>Manage purchases</Button>
+                                                            </div>
+                                                            {purchaseReviewLoading ? (
+                                                                <div className="record-review-empty">
+                                                                    <strong>Loading saved purchases...</strong>
+                                                                    <p>Checking existing cost records for this flock.</p>
+                                                                </div>
+                                                            ) : existingPurchases.length > 0 ? (
+                                                                <div className="record-review-grid" aria-label="Saved purchases">
+                                                                    {existingPurchases.slice(0, 6).map((item) => (
+                                                                        <article key={item.public_id}>
+                                                                            <div>
+                                                                                <span>{purchaseTypeLabels[item.type] || item.type || "Purchase"}</span>
+                                                                                <strong>Rs. {Number(item.cost || 0).toFixed(2)}</strong>
+                                                                                <p>{item.date || "Date not added"}</p>
+                                                                            </div>
+                                                                            <dl>
+                                                                                <div><dt>Item</dt><dd>{item.item_name || item.company_name || "Not added"}</dd></div>
+                                                                                <div><dt>Quantity</dt><dd>{item.quantity || item.unit || "Not added"}</dd></div>
+                                                                                <div><dt>Remarks</dt><dd>{item.remarks || "Not added"}</dd></div>
+                                                                            </dl>
+                                                                            <Button tag={Link} to={`/viewpurchase/${item.flock_public_id}/${item.public_id}`} color="danger" outline type="button">Review</Button>
+                                                                        </article>
+                                                                    ))}
+                                                                </div>
+                                                            ) : (
+                                                                <div className="record-review-empty">
+                                                                    <strong>No purchases saved for this flock yet.</strong>
+                                                                    <p>Continue this form to add feed, medicine, vaccination, labour, equipment, or other costs.</p>
+                                                                </div>
+                                                            )}
+                                                        </>
+                                                    )}
                                                 </>
                                             )}
                                             {(purchaseStep === 1 && showForm === 1) ?

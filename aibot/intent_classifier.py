@@ -93,6 +93,22 @@ class ChikoozaIntentClassifier:
                 source="rule_multi",
             )
 
+        early_entity_type = self._entity_type_from_text(query)
+        early_reference = self._entity_reference_from_text(query, "current")
+        if self._is_count_query(query) and early_entity_type == "farm":
+            return self._intent("count_farms", entity_type="farm", source="rule_core")
+        if self._is_count_query(query) and early_entity_type == "flock":
+            return self._intent("count_flocks", entity_type="flock", source="rule_core")
+        if self._is_broad_list_query(query, "farm"):
+            return self._intent("list_farms", entity_type="farm", source="rule_core")
+        if self._is_broad_list_query(query, "flock"):
+            return self._intent("list_flocks", entity_type="flock", source="rule_core")
+        if self._is_summary_query(query) and not early_reference:
+            # U: OLD: Groq could classify "show my farm summary" as one farm's
+            # U: details, especially after farm names existed in history.
+            # U: NEW: core account summary/list/count intents are deterministic.
+            return self._intent("farm_summary", source="rule_core")
+
         provider = os.getenv("AIBOT_INTENT_PROVIDER", "auto").strip().lower()
         if provider in {"off", "false", "rule", "rules", "deterministic"}:
             return self._rule_classify(question, history=history, source="rule")
@@ -622,6 +638,25 @@ Return JSON only.
         return any(
             word in query
             for word in ("list", "show", "display", "which", "what", "all", "details")
+        )
+
+    def _is_broad_list_query(self, query: str, label: str) -> bool:
+        entity_pattern = r"\b(?:flocks?|batches?)\b" if label == "flock" else r"\bfarms?\b"
+        if not re.search(entity_pattern, query):
+            return False
+        if self._entity_reference_from_text(query, "current"):
+            return False
+        if re.search(r"\b(?:summary|overview)\b", query):
+            return False
+        return bool(
+            re.search(
+                r"\b(?:list|display|which)\b.*\b(?:all|my|our)?\b",
+                query,
+            )
+            or re.search(r"\b(?:show|give|tell|what)\b.*\b(?:all|every)\b", query)
+            or re.search(r"\b(?:show|give|tell|what)\b.*\b(?:my|our)\s+(?:farms?|flocks?|batches?)\b", query)
+            or re.search(r"\b(?:what|which)\s+(?:farms?|flocks?|batches?)\b", query)
+            or re.search(r"\b(?:all|every)\b.*\b(?:farms?|flocks?|batches?)\b", query)
         )
 
     def _entity_type_from_text(self, query: str) -> str:

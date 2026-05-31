@@ -74,6 +74,7 @@ const ManageFarm = () => {
   const [farm, setFarm] = useState([]);
   const [selectedFarmId, setSelectedFarmId] = useState(initialDraft.selectedFarmId);
   const [farmStep, setFarmStep] = useState(initialDraft.farmStep);
+  const farmList = farm.filter((item) => String(item.public_id) !== "0");
 
   useEffect(() => {
     let url = `${apiPath}state/`;
@@ -129,7 +130,9 @@ const ManageFarm = () => {
     let valid = true;
     if (String(addData.country_public_id || "0") === "0") { setCountryError('Please select country'); valid = false; } else { setCountryError(''); }
     if (String(addData.state_public_id || "0") === "0") { setStateError('Please select state'); valid = false; } else { setStateError(''); }
-    if ((addData.name || '').trim() === '') { setFarmnameError('Please enter farm name'); valid = false; } else { setFarmnameError(''); }
+    if ((addData.name || '').trim() === '') { setFarmnameError('Please enter farm name'); valid = false; }
+    else if ((addData.name || '').trim().length > 30) { setFarmnameError('Farm name can be maximum 30 characters'); valid = false; }
+    else { setFarmnameError(''); }
     if ((addData.address || '').trim() === '') { setAddressError('Please enter address'); valid = false; } else { setAddressError(''); }
     if ((addData.city || '').trim() === '') { setCityorvillageError('Please enter city/village name'); valid = false; } else { setCityorvillageError(''); }
     if (!/^\d{6}$/.test(String(addData.pin || ''))) { setPincodeError('Pincode must be 6 digits'); valid = false; } else { setPincodeError(''); }
@@ -189,7 +192,7 @@ const ManageFarm = () => {
             setShow(false);
             // U: Replaced find side effects with map so the callback always returns a value.
             setFarm((currentFarm) => currentFarm.map((item) => (
-              item.public_id === addData.public_id ? { ...item, name: addData.name } : item
+              String(item.public_id) === String(addData.public_id) ? { ...item, ...addData, name: addData.name } : item
             )));
             setAddData(emptyManageFarmData)
             setSelectedFarmId("0");
@@ -214,7 +217,7 @@ const ManageFarm = () => {
   }
   let farmnameChange = (e) => {
     setAddData({ ...addData, name: e.target.value });
-    e.target.value.trim() === '' ? setFarmnameError('Please enter name') : setFarmnameError('');
+    e.target.value.trim() === '' ? setFarmnameError('Please enter name') : e.target.value.trim().length > 30 ? setFarmnameError('Farm name can be maximum 30 characters') : setFarmnameError('');
   }
   let addressChange = (e) => {
     setAddData({ ...addData, address: e.target.value });
@@ -240,10 +243,10 @@ const ManageFarm = () => {
     setAddData({ ...addData, city: e.target.value });
     e.target.value.trim() === '' ? setCityorvillageError('Please enter city/Village name') : setCityorvillageError('');
   }
-  let displayForm = (e) => {
-    if (e.target.value !== "0") {
-      setSelectedFarmId(e.target.value);
-      let url = `${apiPath}farm/${e.target.value}/`;
+  const loadFarmForEdit = (farmId) => {
+    if (String(farmId) !== "0") {
+      setSelectedFarmId(String(farmId));
+      let url = `${apiPath}farm/${farmId}/`;
       // U: Replaced shared config mutation with per-request auth headers from getAuthConfig().
       // config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
       axios.get(url, getAuthConfig()).then((res) => {
@@ -260,6 +263,9 @@ const ManageFarm = () => {
       setShowForm(false);
       setFarmStep(0);
     }
+  };
+  let displayForm = (e) => {
+    loadFarmForEdit(e.target.value);
   }
   let closeAll = () => {
     setAddData(emptyManageFarmData)
@@ -305,6 +311,39 @@ const ManageFarm = () => {
                   <div className={contentArea}>
                     <div className='gridmargin'>
                       {(err !== '') && <Alert color="danger">{err}</Alert>}
+                      <div className="record-review-toolbar">
+                        <div>
+                          <span>Saved farms</span>
+                          <strong>{farmList.length} farm{farmList.length === 1 ? "" : "s"} in this account</strong>
+                          <p>Review an existing farm or add another location before creating more flocks.</p>
+                        </div>
+                        <Button color="danger" type="button" onClick={() => navigate("/addfarm")}>Add another farm</Button>
+                      </div>
+                      {farmList.length > 0 ? (
+                        <div className="record-review-grid" aria-label="Saved farms">
+                          {farmList.map((item) => (
+                            <article key={item.public_id} className={String(item.public_id) === selectedFarmId ? "is-selected" : ""}>
+                              <div>
+                                <span>Farm</span>
+                                <strong>{item.name}</strong>
+                                <p>{[item.city, item.state_name].filter(Boolean).join(", ") || "Location not added"}</p>
+                              </div>
+                              <dl>
+                                <div><dt>Sheds</dt><dd>{item.shed_count ?? "Not added"}</dd></div>
+                                <div><dt>Status</dt><dd>{item.status ? "Active" : "Inactive"}</dd></div>
+                                <div><dt>Pin</dt><dd>{item.pin || "Not added"}</dd></div>
+                              </dl>
+                              <Button color="danger" outline type="button" onClick={() => loadFarmForEdit(item.public_id)}>Review / edit</Button>
+                            </article>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="record-review-empty">
+                          <strong>No farms saved yet.</strong>
+                          <p>Add the first farm before creating flocks, purchases, sales, reports, and Farmer AI answers.</p>
+                          <Button color="danger" type="button" onClick={() => navigate("/addfarm")}>Add first farm</Button>
+                        </div>
+                      )}
                       <div className="form-stepper" aria-label="Manage farm steps">
                         {manageFarmSteps.map((step, index) => (
                           <button
@@ -345,8 +384,9 @@ const ManageFarm = () => {
                               <FormGroup>
                                 <Label for="exampleName">Farm Name</Label>
                                 <div className="input-group input-group">
-                                  <input onChange={farmnameChange} name="farmname" value={addData.name || ""} placeholder="Farm Name" type="text" className="form-control" aria-label="Farm Name" aria-describedby="basic-addon1" />
+                                  <input onChange={farmnameChange} name="farmname" value={addData.name || ""} placeholder="Farm Name" type="text" maxLength="30" className="form-control" aria-label="Farm Name" aria-describedby="basic-addon1" />
                                 </div>
+                                <small className="text-muted">{(addData.name || "").length}/30 characters</small>
                                 <small id="passwordHelp" className="text-danger">{farmnameError}</small>
                               </FormGroup>
                               <FormGroup>

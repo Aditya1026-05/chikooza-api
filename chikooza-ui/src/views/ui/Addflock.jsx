@@ -51,6 +51,8 @@ const AddFlock = () => {
     let [farms, setFarms] = useState([]);
     let [breeds, setBreeds] = useState([]);
     let [intgcom, setIntgcom] = useState([]);
+    const [existingFlocks, setExistingFlocks] = useState([]);
+    const [flockReviewLoading, setFlockReviewLoading] = useState(false);
 
     var hatchdate = moment();
     var currentDate = hatchdate.format('YYYY-MM-DD');
@@ -110,6 +112,37 @@ const AddFlock = () => {
     }, [addData]);
 
     const hasFarmPrerequisite = farms.some((farm) => String(farm.public_id) !== "0");
+    const hasSelectedFarm = addData.farm_public_id && String(addData.farm_public_id) !== "0";
+    const selectedFarmRecord = farms.find((farm) => String(farm.public_id) === String(addData.farm_public_id));
+
+    const loadExistingFlocks = (farmPublicId) => {
+        if (!farmPublicId || String(farmPublicId) === "0") {
+            setExistingFlocks([]);
+            return;
+        }
+
+        setFlockReviewLoading(true);
+        axios.get(`${apiPath}flocks/${farmPublicId}/`, getAuthConfig()).then((res) => {
+            if (res.data.results.total_records === 0) {
+                setExistingFlocks([]);
+            } else {
+                setExistingFlocks(res.data.results.flock_list || []);
+            }
+        }).catch((err) => {
+            setExistingFlocks([]);
+            handleUnauthorized(err, navigate);
+        }).finally(() => {
+            setFlockReviewLoading(false);
+        });
+    };
+
+    useEffect(() => {
+        // U: NEW: if a saved draft already has a farm selected, show the saved
+        // U: flocks under that farm before the farmer creates another one.
+        if (hasSelectedFarm) {
+            loadExistingFlocks(addData.farm_public_id);
+        }
+    }, [navigate]);
 
     useEffect(() => {
         if (String(addData.integration) === "1") {
@@ -185,6 +218,7 @@ const AddFlock = () => {
         setAddData({ ...addData, farm_public_id: e.target.value });
         // U: OLD: e.target.value === 0 compared a string to a number.
         e.target.value === "0" ? setFarm_public_iderr('Please select farm') : setFarm_public_iderr('');
+        loadExistingFlocks(e.target.value);
     }
     let changeBreed = (e) => {
         setAddData({ ...addData, breed_public_id: e.target.value });
@@ -358,22 +392,65 @@ const AddFlock = () => {
                                                 ))}
                                             </div>
                                             {flockStep === 0 && (
-                                                <FormGroup>
-                                                    <Label for="farmselect">Select Farm</Label>
-                                                    <div className="input-group">
-                                                        <Input onChange={changeFarm} id="farmSelect" value={addData.farm_public_id || "0"} name="farm" type="select">
-                                                            <option value="0" disabled>Select Farm</option>
-                                                            {
-                                                                farms.map((item) => {
-                                                                    return (
-                                                                        <option key={item.public_id} value={item.public_id}>{item.name}</option>
-                                                                    )
-                                                                })
-                                                            }
-                                                        </Input>
-                                                    </div>
-                                                    <small className="text-danger">{farm_public_iderr}</small>
-                                                </FormGroup>
+                                                <>
+                                                    <FormGroup>
+                                                        <Label for="farmselect">Select Farm</Label>
+                                                        <div className="input-group">
+                                                            <Input onChange={changeFarm} id="farmSelect" value={addData.farm_public_id || "0"} name="farm" type="select">
+                                                                <option value="0" disabled>Select Farm</option>
+                                                                {
+                                                                    farms.map((item) => {
+                                                                        return (
+                                                                            <option key={item.public_id} value={item.public_id}>{item.name}</option>
+                                                                        )
+                                                                    })
+                                                                }
+                                                            </Input>
+                                                        </div>
+                                                        <small className="text-danger">{farm_public_iderr}</small>
+                                                    </FormGroup>
+                                                    {hasSelectedFarm && (
+                                                        <>
+                                                            <div className="record-review-toolbar">
+                                                                <div>
+                                                                    <span>Saved flocks</span>
+                                                                    <strong>{selectedFarmRecord?.name || "Selected farm"}</strong>
+                                                                    <p>{existingFlocks.length} flock{existingFlocks.length === 1 ? "" : "s"} already saved here. Review them before adding another batch.</p>
+                                                                </div>
+                                                                <Button color="danger" outline type="button" onClick={() => navigate("/manageflock", { state: { farmPublicId: addData.farm_public_id } })}>Manage flocks</Button>
+                                                            </div>
+                                                            {flockReviewLoading ? (
+                                                                <div className="record-review-empty">
+                                                                    <strong>Loading saved flocks...</strong>
+                                                                    <p>Checking batches already linked to this farm.</p>
+                                                                </div>
+                                                            ) : existingFlocks.length > 0 ? (
+                                                                <div className="record-review-grid" aria-label="Existing flocks for selected farm">
+                                                                    {existingFlocks.slice(0, 6).map((item) => (
+                                                                        <article key={item.flock_public_id}>
+                                                                            <div>
+                                                                                <span>Flock</span>
+                                                                                <strong>{item.flock_name}</strong>
+                                                                                <p>{item.farm_name ? `Farm: ${item.farm_name}` : "Selected farm"}</p>
+                                                                            </div>
+                                                                            <dl>
+                                                                                <div><dt>Breed</dt><dd>{item.chick_breed || "Not added"}</dd></div>
+                                                                                <div><dt>Hatch date</dt><dd>{item.hatch_date || "Not added"}</dd></div>
+                                                                                <div><dt>Birds</dt><dd>{item.actual_birds ?? "Not added"} / {item.flock_size ?? "Not added"}</dd></div>
+                                                                            </dl>
+                                                                            <Button color="danger" outline type="button" onClick={() => navigate("/manageflock", { state: { farmPublicId: addData.farm_public_id, flockPublicId: item.flock_public_id } })}>Review / edit</Button>
+                                                                        </article>
+                                                                    ))}
+                                                                </div>
+                                                            ) : (
+                                                                <div className="record-review-empty">
+                                                                    <strong>No flock saved under this farm yet.</strong>
+                                                                    <p>Continue this form to create the first flock for daily data, purchases, sales, reports, and Farmer AI.</p>
+                                                                </div>
+                                                            )}
+                                                        </>
+                                                    )}
+                                                </>
                                             )}
                                             {flockStep === 1 && (
                                                 <>

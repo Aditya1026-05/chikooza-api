@@ -643,7 +643,11 @@ class ChikoozaMultiReportService:
         if not entity_type:
             return ""
         if reference in {"", "current"}:
-            return f"the {entity_type}"
+            # U: OLD: broad multi-part questions like "how many farms and
+            # U: flocks do I have" produced a fake "Selected item: the flock".
+            # U: NEW: only create a target section when the farmer gave a real
+            # U: target such as first/that/exact farm/flock.
+            return ""
         if reference in {
             "it",
             "that",

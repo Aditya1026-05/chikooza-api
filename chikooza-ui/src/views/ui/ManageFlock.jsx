@@ -4,7 +4,7 @@ import { contentArea, apiPath, getAuthConfig, handleUnauthorized } from "../../C
 import Accordion from 'react-bootstrap/Accordion'
 import { useState, useEffect } from "react";
 import axios from 'axios';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import Modal from 'react-bootstrap/Modal';
 import moment from "moment/moment";
 
@@ -54,16 +54,24 @@ const ManageFlock = () => {
     const [show, setShow] = useState(false);
     let [loading, setLoading] = useState(false);
     const navigate = useNavigate();
+    const location = useLocation();
+    const routeFarmId = String(location.state?.farmPublicId || "0");
+    const routeFlockId = String(location.state?.flockPublicId || "0");
+    const startingFarmId = routeFarmId !== "0" ? routeFarmId : initialDraft.selectedFarmId;
+    const startingFlockId = routeFlockId !== "0" ? routeFlockId : initialDraft.selectedFlockId;
     let [err, setErr] = useState('');
     let [farms, setFarms] = useState([]);
-    let [showFlocks, setShowFlocks] = useState(initialDraft.selectedFarmId !== "0" ? 1 : 0);
+    let [showFlocks, setShowFlocks] = useState(startingFarmId !== "0" ? 1 : 0);
     let [flocks, setFlocks] = useState([]);
-    let [showForm, setShowForm] = useState(initialDraft.data.flock_public_id ? 1 : 0);
+    let [showForm, setShowForm] = useState(routeFlockId === "0" && initialDraft.data.flock_public_id ? 1 : 0);
     let [breeds, setBreeds] = useState([]);
     let [intgcom, setIntgcom] = useState([]);
-    const [selectedFarmId, setSelectedFarmId] = useState(initialDraft.selectedFarmId);
-    const [selectedFlockId, setSelectedFlockId] = useState(initialDraft.selectedFlockId);
+    const [selectedFarmId, setSelectedFarmId] = useState(startingFarmId);
+    const [selectedFlockId, setSelectedFlockId] = useState(startingFlockId);
     const [flockStep, setFlockStep] = useState(initialDraft.flockStep);
+    const farmList = farms.filter((item) => String(item.public_id) !== "0");
+    const flockList = flocks.filter((item) => String(item.flock_public_id) !== "0");
+    const selectedFarmRecord = farmList.find((item) => String(item.public_id) === selectedFarmId);
     useEffect(() => {
         let url = `${apiPath}farm/`;
         // U: Replaced shared config mutation with per-request auth headers from getAuthConfig().
@@ -114,10 +122,12 @@ const ManageFlock = () => {
     }, [addData, selectedFarmId, selectedFlockId, flockStep, showForm]);
 
     useEffect(() => {
-        if (initialDraft.selectedFarmId === "0") {
+        if (startingFarmId === "0") {
             return;
         }
-        let url = `${apiPath}flocks/${initialDraft.selectedFarmId}/`;
+        // U: NEW: support navigation from add-flock review cards directly
+        // U: into the same farm/flock review context.
+        let url = `${apiPath}flocks/${startingFarmId}/`;
         axios.get(url, getAuthConfig()).then((res) => {
             setShowFlocks(1);
             if (res.data.results.total_records === 0) {
@@ -128,7 +138,7 @@ const ManageFlock = () => {
         }).catch((err) => {
             handleUnauthorized(err, navigate);
         });
-    }, [initialDraft.selectedFarmId, navigate]);
+    }, [startingFarmId, navigate]);
 
     let [addData, setAddData] = useState(initialDraft.data);
     let [hatch_dateerr, setHatch_dateerr] = useState(null);
@@ -271,7 +281,7 @@ const ManageFlock = () => {
                 setLoading(false);
                 setTimeout(successMsg, 3000);
                 setFlocks((currentFlocks) => currentFlocks.map((item) => (
-                    item.flock_public_id === addData.flock_public_id ? { ...item, flock_name: addData.flock_name } : item
+                    String(item.flock_public_id) === String(addData.flock_public_id) ? { ...item, ...addData, flock_name: addData.flock_name } : item
                 )));
                 //setErr('Flock updated successfully');
                 //setShowFlocks(0);
@@ -328,16 +338,15 @@ const ManageFlock = () => {
             });
         }
     }
-    let changeFlocks = (e) => {
-        //setAddData({...addData,farm_public_id:e.target.value});
-        if (e.target.value === "0") {
+    const loadFlockForEdit = (flockId) => {
+        if (String(flockId) === "0") {
             //setFlock_public_iderr('Please select flocks');
             setShowForm(0);
             setSelectedFlockId("0");
         } else {
             //setFlock_public_iderr('');
-            setSelectedFlockId(e.target.value);
-            let url = `${apiPath}flocksDetail/${e.target.value}/`;
+            setSelectedFlockId(String(flockId));
+            let url = `${apiPath}flocksDetail/${flockId}/`;
             // U: Replaced shared config mutation with per-request auth headers from getAuthConfig().
             // config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
             axios.get(url, getAuthConfig()).then((res) => {
@@ -350,6 +359,14 @@ const ManageFlock = () => {
                 handleUnauthorized(err, navigate);
             });
         }
+    };
+    useEffect(() => {
+        if (startingFlockId !== "0") {
+            loadFlockForEdit(startingFlockId);
+        }
+    }, []);
+    let changeFlocks = (e) => {
+        loadFlockForEdit(e.target.value);
     }
     let changeBreed = (e) => {
         setAddData({ ...addData, chick_breed_public_id: e.target.value });
@@ -520,21 +537,56 @@ const ManageFlock = () => {
                                                         </div>
                                                     </FormGroup>
                                                     {(showFlocks === 1) ?
-                                                        <FormGroup>
-                                                            <Label for="farmselect">Select Flocks</Label>
-                                                            <div className="input-group">
-                                                                <Input onChange={changeFlocks} id="flockSelect" value={selectedFlockId} name="flock" type="select">
-                                                                    <option value="0">Select Flocks</option>
-                                                                    {
-                                                                        flocks.map((item) => {
-                                                                            return (
-                                                                                <option key={item.flock_public_id} value={item.flock_public_id}>{item.flock_name}</option>
-                                                                            )
-                                                                        })
-                                                                    }
-                                                                </Input>
+                                                        <>
+                                                            <FormGroup>
+                                                                <Label for="farmselect">Select Flocks</Label>
+                                                                <div className="input-group">
+                                                                    <Input onChange={changeFlocks} id="flockSelect" value={selectedFlockId} name="flock" type="select">
+                                                                        <option value="0">Select Flocks</option>
+                                                                        {
+                                                                            flocks.map((item) => {
+                                                                                return (
+                                                                                    <option key={item.flock_public_id} value={item.flock_public_id}>{item.flock_name}</option>
+                                                                                )
+                                                                            })
+                                                                        }
+                                                                    </Input>
+                                                                </div>
+                                                            </FormGroup>
+                                                            <div className="record-review-toolbar">
+                                                                <div>
+                                                                    <span>Saved flocks</span>
+                                                                    <strong>{selectedFarmRecord?.name || "Selected farm"}</strong>
+                                                                    <p>{flockList.length} flock{flockList.length === 1 ? "" : "s"} saved under this farm. Select one to review or edit its setup.</p>
+                                                                </div>
+                                                                <Button color="danger" type="button" onClick={() => navigate("/addflock")}>Add another flock</Button>
                                                             </div>
-                                                        </FormGroup>
+                                                            {flockList.length > 0 ? (
+                                                                <div className="record-review-grid" aria-label="Saved flocks">
+                                                                    {flockList.map((item) => (
+                                                                        <article key={item.flock_public_id} className={String(item.flock_public_id) === selectedFlockId ? "is-selected" : ""}>
+                                                                            <div>
+                                                                                <span>Flock</span>
+                                                                                <strong>{item.flock_name}</strong>
+                                                                                <p>{item.farm_name ? `Farm: ${item.farm_name}` : "Farm selected"}</p>
+                                                                            </div>
+                                                                            <dl>
+                                                                                <div><dt>Breed</dt><dd>{item.chick_breed || "Not added"}</dd></div>
+                                                                                <div><dt>Hatch date</dt><dd>{item.hatch_date || "Not added"}</dd></div>
+                                                                                <div><dt>Birds</dt><dd>{item.actual_birds ?? "Not added"} / {item.flock_size ?? "Not added"}</dd></div>
+                                                                            </dl>
+                                                                            <Button color="danger" outline type="button" onClick={() => loadFlockForEdit(item.flock_public_id)}>Review / edit</Button>
+                                                                        </article>
+                                                                    ))}
+                                                                </div>
+                                                            ) : (
+                                                                <div className="record-review-empty">
+                                                                    <strong>No flocks saved under this farm yet.</strong>
+                                                                    <p>Add a flock so daily data, purchases, sales, reports, and Farmer AI can connect to this farm.</p>
+                                                                    <Button color="danger" type="button" onClick={() => navigate("/addflock")}>Add first flock</Button>
+                                                                </div>
+                                                            )}
+                                                        </>
                                                         : null}
                                                 </>
                                             )}

@@ -668,6 +668,109 @@ textarea::placeholder {
   padding: clamp(1rem, 3vw, 1.5rem);
 }
 
+.record-review-toolbar {
+  align-items: center;
+  background: #fff8f4;
+  border: 1px solid var(--ck-border);
+  border-radius: var(--ck-radius-lg);
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+  padding: 1rem;
+}
+
+.record-review-toolbar span,
+.record-review-grid article span {
+  color: var(--ck-red-700);
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 850;
+  letter-spacing: 0.09em;
+  margin-bottom: 0.25rem;
+  text-transform: uppercase;
+}
+
+.record-review-toolbar strong,
+.record-review-grid article strong {
+  color: var(--ck-text);
+  display: block;
+  font-size: 1.05rem;
+  line-height: 1.25;
+}
+
+.record-review-toolbar p,
+.record-review-grid article p,
+.record-review-empty p {
+  color: var(--ck-text-muted);
+  margin: 0.25rem 0 0;
+}
+
+.record-review-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  justify-content: flex-end;
+}
+
+.record-review-grid {
+  display: grid;
+  gap: 0.85rem;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  margin-bottom: 1.2rem;
+}
+
+.record-review-grid article {
+  background: #ffffff;
+  border: 1px solid var(--ck-border);
+  border-radius: var(--ck-radius-lg);
+  box-shadow: var(--ck-shadow-sm);
+  display: grid;
+  gap: 0.85rem;
+  padding: 1rem;
+}
+
+.record-review-grid article.is-selected {
+  border-color: var(--ck-red-600);
+  box-shadow: 0 0 0 4px rgba(180, 35, 24, 0.08);
+}
+
+.record-review-grid dl {
+  display: grid;
+  gap: 0.45rem;
+  margin: 0;
+}
+
+.record-review-grid dl div {
+  align-items: baseline;
+  display: flex;
+  gap: 0.5rem;
+  justify-content: space-between;
+}
+
+.record-review-grid dt {
+  color: var(--ck-text-muted);
+  font-size: 0.85rem;
+  font-weight: 800;
+}
+
+.record-review-grid dd {
+  color: var(--ck-text);
+  font-size: 0.9rem;
+  font-weight: 750;
+  margin: 0;
+  text-align: right;
+}
+
+.record-review-empty {
+  background: #fff8f4;
+  border: 1px dashed rgba(180, 35, 24, 0.36);
+  border-radius: var(--ck-radius-lg);
+  margin-bottom: 1.2rem;
+  padding: 1rem;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -732,6 +835,7 @@ textarea::placeholder {
   .report-actions,
   .home-actions,
   .ck-actions,
+  .record-review-toolbar,
   .farmer-ai-form div {
     align-items: stretch;
     flex-direction: column;
@@ -747,6 +851,10 @@ textarea::placeholder {
   .home-secondary-action,
   .farmer-ai-form .btn {
     width: 100%;
+  }
+
+  .record-review-grid {
+    grid-template-columns: 1fr;
   }
 
   .modal-dialog {

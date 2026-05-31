@@ -104,6 +104,8 @@ const FlockSale = () => {
     let [showFlocks, setShowFlocks] = useState(Boolean(initialDraft.data.farm));
     let [showFlockSale, setShowFlockSale] = useState(Boolean(initialDraft.data.flock));
     let [showButton, setShowButton] = useState(Boolean(initialDraft.data.selType && initialDraft.data.selType !== "0"));
+    const [existingSales, setExistingSales] = useState([]);
+    const [saleReviewLoading, setSaleReviewLoading] = useState(false);
     const [saleStep, setSaleStep] = useState(initialDraft.saleStep);
     // let [data, setData] = useState({ farm: null, flock: null, selType: null, date: '', sellcount: '', selltwt: '', sellrate: '', sellamount: '', sellavgweight: 0, totalCost: 0 });
 
@@ -122,6 +124,24 @@ const FlockSale = () => {
     const prefillFlockId = String(location.state?.flockPublicId || "0");
     const hasFarmPrerequisite = farms.some((farm) => String(farm.public_id) !== "0");
     const hasFlockOptions = flocks.some((item) => String(item.flock_public_id) !== "0");
+    const saleReviewTotal = existingSales.reduce((total, item) => total + Number(item.cost || 0), 0);
+
+    const loadExistingSales = (flockPublicId) => {
+        if (!flockPublicId || String(flockPublicId) === "0") {
+            setExistingSales([]);
+            return;
+        }
+
+        setSaleReviewLoading(true);
+        axios.get(`${apiPath}sales/?flock_public_id=${flockPublicId}`, getAuthConfig()).then((res) => {
+            setExistingSales(res.data.results.sales_list || []);
+        }).catch((err) => {
+            setExistingSales([]);
+            handleUnauthorized(err, navigate);
+        }).finally(() => {
+            setSaleReviewLoading(false);
+        });
+    };
 
     function successMsg() {
         setShow(false);
@@ -251,14 +271,17 @@ const FlockSale = () => {
         setData({ ...emptySaleData, ...selection });
         setDataPopUp(emptySalePopupData);
         setError({});
-        setSubmitError("");
-        setSaleStep(keepSelection ? 1 : 0);
-        setShowForm(false);
-        setShowButton(false);
-        setShowFlockSale(Boolean(keepSelection && data.flock));
-        if (!keepSelection) {
-            setFlock([]);
-            setFlocks([]);
+            setSubmitError("");
+            setSaleStep(keepSelection ? 1 : 0);
+            setShowForm(false);
+            setShowButton(false);
+            setShowFlockSale(Boolean(keepSelection && data.flock));
+            if (!keepSelection) {
+                setExistingSales([]);
+            }
+            if (!keepSelection) {
+                setFlock([]);
+                setFlocks([]);
             setShowFlocks(false);
         }
         localStorage.removeItem(SALE_DRAFT_KEY);
@@ -317,6 +340,7 @@ const FlockSale = () => {
                 other_taxes: dataPopUp.ot,
             };
             let url = `${apiPath}sales/`;
+            const savedFlockPublicId = data.flock;
             // U: Replaced shared config mutation with per-request auth headers from getAuthConfig().
             // config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
             axios.post(url, saleData, getAuthConfig()).then((res) => {
@@ -324,6 +348,7 @@ const FlockSale = () => {
                 setLoading(false)
                 setTimeout(successMsg, 3000);
                 resetSaleForm({ keepSelection: true });
+                loadExistingSales(savedFlockPublicId);
             }).catch((err) => {
                 console.log(err);
                 setSubmitError('Something went wrong. Please try again');
@@ -408,6 +433,7 @@ const FlockSale = () => {
                     setShowForm(Boolean(prefillFlockId === "0" && initialDraft.saleStep >= 2));
                     setSaleStep(prefillFlockId !== "0" ? 1 : initialDraft.saleStep);
                     setError({});
+                    loadExistingSales(selected.flock_public_id);
 
                     axios.get(`${apiPath}dailyDataLastDate/${selected.flock_public_id}/`, getAuthConfig()).then((dailyRes) => {
                         if (!cancelled) {
@@ -449,6 +475,7 @@ const FlockSale = () => {
             setError({});
             setSubmitError("");
             setSaleStep(0);
+            setExistingSales([]);
         } else {
             let url = `${apiPath}flocks/${e.target.value}/`;
             // U: Replaced shared config mutation with per-request auth headers from getAuthConfig().
@@ -469,6 +496,7 @@ const FlockSale = () => {
                 setError({});
                 setSubmitError("");
                 setSaleStep(0);
+                setExistingSales([]);
             }).catch((err) => {
                 //setFormError('No Flock available.');
                 handleUnauthorized(err, navigate);
@@ -484,6 +512,7 @@ const FlockSale = () => {
             setError({});
             setSubmitError("");
             setSaleStep(0);
+            setExistingSales([]);
         } else {
             const user = flocks.find(u => String(u.flock_public_id) === e.target.value);
             if (!user) {
@@ -507,6 +536,7 @@ const FlockSale = () => {
             setError({});
             setSubmitError("");
             setSaleStep(1);
+            loadExistingSales(user.flock_public_id);
         }
     }
     let changeFlockSale = (e) => {
@@ -850,6 +880,47 @@ const FlockSale = () => {
                                                             <p>This farm does not have a flock yet. Add a flock before recording partial or final lifting sales.</p>
                                                             <Link to="/addflock">Add flock</Link>
                                                         </div>
+                                                    )}
+                                                    {showFlockSale && (
+                                                        <>
+                                                            <div className="record-review-toolbar">
+                                                                <div>
+                                                                    <span>Saved sales</span>
+                                                                    <strong>{flock.flock_name || "Selected flock"}</strong>
+                                                                    <p>{existingSales.length} sale{existingSales.length === 1 ? "" : "s"} saved, Rs. {saleReviewTotal.toFixed(2)} total revenue.</p>
+                                                                </div>
+                                                                <Button color="danger" outline type="button" onClick={() => navigate("/viewsale", { state: { farmPublicId: data.farm, flockPublicId: data.flock } })}>Manage sales</Button>
+                                                            </div>
+                                                            {saleReviewLoading ? (
+                                                                <div className="record-review-empty">
+                                                                    <strong>Loading saved sales...</strong>
+                                                                    <p>Checking existing sale records for this flock.</p>
+                                                                </div>
+                                                            ) : existingSales.length > 0 ? (
+                                                                <div className="record-review-grid" aria-label="Saved sales">
+                                                                    {existingSales.slice(0, 6).map((item) => (
+                                                                        <article key={item.public_id}>
+                                                                            <div>
+                                                                                <span>{getSaleTypeLabel(item.sales_type)}</span>
+                                                                                <strong>Rs. {Number(item.cost || 0).toFixed(2)}</strong>
+                                                                                <p>{item.date || "Date not added"}</p>
+                                                                            </div>
+                                                                            <dl>
+                                                                                <div><dt>Birds sold</dt><dd>{item.lifting_count || 0}</dd></div>
+                                                                                <div><dt>Total weight</dt><dd>{item.total_weight || 0} kg</dd></div>
+                                                                                <div><dt>Rate</dt><dd>Rs. {item.rate_per_kg || 0}/kg</dd></div>
+                                                                            </dl>
+                                                                            <Button color="danger" outline type="button" onClick={() => navigate('/editsale', { state: { item } })}>Review / edit</Button>
+                                                                        </article>
+                                                                    ))}
+                                                                </div>
+                                                            ) : (
+                                                                <div className="record-review-empty">
+                                                                    <strong>No sales saved for this flock yet.</strong>
+                                                                    <p>Continue this wizard when birds are sold. Existing sales will appear here for quick review.</p>
+                                                                </div>
+                                                            )}
+                                                        </>
                                                     )}
                                                 </>
                                             )}

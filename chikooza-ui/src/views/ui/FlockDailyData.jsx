@@ -180,6 +180,11 @@ const ManageFlock = () => {
         dt1.setDate(dt1.getDate() + num);
         return (`${dt1.getDate()} ${monthNames[dt1.getMonth()]}`);
     }
+    const dailyRecords = Array.isArray(list) ? list : [];
+    const latestDailyRecord = dailyRecords[dailyRecords.length - 1];
+    const nextDailyDay = dailyRecords.length + 1;
+    const nextDailyDate = showForm && flock.hatch_date ? getrealdate(flock.hatch_date, nextDailyDay) : "";
+    const recentDailyRecords = dailyRecords.slice(-6).reverse();
     function MyVerticallyCenteredModal(props) {
         return (
             <Modal
@@ -316,6 +321,46 @@ const ManageFlock = () => {
                                                         <strong>Daily data entry order</strong>
                                                         <p>Only the next open day should be filled. Completed days are green, the next available day is highlighted, and future days stay disabled.</p>
                                                     </div>
+                                                    <div className="record-review-toolbar">
+                                                        <div>
+                                                            <span>Daily data review</span>
+                                                            <strong>{flock.flock_name || "Selected flock"}</strong>
+                                                            <p>{dailyRecords.length} day{dailyRecords.length === 1 ? "" : "s"} completed. {latestDailyRecord ? `Latest entry: ${latestDailyRecord.date}.` : "No daily entry saved yet."}</p>
+                                                        </div>
+                                                        {nextDailyDate && (
+                                                            <Button tag={Link} to={`/daydata/${flock.farm_public_id}/${flock.flock_public_id}/${nextDailyDate}`} color="danger" type="button">
+                                                                Record day {nextDailyDay}
+                                                            </Button>
+                                                        )}
+                                                    </div>
+                                                    {recentDailyRecords.length > 0 ? (
+                                                        <div className="record-review-grid" aria-label="Recent daily data records">
+                                                            {recentDailyRecords.map((item, index) => (
+                                                                <article key={item.public_id || `${item.date}-${index}`}>
+                                                                    <div>
+                                                                        <span>Daily entry</span>
+                                                                        <strong>{item.date || `Day ${dailyRecords.length - index}`}</strong>
+                                                                        <p>Review recent flock health and growth values.</p>
+                                                                    </div>
+                                                                    <dl>
+                                                                        <div><dt>Current birds</dt><dd>{item.current_bird_count ?? "Not added"}</dd></div>
+                                                                        <div><dt>Mortality</dt><dd>{item.mortality ?? 0}</dd></div>
+                                                                        <div><dt>Feed</dt><dd>{item.feed_consumed ?? item.feed_intake ?? 0} kg</dd></div>
+                                                                        <div><dt>Avg weight</dt><dd>{item.average_weight ?? item.average_bird_weight ?? "Not added"}</dd></div>
+                                                                    </dl>
+                                                                    <Button tag={Link} to={`/daydata/${flock.farm_public_id}/${flock.flock_public_id}/${item.date}`} color="danger" outline type="button">Review / edit</Button>
+                                                                </article>
+                                                            ))}
+                                                        </div>
+                                                    ) : (
+                                                        <div className="record-review-empty">
+                                                            <strong>No daily data saved for this flock yet.</strong>
+                                                            <p>Start with day 1 so the dashboard, reports, and Farmer AI can track mortality, feed, weight, FCR, and current birds.</p>
+                                                            {nextDailyDate && (
+                                                                <Button tag={Link} to={`/daydata/${flock.farm_public_id}/${flock.flock_public_id}/${nextDailyDate}`} color="danger" type="button">Add first daily entry</Button>
+                                                            )}
+                                                        </div>
+                                                    )}
                                                     <div>
                                                         <MyVerticallyCenteredModal show={modalShow} onHide={() => setModalShow(false)} />
                                                         <Button className="flockdate" value="1" onClick={handleShow}>

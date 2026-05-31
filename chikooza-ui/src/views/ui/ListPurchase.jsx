@@ -1,14 +1,13 @@
-import { Row, Col, Table, Card, CardTitle, CardBody, FormGroup, Label, Input } from "reactstrap";
+import { Row, Col, Table, Card, CardTitle, CardBody, Button, FormGroup, Label, Input } from "reactstrap";
 import '../../assets/css/header.css';
 import { contentArea, apiPath, getAuthConfig, handleUnauthorized } from "../../Constants";
 import { useState, useEffect } from "react";
 import axios from 'axios';
-import { Link } from "react-router-dom";
 // U: OLD: import jsPDF from "jspdf";
 // U: OLD: import 'jspdf-autotable'
 // U: NEW: lazy-load the PDF runtime only when the user exports.
 import { loadAutoTable, loadJsPDF } from "../../utils/pdf";
-import { useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 
 
 const ListPurchase = () => {
@@ -17,8 +16,15 @@ const ListPurchase = () => {
     const [showFlock, setShowFlock] = useState(false);
     const [showForm, setShowForm] = useState(false);
     let [purchaseList, setPurchaseList] = useState([]);
+    const [selectedFarmId, setSelectedFarmId] = useState("0");
+    const [selectedFlockId, setSelectedFlockId] = useState("0");
+    const [selectedFlockName, setSelectedFlockName] = useState("");
     const [isExportingPdf, setIsExportingPdf] = useState(false);
     let navigate = useNavigate()
+    const location = useLocation();
+    const prefillFarmId = String(location.state?.farmPublicId || "0");
+    const prefillFlockId = String(location.state?.flockPublicId || "0");
+    const purchaseTotal = purchaseList.reduce((total, item) => total + Number(item.cost || 0), 0);
 
     useEffect(() => {
         let url = `${apiPath}farm/`;
@@ -30,13 +36,45 @@ const ListPurchase = () => {
             } else {
                 setFarms(res.data.results);
             }
+
+            if (prefillFarmId !== "0") {
+                // U: NEW: when the farmer comes from add-purchase review,
+                // U: keep the same farm/flock selected on the manage screen.
+                setSelectedFarmId(prefillFarmId);
+                axios.get(`${apiPath}flocks/${prefillFarmId}/`, getAuthConfig()).then((flockRes) => {
+                    setShowFlock(true);
+                    if (flockRes.data.results.total_records === 0) {
+                        setFlocks([{ flock_public_id: 0, flock_name: 'No flock available' }]);
+                        return;
+                    }
+                    const flockList = flockRes.data.results.flock_list || [];
+                    setFlocks(flockList);
+                    const selected = flockList.find((item) => String(item.flock_public_id) === prefillFlockId);
+                    if (selected) {
+                        setSelectedFlockId(prefillFlockId);
+                        setSelectedFlockName(selected.flock_name || "Selected flock");
+                        axios.get(`${apiPath}purchase/?flock_public_id=${prefillFlockId}`, getAuthConfig()).then((purchaseRes) => {
+                            setPurchaseList(purchaseRes.data.results.purchase_list || []);
+                            setShowForm(true);
+                        }).catch((err) => {
+                            setPurchaseList([]);
+                            handleUnauthorized(err, navigate);
+                        });
+                    }
+                }).catch((err) => {
+                    handleUnauthorized(err, navigate);
+                });
+            }
         }).catch((err) => {
             setFarms([{ public_id: 0, name: 'No farm available' }]);
             handleUnauthorized(err, navigate);
         });
-    }, [navigate])
+    }, [navigate, prefillFarmId, prefillFlockId])
 
     let changeFarm = (e) => {
+        setSelectedFarmId(e.target.value);
+        setSelectedFlockId("0");
+        setSelectedFlockName("");
         setPurchaseList([]);
         setShowForm(false);
         if (e.target.value === "0") {
@@ -63,10 +101,14 @@ const ListPurchase = () => {
         }
     }
     let changeFlocks = (e) => {
+        setSelectedFlockId(e.target.value);
         if (e.target.value === "0") {
             setShowForm(false);
             setPurchaseList([]);
+            setSelectedFlockName("");
         } else {
+            const selected = flocks.find((item) => String(item.flock_public_id) === e.target.value);
+            setSelectedFlockName(selected?.flock_name || "Selected flock");
             let url = `${apiPath}purchase/?flock_public_id=${e.target.value}`;
             // U: Replaced shared config mutation with per-request auth headers from getAuthConfig().
             // config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
@@ -144,7 +186,7 @@ const ListPurchase = () => {
                                     <div className='gridmargin'>
                                         <FormGroup>
                                             <div className="input-group">
-                                                <Input onChange={changeFarm} defaultValue="0" id="farmSelect" name="farm" type="select">
+                                                <Input onChange={changeFarm} value={selectedFarmId} id="farmSelect" name="farm" type="select">
                                                     <option value="0">Select Farm</option>
                                                     {
                                                         farms.map((item) => {
@@ -161,7 +203,7 @@ const ListPurchase = () => {
                                             <FormGroup>
                                                 <Label for="farmselect">Select Flocks</Label>
                                                 <div className="input-group">
-                                                    <Input onChange={changeFlocks} id="farmSelect" name="flock" type="select" defaultValue="0">
+                                                    <Input onChange={changeFlocks} id="farmSelect" name="flock" type="select" value={selectedFlockId}>
                                                         <option value="0">Select Flocks</option>
                                                         {
                                                             flocks.map((item) => {
@@ -177,22 +219,49 @@ const ListPurchase = () => {
                                         {
                                             showForm &&
                                             <>
-                                                <button type="button" onClick={downloadPdf} disabled={isExportingPdf} className="btn-danger font_family_content mb-2 fs-5">
-                                                    {isExportingPdf ? "Exporting..." : "Export"}
-                                                </button>
-                                                <Table bordered striped>
-                                                    <thead>
-                                                        <tr className="text-center">
-                                                            <th>Date</th>
-                                                            <th>Type</th>
-                                                            <th>Amount(Rs)</th>
-                                                            <th>Actions</th>
-                                                        </tr>
-                                                    </thead>
-                                                    <tbody>
-                                                        {
-                                                            purchaseList.length > 0 ?
-                                                                purchaseList.map((item) => {
+                                                <div className="record-review-toolbar">
+                                                    <div>
+                                                        <span>Manage purchases</span>
+                                                        <strong>{selectedFlockName}</strong>
+                                                        <p>{purchaseList.length} purchase{purchaseList.length === 1 ? "" : "s"} saved, Rs. {purchaseTotal.toFixed(2)} total cost.</p>
+                                                    </div>
+                                                    <div className="record-review-actions">
+                                                        <Button color="danger" type="button" onClick={() => navigate("/addpurchase", { state: { farmPublicId: selectedFarmId, flockPublicId: selectedFlockId } })}>Add purchase</Button>
+                                                        <Button type="button" color="danger" outline onClick={downloadPdf} disabled={isExportingPdf || purchaseList.length === 0}>
+                                                            {isExportingPdf ? "Exporting..." : "Export"}
+                                                        </Button>
+                                                    </div>
+                                                </div>
+                                                {purchaseList.length > 0 ? (
+                                                    <>
+                                                        <div className="record-review-grid" aria-label="Purchase review cards">
+                                                            {purchaseList.map((item) => (
+                                                                <article key={item.public_id}>
+                                                                    <div>
+                                                                        <span>{item.type || "Purchase"}</span>
+                                                                        <strong>Rs. {Number(item.cost || 0).toFixed(2)}</strong>
+                                                                        <p>{item.date ? getformateddate(item.date) : "Date not added"}</p>
+                                                                    </div>
+                                                                    <dl>
+                                                                        <div><dt>Item</dt><dd>{item.item_name || item.company_name || "Not added"}</dd></div>
+                                                                        <div><dt>Quantity</dt><dd>{item.quantity || item.unit || "Not added"}</dd></div>
+                                                                        <div><dt>Remarks</dt><dd>{item.remarks || "Not added"}</dd></div>
+                                                                    </dl>
+                                                                    <Button tag={Link} to={`/viewpurchase/${item.flock_public_id}/${item.public_id}`} color="danger" outline type="button">Review</Button>
+                                                                </article>
+                                                            ))}
+                                                        </div>
+                                                        <Table bordered striped responsive>
+                                                            <thead>
+                                                                <tr className="text-center">
+                                                                    <th>Date</th>
+                                                                    <th>Type</th>
+                                                                    <th>Amount(Rs)</th>
+                                                                    <th>Actions</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                                {purchaseList.map((item) => {
                                                                     return (
                                                                         <tr key={item.public_id} className="text-center">
                                                                             <td>{getformateddate(item.date)}</td>
@@ -202,13 +271,17 @@ const ListPurchase = () => {
                                                                                 <Link to={`/viewpurchase/${item.flock_public_id}/${item.public_id}`} style={{ textDecoration: "none" }}>View</Link></td>
                                                                         </tr>
                                                                     )
-                                                                }) :
-                                                                <tr className="text-center">
-                                                                    <td colSpan={4}>No purchase found</td>
-                                                                </tr>
-                                                        }
-                                                    </tbody>
-                                                </Table>
+                                                                })}
+                                                            </tbody>
+                                                        </Table>
+                                                    </>
+                                                ) : (
+                                                    <div className="record-review-empty">
+                                                        <strong>No purchases saved for this flock yet.</strong>
+                                                        <p>Add feed, medicine, vaccination, equipment, labour, or other costs so reports and Farmer AI can calculate expenses.</p>
+                                                        <Button color="danger" type="button" onClick={() => navigate("/addpurchase", { state: { farmPublicId: selectedFarmId, flockPublicId: selectedFlockId } })}>Add first purchase</Button>
+                                                    </div>
+                                                )}
                                             </>
                                         }
                                     </div>

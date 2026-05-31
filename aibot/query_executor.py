@@ -100,6 +100,19 @@ class ChikoozaSafeQueryExecutor:
             )
             return self._attach_resolution(response, entity_resolution)
 
+        if self._should_skip_entity_resolution(intent):
+            # U: OLD: account-wide/list intents still went through entity
+            # U: resolution, so "farm summary" or "list all flocks" could become
+            # U: ambiguous when the account had multiple farms/flocks.
+            # U: NEW: keep broad questions broad unless the classifier found an
+            # U: explicit entity reference such as first/second/that/exact name.
+            canonical_question = self._canonical_question(intent, question)
+            response = self.deterministic_service.answer(canonical_question, history=[])
+            response["canonical_question"] = canonical_question
+            response["resolved_farm_id"] = None
+            response["resolved_flock_id"] = None
+            return response
+
         entity_resolution = self.entity_resolver.resolve(intent, question, history)
         if entity_resolution.response:
             return entity_resolution.response
@@ -116,7 +129,8 @@ class ChikoozaSafeQueryExecutor:
     def _canonical_question(self, intent: ChikoozaIntent, question: str) -> str:
         target = self._target_phrase(intent)
         if intent.intent == "farm_summary":
-            return self._with_time_phrase("show my farm summary", question)
+            base = f"show summary for {target}" if target else "show my account summary"
+            return self._with_time_phrase(base, question)
         if intent.intent == "list_farms":
             return f"list farms for {target}" if target else "list all farms i have"
         if intent.intent == "list_flocks":
@@ -202,7 +216,7 @@ class ChikoozaSafeQueryExecutor:
         if not entity_type:
             return ""
         if reference in {"", "current"}:
-            return f"the {entity_type}"
+            return ""
         if reference == "other":
             return f"other {entity_type}"
         if reference in {
@@ -220,6 +234,18 @@ class ChikoozaSafeQueryExecutor:
         if reference in {"first", "second", "third", "fourth", "fifth"}:
             return f"{reference} {entity_type}"
         return f"{entity_type} {reference}"
+
+    def _should_skip_entity_resolution(self, intent: ChikoozaIntent) -> bool:
+        reference = (intent.entity_reference or "").strip()
+        if reference and reference != "current":
+            return False
+        return intent.intent in {
+            "farm_summary",
+            "list_farms",
+            "list_flocks",
+            "count_farms",
+            "count_flocks",
+        }
 
     def _should_resolve_multi_report_target(
         self, intent: ChikoozaIntent, question: str

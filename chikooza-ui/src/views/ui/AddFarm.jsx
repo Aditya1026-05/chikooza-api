@@ -88,8 +88,13 @@ const AddFarm = () => {
     });
   }, [navigate])
   let save = (e) => {
+    return saveFarm(e, "manage");
+  }
+
+  const saveFarm = (e, nextAction = "manage") => {
     e.preventDefault();
     setLoading(false);
+    setErr('');
     const identityValid = validateFarmIdentity();
     const locationValid = validateFarmLocation();
     if (!identityValid) {
@@ -117,10 +122,20 @@ const AddFarm = () => {
       axios.post(url, farm, getAuthConfig()).then((res) => {
         localStorage.removeItem(FARM_DRAFT_KEY);
         setLoading(false);
+        setAddData(emptyFarmDraft);
+        setFarmStep(0);
         setShow(true);
-        setTimeout(successMsg, 3000);
+        setTimeout(() => {
+          setShow(false);
+          if (nextAction === "another") {
+            return;
+          }
+          navigate("/managefarm");
+        }, 1600);
       }).catch((err) => {
-        setErr('Something went wrong. Please try again');
+        setLoading(false);
+        const apiError = err?.response?.data?.message || err?.response?.data?.error;
+        setErr(apiError || 'Something went wrong. Please try again');
         handleUnauthorized(err, navigate);
       });
     }
@@ -137,7 +152,7 @@ const AddFarm = () => {
   }
   let farmnameChange = (e) => {
     setAddData({ ...addData, farmname: e.target.value });
-    e.target.value.trim() === '' ? setFarmnameError('Please enter name') : setFarmnameError('');
+    e.target.value.trim() === '' ? setFarmnameError('Please enter name') : e.target.value.trim().length > 30 ? setFarmnameError('Farm name can be maximum 30 characters') : setFarmnameError('');
   }
   let addressChange = (e) => {
     setAddData({ ...addData, address: e.target.value });
@@ -155,9 +170,6 @@ const AddFarm = () => {
   let cityorvillageChange = (e) => {
     setAddData({ ...addData, cityorvillage: e.target.value });
     e.target.value.trim() === '' ? setCityorvillageError('Please enter city/Village name') : setCityorvillageError('');
-  }
-  function successMsg() {
-    navigate("/managefarm");
   }
   let closeAll = () => {
     navigate('/member')
@@ -177,7 +189,9 @@ const AddFarm = () => {
   };
   const validateFarmIdentity = () => {
     let valid = true;
-    if (addData.farmname.trim() === '') { setFarmnameError('Please enter farm name'); valid = false; } else { setFarmnameError(''); }
+    if (addData.farmname.trim() === '') { setFarmnameError('Please enter farm name'); valid = false; }
+    else if (addData.farmname.trim().length > 30) { setFarmnameError('Farm name can be maximum 30 characters'); valid = false; }
+    else { setFarmnameError(''); }
     if (addData.numberofsheds.trim() === '' || Number(addData.numberofsheds.trim()) < 1) { setNumberofshedsError('Enter at least 1 shed'); valid = false; } else { setNumberofshedsError(''); }
     return valid;
   };
@@ -245,8 +259,9 @@ const AddFarm = () => {
                           <FormGroup>
                             <Label for="exampleName">Farm Name</Label>
                             <div className="input-group input-group">
-                              <input onChange={farmnameChange} value={addData.farmname} name="farmname" placeholder="Farm Name" type="text" className="form-control" aria-label="Farm Name" aria-describedby="basic-addon1" />
+                              <input onChange={farmnameChange} value={addData.farmname} name="farmname" placeholder="Farm Name" type="text" maxLength="30" className="form-control" aria-label="Farm Name" aria-describedby="basic-addon1" />
                             </div>
+                            <small className="text-muted">{addData.farmname.length}/30 characters</small>
                             <small id="passwordHelp" className="text-danger">{farmnameError}</small>
                           </FormGroup>
                           <FormGroup>
@@ -341,7 +356,10 @@ const AddFarm = () => {
                               <span className="spinner-border spinner-border-sm" role="status" aria-hidden="true" />
                             </Button>
                             :
-                            <Button className="btn" color="danger" type="submit">Save</Button>
+                            <>
+                              <Button className="btn" color="danger" type="submit">Save & review farms</Button>
+                              <Button className="btn" color="secondary" outline type="button" onClick={(event) => saveFarm(event, "another")}>Save & add another farm</Button>
+                            </>
                         )}
                         <Button className="btn" color="warning" type="button" onClick={closeAll} >Cancel</Button>
                       </div>
