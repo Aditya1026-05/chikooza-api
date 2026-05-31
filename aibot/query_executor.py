@@ -1,3 +1,5 @@
+import re
+
 from .intent_classifier import ChikoozaIntent
 from .insight_service import ChikoozaFarmInsightService
 from .multi_report_service import ChikoozaMultiReportService
@@ -66,10 +68,16 @@ class ChikoozaSafeQueryExecutor:
             )
 
         if intent.intent == "multi_farm_report":
+            entity_resolution = None
+            if self._should_resolve_multi_report_target(intent, question):
+                entity_resolution = self.entity_resolver.resolve(intent, question, history)
+                if entity_resolution.response:
+                    return entity_resolution.response
             return self.multi_report_service.answer(
                 question,
                 history=history,
                 intent=intent,
+                entity_resolution=entity_resolution,
             )
 
         entity_resolution = self.entity_resolver.resolve(intent, question, history)
@@ -144,3 +152,20 @@ class ChikoozaSafeQueryExecutor:
         if reference in {"first", "second", "third", "fourth", "fifth"}:
             return f"{reference} {entity_type}"
         return f"{entity_type} {reference}"
+
+    def _should_resolve_multi_report_target(
+        self, intent: ChikoozaIntent, question: str
+    ) -> bool:
+        entity_type = intent.entity_type
+        reference = (intent.entity_reference or "").strip()
+        if entity_type not in {"farm", "flock"}:
+            return False
+        if reference and reference != "other":
+            return True
+        entity_words = "flock|batch" if entity_type == "flock" else "farm"
+        return bool(
+            re.search(
+                rf"\b(?:for|inside|about|of|in)\s+(?:the\s+|my\s+|our\s+)?[a-z0-9 ]*\b(?:{entity_words})\b",
+                question.lower(),
+            )
+        )

@@ -42,11 +42,34 @@ class ChikoozaMultiReportService:
     def __init__(self, deterministic_service):
         self.deterministic_service = deterministic_service
 
-    def answer(self, question: str, history: list | None = None, intent=None) -> dict:
+    def answer(
+        self,
+        question: str,
+        history: list | None = None,
+        intent=None,
+        entity_resolution=None,
+    ) -> dict:
         spec = self._spec(question, intent=intent)
+        target_entity_type = self._target_entity_type(intent, entity_resolution)
+        if target_entity_type and spec["wants_all"]:
+            # U: OLD: targeted complete-report prompts still expanded to broad
+            # U: farm/flock breakdowns. U: NEW: keep the report scoped to the
+            # U: already resolved farm/flock.
+            spec = {
+                **spec,
+                "include_account": False,
+                "include_farms": False,
+                "include_flocks": False,
+                "breakdown_farms": False,
+                "breakdown_flocks": False,
+            }
         report = {
             "requested_metrics": sorted(spec["metrics"]),
-            "account": self._account_section(spec, history=history),
+            "account": (
+                self._account_section(spec, history=history)
+                if spec["include_account"]
+                else {}
+            ),
             "farms": [],
             "flocks": [],
             "target": [],
@@ -59,12 +82,16 @@ class ChikoozaMultiReportService:
 
         target_phrase = self._target_phrase(intent)
         if (
-            target_phrase
+            (target_phrase or target_entity_type)
             and not spec["breakdown_farms"]
             and not spec["breakdown_flocks"]
         ):
             report["target"] = self._target_section(
-                target_phrase, spec, history=history
+                target_phrase,
+                spec,
+                history=history,
+                target_entity_type=target_entity_type,
+                entity_resolution=entity_resolution,
             )
         else:
             if spec["include_farms"]:
@@ -121,7 +148,11 @@ class ChikoozaMultiReportService:
         breakdown_farms = include_farms and self._wants_breakdown(query, "farm")
         breakdown_flocks = include_flocks and self._wants_breakdown(query, "flock")
 
-        if wants_all:
+        targeted_complete = wants_all and (
+            self._intent_has_specific_target(intent) or self._has_singular_target(query)
+        )
+
+        if wants_all and not targeted_complete:
             metrics.update(self.ALL_METRICS)
             # U: OLD: "show all my data" only returned account totals unless the
             # U: farmer explicitly said farms/flocks. U: NEW: complete-data
@@ -132,6 +163,9 @@ class ChikoozaMultiReportService:
             metrics.add("flock_count")
             breakdown_farms = True
             breakdown_flocks = True
+
+        elif wants_all:
+            metrics.update(self.ALL_METRICS)
 
         if include_farms and self._mentions_count(query):
             metrics.add("farm_count")
@@ -150,6 +184,7 @@ class ChikoozaMultiReportService:
             "breakdown_farms": breakdown_farms,
             "breakdown_flocks": breakdown_flocks,
             "wants_all": wants_all,
+            "include_account": True,
         }
 
     def _account_section(self, spec: dict, history: list | None) -> dict:
@@ -161,8 +196,22 @@ class ChikoozaMultiReportService:
         return account
 
     def _target_section(
-        self, target_phrase: str, spec: dict, history: list | None
+        self,
+        target_phrase: str,
+        spec: dict,
+        history: list | None,
+        target_entity_type: str = "",
+        entity_resolution=None,
     ) -> list[dict]:
+        by_id_section = self._target_section_by_id(
+            target_phrase,
+            spec,
+            target_entity_type=target_entity_type,
+            entity_resolution=entity_resolution,
+        )
+        if by_id_section:
+            return by_id_section
+
         metrics = []
         for metric in self._ordered_metrics(spec["metrics"]):
             if metric in {"farm_count", "flock_count"}:
@@ -176,6 +225,62 @@ class ChikoozaMultiReportService:
                     }
                 )
         return [{"target": target_phrase, "metrics": metrics}]
+
+    def _target_section_by_id(
+        self,
+        target_phrase: str,
+        spec: dict,
+        *,
+        target_entity_type: str,
+        entity_resolution=None,
+    ) -> list[dict]:
+        if not target_entity_type or not entity_resolution:
+            return []
+
+        farm_id = getattr(entity_resolution, "farm_id", None)
+        flock_id = getattr(entity_resolution, "flock_id", None)
+        if target_entity_type == "flock" and not flock_id:
+            return []
+        if target_entity_type == "farm" and not farm_id:
+            return []
+
+        detail = self._target_detail_by_id(target_entity_type, farm_id, flock_id)
+        target = (
+            detail.get(f"{target_entity_type}_name")
+            or target_phrase
+            or f"selected {target_entity_type}"
+        )
+        metrics = self._entity_metrics(
+            spec,
+            farm_id=farm_id,
+            flock_id=flock_id if target_entity_type == "flock" else None,
+            history=None,
+        )
+        return [
+            {
+                "target": target,
+                "entity_type": target_entity_type,
+                "details": detail,
+                "metrics": metrics,
+            }
+        ]
+
+    def _target_detail_by_id(
+        self, target_entity_type: str, farm_id: int | None, flock_id: int | None
+    ) -> dict:
+        try:
+            if target_entity_type == "flock":
+                plan = self.deterministic_service._flock_list_plan(
+                    farm_id=farm_id,
+                    flock_id=flock_id,
+                )
+            else:
+                plan = self.deterministic_service._farm_list_plan(farm_id=farm_id)
+            rows = self.deterministic_service.executor.execute(plan)
+            return self._json_safe(rows[0]) if rows else {}
+        except Exception:
+            logger.exception("Target detail fetch failed")
+            return {}
 
     def _farm_breakdown(self, spec: dict, history: list | None) -> list[dict]:
         rows = self._list_rows("farm")[: self.MAX_BREAKDOWN_ITEMS]
@@ -396,8 +501,26 @@ class ChikoozaMultiReportService:
     def _format_target(self, targets: list[dict]) -> list[str]:
         lines = []
         for target in targets:
-            lines.append(f"- {target.get('target')}:")
-            for item in target.get("metrics") or []:
+            entity_type = target.get("entity_type") or ""
+            details = target.get("details") or {}
+            description = (
+                self._entity_description(entity_type, details)
+                if entity_type in {"farm", "flock"}
+                else ""
+            )
+            lines.append(
+                f"- {target.get('target')}:"
+                f"{f' {description}' if description else ''}"
+            )
+            metrics = target.get("metrics") or []
+            if isinstance(metrics, dict):
+                iterable = [
+                    {"metric": metric, "response": response}
+                    for metric, response in metrics.items()
+                ]
+            else:
+                iterable = metrics
+            for item in iterable:
                 answer = self._friendly_answer(item.get("metric"), item.get("response"))
                 if answer:
                     lines.append(f"  {answer}")
@@ -485,6 +608,32 @@ class ChikoozaMultiReportService:
         if reference in {"first", "second", "third", "fourth", "fifth"}:
             return f"{reference} {entity_type}"
         return f"{entity_type} {reference}"
+
+    def _target_entity_type(self, intent, entity_resolution=None) -> str:
+        entity_type = (getattr(intent, "entity_type", "") or "").strip()
+        if entity_type in {"farm", "flock"}:
+            if entity_resolution and (
+                getattr(entity_resolution, "farm_id", None)
+                or getattr(entity_resolution, "flock_id", None)
+            ):
+                return entity_type
+            if self._intent_has_specific_target(intent):
+                return entity_type
+        return ""
+
+    def _intent_has_specific_target(self, intent) -> bool:
+        if not intent:
+            return False
+        reference = (getattr(intent, "entity_reference", "") or "").strip()
+        return bool(reference and reference != "other")
+
+    def _has_singular_target(self, query: str) -> bool:
+        return bool(
+            re.search(
+                r"\b(?:for|inside|about|of|in)\s+(?:the\s+|my\s+|our\s+)?[a-z0-9 ]*\b(?:farm|flock|batch)\b",
+                query,
+            )
+        )
 
     def _ordered_metrics(self, metrics) -> list[str]:
         order = (

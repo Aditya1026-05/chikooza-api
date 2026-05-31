@@ -1129,6 +1129,16 @@ class ChikoozaIntentArchitectureTests(SimpleTestCase):
 
                 self.assertEqual(intent.intent, "multi_farm_report")
 
+        flock_intent = classifier.classify("complete report for first flock")
+        farm_intent = classifier.classify("show all data for this farm")
+
+        self.assertEqual(flock_intent.intent, "multi_farm_report")
+        self.assertEqual(flock_intent.entity_type, "flock")
+        self.assertEqual(flock_intent.entity_reference, "first")
+        self.assertEqual(farm_intent.intent, "multi_farm_report")
+        self.assertEqual(farm_intent.entity_type, "farm")
+        self.assertEqual(farm_intent.entity_reference, "this")
+
     def test_rule_intent_classifier_uses_history_for_pronoun_detail(self):
         classifier = ChikoozaIntentClassifier(
             user=self.user,
@@ -1277,6 +1287,52 @@ class ChikoozaIntentArchitectureTests(SimpleTestCase):
         self.assertIn("Test Farm", response["answer"])
         self.assertIn("Test Flock", response["answer"])
 
+    def test_multi_report_service_scopes_complete_data_to_resolved_flock(self):
+        deterministic = ChikoozaTextToSQLService(user=self.user)
+        deterministic.executor = FakeMultiReportExecutor()
+        service = ChikoozaMultiReportService(deterministic)
+
+        response = service.answer(
+            "complete report for first flock",
+            intent=ChikoozaIntent(
+                intent="multi_farm_report",
+                entity_type="flock",
+                entity_reference="first",
+            ),
+            entity_resolution=SimpleNamespace(farm_id=42, flock_id=77),
+        )
+
+        self.assertEqual(response["status"], "success")
+        self.assertIn("Selected item", response["answer"])
+        self.assertIn("Test Flock", response["answer"])
+        self.assertNotIn("Account totals", response["answer"])
+        self.assertNotIn("Farm-wise details", response["answer"])
+        self.assertNotIn("Flock-wise details", response["answer"])
+        self.assertEqual(response["data"]["target"][0]["details"]["flock_id"], 77)
+
+    def test_multi_report_service_scopes_complete_data_to_resolved_farm(self):
+        deterministic = ChikoozaTextToSQLService(user=self.user)
+        deterministic.executor = FakeMultiReportExecutor()
+        service = ChikoozaMultiReportService(deterministic)
+
+        response = service.answer(
+            "complete report for first farm",
+            intent=ChikoozaIntent(
+                intent="multi_farm_report",
+                entity_type="farm",
+                entity_reference="first",
+            ),
+            entity_resolution=SimpleNamespace(farm_id=42, flock_id=None),
+        )
+
+        self.assertEqual(response["status"], "success")
+        self.assertIn("Selected item", response["answer"])
+        self.assertIn("Test Farm", response["answer"])
+        self.assertNotIn("Account totals", response["answer"])
+        self.assertNotIn("Farm-wise details", response["answer"])
+        self.assertNotIn("Flock-wise details", response["answer"])
+        self.assertEqual(response["data"]["target"][0]["details"]["farm_id"], 42)
+
     def test_intent_agent_runs_multi_report_before_single_summary(self):
         deterministic = ChikoozaTextToSQLService(user=self.user)
         deterministic.executor = FakeMultiReportExecutor()
@@ -1307,3 +1363,58 @@ class ChikoozaIntentArchitectureTests(SimpleTestCase):
         self.assertEqual(response["metric"], "multi_farm_report")
         self.assertIn("Farm-wise details", response["answer"])
         self.assertIn("Flock-wise details", response["answer"])
+
+    def test_intent_agent_scopes_complete_report_to_first_flock(self):
+        deterministic = ChikoozaTextToSQLService(user=self.user)
+        farm = SimpleNamespace(id=42, public_id=9001, name="Test Farm")
+        flock = SimpleNamespace(
+            id=77,
+            public_id=5001,
+            name="Test Flock",
+            farm_id=42,
+            farm=farm,
+        )
+        deterministic._farms = lambda: [farm]
+        deterministic._flocks = lambda: [flock]
+        deterministic.executor = FakeMultiReportExecutor()
+        agent = ChikoozaIntentAgentService(
+            user=self.user,
+            deterministic_service=deterministic,
+        )
+
+        response = agent.answer("complete report for first flock")
+
+        self.assertEqual(response["intent"], "multi_farm_report")
+        self.assertEqual(response["metric"], "multi_farm_report")
+        self.assertIn("Selected item", response["answer"])
+        self.assertIn("Test Flock", response["answer"])
+        self.assertNotIn("Account totals", response["answer"])
+        self.assertNotIn("Farm-wise details", response["answer"])
+        self.assertNotIn("Flock-wise details", response["answer"])
+
+    def test_intent_agent_scopes_complete_report_to_named_farm(self):
+        deterministic = ChikoozaTextToSQLService(user=self.user)
+        farm = SimpleNamespace(id=42, public_id=9001, name="Test Farm")
+        flock = SimpleNamespace(
+            id=77,
+            public_id=5001,
+            name="Test Flock",
+            farm_id=42,
+            farm=farm,
+        )
+        deterministic._farms = lambda: [farm]
+        deterministic._flocks = lambda: [flock]
+        deterministic.executor = FakeMultiReportExecutor()
+        agent = ChikoozaIntentAgentService(
+            user=self.user,
+            deterministic_service=deterministic,
+        )
+
+        response = agent.answer("everything inside Test Farm")
+
+        self.assertEqual(response["intent"], "multi_farm_report")
+        self.assertEqual(response["metric"], "multi_farm_report")
+        self.assertIn("Selected item", response["answer"])
+        self.assertIn("Test Farm", response["answer"])
+        self.assertNotIn("Account totals", response["answer"])
+        self.assertNotIn("Flock-wise details", response["answer"])
