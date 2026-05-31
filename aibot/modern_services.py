@@ -2042,8 +2042,9 @@ class ChikoozaModernAgentService:
     """
     U: Chikooza integration of the cloned chatbot design:
     U: route query -> enforce authenticated user -> run tenant-safe Text-to-SQL.
-    U: NEW: use the Groq SQL agent when configured and keep the deterministic
-    U: mapper as fallback. RAG-only questions are still not connected here.
+    U: NEW: use the Groq SQL agent as the active Farmer AI data path.
+    U: The deterministic mapper remains in the repo for reference/tests, not
+    U: as the live fallback. RAG-only questions are still not connected here.
     """
 
     def __init__(self, user):
@@ -2165,33 +2166,57 @@ class ChikoozaModernAgentService:
         return "Short version:\n" + "\n".join(f"- {line}" for line in compact_lines)
 
     def _build_sql_service(self):
-        fallback = ChikoozaTextToSQLService(user=self.user)
-        provider = os.getenv("AIBOT_SQL_LLM_PROVIDER", "auto").strip().lower()
+        provider = os.getenv("AIBOT_SQL_LLM_PROVIDER", "groq_sql").strip().lower()
         if provider in {"off", "false", "rule", "rules", "deterministic"}:
-            return fallback
+            # U: OLD: returning ChikoozaTextToSQLService here made the live
+            # U: Farmer AI use brittle rule matching instead of the cloned
+            # U: repo-style LLM SQL planner.
+            # return ChikoozaTextToSQLService(user=self.user)
+            logger.warning(
+                "AIBOT_SQL_LLM_PROVIDER=%s requested the disabled rule engine; using Groq SQL path.",
+                provider,
+            )
 
-        if provider not in {"legacy_sql", "groq_sql", "old_sql"}:
-            try:
-                from .intent_agent import ChikoozaIntentAgentService
+        if provider not in {"auto", "groq", "legacy_sql", "groq_sql", "old_sql"}:
+            logger.warning(
+                "Unknown AIBOT_SQL_LLM_PROVIDER=%s; using Groq SQL path.", provider
+            )
 
-                return ChikoozaIntentAgentService(
-                    user=self.user,
-                    deterministic_service=fallback,
-                )
-            except Exception:
-                logger.exception("Could not initialize intent-based Farmer AI agent.")
-                return fallback
+        # U: OLD: the intent/rule agent was used by default.
+        # try:
+        #     from .intent_agent import ChikoozaIntentAgentService
+        #     return ChikoozaIntentAgentService(
+        #         user=self.user,
+        #         deterministic_service=ChikoozaTextToSQLService(user=self.user),
+        #     )
+        # except Exception:
+        #     logger.exception("Could not initialize intent-based Farmer AI agent.")
 
         try:
             from .llm_sql import ChikoozaLLMTextToSQLService
 
             service = ChikoozaLLMTextToSQLService(
                 user=self.user,
-                fallback_service=fallback,
+                # U: OLD: fallback_service=ChikoozaTextToSQLService(...) kept
+                # U: silently returning the old deterministic answers. The live
+                # U: path now fails clearly if Groq SQL cannot run.
+                fallback_service=None,
             )
-            if service.is_available:
-                return service
+            return service
         except Exception:
             logger.exception("Could not initialize Groq-backed Farmer AI SQL service.")
 
-        return fallback
+        return _UnavailableFarmerAIService()
+
+
+class _UnavailableFarmerAIService:
+    def answer(self, query_text: str, history: list | None = None) -> dict:
+        return {
+            "status": "error",
+            "message": (
+                "Farmer AI SQL planner is not available. Check Groq API key setup "
+                "and backend logs."
+            ),
+            "route": TEXT_TO_SQL,
+            "engine": "groq_sql",
+        }

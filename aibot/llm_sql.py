@@ -92,8 +92,12 @@ Hard rules:
 9. "my", "our", "me", "us", and "this farmer" mean the authenticated farmer only.
 10. If the user asks for another farmer/user/customer's private data, return {{"blocked": true, "reason": "cross_tenant_request"}}.
 11. If the question is not answerable from these views, return {{"blocked": true, "reason": "not_answerable_from_farm_data"}}.
-12. If the user asks a follow-up like "what about that flock" or "compare it", use the recent conversation to resolve the farm/flock/metric context.
+12. If the user asks a follow-up like "what about that flock", "i meant daily data", "now in detail", "same farm", or "compare it", use Entity Context plus the recent conversation to resolve the farm/flock/metric context.
 13. If Entity Context resolves a farm/flock mention, use the resolved internal farm_id/flock_id exactly. For example, if the farmer says "flock 1" and Entity Context says it means flock_id 4, use flock_id = %s with param 4.
+14. Entity priority is: current explicit farm/flock mention first, then current resolved Entity Context, then the last referenced farm/flock from recent chat for unresolved follow-ups.
+15. If the user asks "daily data only", query ai_dailydata_data_view only. Do not answer with only flock master data.
+16. If the user asks "daily data and everything" after a selected flock, answer for that selected flock unless the user clearly asks for the whole account.
+17. If the user asks "total flocks in each farm", group by farm_id/farm_name and count DISTINCT flock_id. Do not ask the user to choose one farm.
 
 Common Chikooza mappings:
 - revenue/sales/income -> SUM(sale_amount) from ai_sale_data_view.
@@ -143,8 +147,29 @@ Exact SQL patterns to copy when relevant:
   "metric": "farm_record_summary",
   "result_type": "summary"
 }}
+5. Flock count in each farm:
+{{
+  "sql": "SELECT farm_id, farm_name, COUNT(DISTINCT flock_id) AS flock_count FROM ai_farm_flock_data_view WHERE owner_id = %s AND farm_id IS NOT NULL GROUP BY farm_id, farm_name ORDER BY farm_name LIMIT 100",
+  "params": ["{OWNER_PARAM}"],
+  "metric": "flock_count_by_farm",
+  "result_type": "table"
+}}
+6. Daily data rows for one resolved flock:
+{{
+  "sql": "SELECT record_date, flock_id, flock_name, birds_died, total_mort, birds_current, feed_consumed_kg, total_feed, average_bird_weight, fcr, remarks, daily_data_status FROM ai_dailydata_data_view WHERE owner_id = %s AND flock_id = %s AND daily_data_id IS NOT NULL ORDER BY record_date DESC LIMIT 100",
+  "params": ["{OWNER_PARAM}", 4],
+  "metric": "daily_data_by_flock",
+  "result_type": "table"
+}}
+7. Complete one-flock report with daily, sales, purchases and profit:
+{{
+  "sql": "SELECT base.flock_id, base.flock_name, base.farm_name, base.hatch_date, base.flock_size, base.actual_birds, base.breed_name, COALESCE(latest.birds_current, 0) AS current_birds, COALESCE(daily.total_mortality, 0) AS total_mortality, COALESCE(daily.total_feed_consumed, 0) AS total_feed_consumed, COALESCE(daily.average_weight, 0) AS average_weight, COALESCE(daily.average_fcr, 0) AS average_fcr, COALESCE(sales.total_sales, 0) AS total_sales, COALESCE(purchases.total_purchases, 0) AS total_purchases, COALESCE(base.flock_cost, 0) AS flock_cost, COALESCE(sales.total_sales, 0) - COALESCE(purchases.total_purchases, 0) - COALESCE(base.flock_cost, 0) AS profit_loss FROM (SELECT flock_id, flock_name, farm_name, hatch_date, flock_size, actual_birds, breed_name, MAX(flock_cost) AS flock_cost FROM ai_farm_flock_data_view WHERE owner_id = %s AND flock_id = %s GROUP BY flock_id, flock_name, farm_name, hatch_date, flock_size, actual_birds, breed_name) base LEFT JOIN (SELECT flock_id, SUM(birds_died) AS total_mortality, SUM(feed_consumed_kg) AS total_feed_consumed, AVG(average_bird_weight) AS average_weight, AVG(fcr) AS average_fcr FROM ai_dailydata_data_view WHERE owner_id = %s AND flock_id = %s AND daily_data_id IS NOT NULL GROUP BY flock_id) daily ON daily.flock_id = base.flock_id LEFT JOIN (SELECT current_rows.flock_id, current_rows.birds_current FROM ai_dailydata_data_view current_rows WHERE current_rows.owner_id = %s AND current_rows.flock_id = %s AND current_rows.daily_data_id IS NOT NULL AND current_rows.record_date = (SELECT MAX(compare_rows.record_date) FROM ai_dailydata_data_view compare_rows WHERE compare_rows.owner_id = %s AND compare_rows.flock_id = current_rows.flock_id AND compare_rows.daily_data_id IS NOT NULL)) latest ON latest.flock_id = base.flock_id LEFT JOIN (SELECT flock_id, SUM(sale_amount) AS total_sales FROM ai_sale_data_view WHERE owner_id = %s AND flock_id = %s GROUP BY flock_id) sales ON sales.flock_id = base.flock_id LEFT JOIN (SELECT flock_id, SUM(purchase_amount) AS total_purchases FROM ai_purchase_data_view WHERE owner_id = %s AND flock_id = %s GROUP BY flock_id) purchases ON purchases.flock_id = base.flock_id",
+  "params": ["{OWNER_PARAM}", 4, "{OWNER_PARAM}", 4, "{OWNER_PARAM}", 4, "{OWNER_PARAM}", "{OWNER_PARAM}", 4, "{OWNER_PARAM}", 4],
+  "metric": "complete_flock_report",
+  "result_type": "summary"
+}}
 
-Do not mix aggregate functions like SUM/AVG with plain row columns unless you also GROUP BY those row columns. For latest/current questions, prefer latest row fields over SUM.
+Do not mix aggregate functions like SUM/AVG with plain row columns unless you also GROUP BY those row columns. For latest/current questions, prefer latest row fields over SUM. Do not use CTE/WITH because the validator accepts one SELECT statement over approved views only.
 """.strip()
 
 
@@ -198,12 +223,32 @@ Return the JSON SQL plan now.
 
     def _history_text(self, history: list[dict]) -> str:
         parts = []
-        for item in history[-8:]:
+        # U: OLD: only eight messages were sent, which dropped part of a
+        # U: six-turn chat. Keep six user turns + six assistant turns.
+        for item in history[-12:]:
             role = item.get("role", "user")
             content = str(item.get("content", "")).strip()
             if content:
-                parts.append(f"{role.title()}: {content}")
+                metadata = self._safe_metadata_text(item)
+                if metadata:
+                    parts.append(f"{role.title()}: {content} [{metadata}]")
+                else:
+                    parts.append(f"{role.title()}: {content}")
         return "\n".join(parts)
+
+    def _safe_metadata_text(self, item: dict) -> str:
+        fields = []
+        for key in (
+            "resolved_farm_id",
+            "resolved_flock_id",
+            "intent_entity_type",
+            "intent_entity_reference",
+            "metric",
+        ):
+            value = item.get(key)
+            if value not in (None, ""):
+                fields.append(f"{key}={value}")
+        return ", ".join(fields)
 
 
 @dataclass(frozen=True)
@@ -238,7 +283,7 @@ class ChikoozaEntityResolver:
     def __init__(self, user):
         self.user = user
 
-    def resolve(self, question: str) -> EntityResolution:
+    def resolve(self, question: str, history: list[dict] | None = None) -> EntityResolution:
         farms = self._farms()
         flocks = self._flocks()
         query = re.sub(r"\s+", " ", (question or "").lower()).strip()
@@ -246,6 +291,9 @@ class ChikoozaEntityResolver:
             self._available_farms_context(farms),
             self._available_flocks_context(flocks),
         ]
+        history_context = self._history_entity_context(history or [], farms, flocks)
+        if history_context:
+            context_lines.append(history_context)
 
         flock_resolution = self._resolve_flock(query, flocks)
         if flock_resolution == "not_found":
@@ -258,7 +306,9 @@ class ChikoozaEntityResolver:
                 "Resolved flock mention: "
                 f"flock_id={flock_resolution.id}, "
                 f"flock_public_id={flock_resolution.public_id}, "
-                f"flock_name={flock_resolution.name}."
+                f"flock_name={flock_resolution.name}, "
+                f"farm_id={flock_resolution.farm.id}, "
+                f"farm_name={flock_resolution.farm.name}."
             )
 
         farm_resolution = self._resolve_farm(query, farms)
@@ -276,6 +326,39 @@ class ChikoozaEntityResolver:
             )
 
         return EntityResolution(context="\n".join(context_lines))
+
+    def _history_entity_context(
+        self,
+        history: list[dict],
+        farms: list,
+        flocks: list,
+    ) -> str:
+        for item in reversed(history[-12:]):
+            if item.get("role") != "assistant":
+                continue
+            flock_id = item.get("resolved_flock_id")
+            if flock_id is not None:
+                flock = self._find_by_id(flocks, flock_id)
+                if flock:
+                    return (
+                        "Last referenced flock from recent chat: "
+                        f"flock_id={flock.id}, "
+                        f"flock_public_id={flock.public_id}, "
+                        f"flock_name={flock.name}, "
+                        f"farm_id={flock.farm.id}, "
+                        f"farm_name={flock.farm.name}."
+                    )
+            farm_id = item.get("resolved_farm_id")
+            if farm_id is not None:
+                farm = self._find_by_id(farms, farm_id)
+                if farm:
+                    return (
+                        "Last referenced farm from recent chat: "
+                        f"farm_id={farm.id}, "
+                        f"farm_public_id={farm.public_id}, "
+                        f"farm_name={farm.name}."
+                    )
+        return ""
 
     def _farms(self):
         return list(Farm.objects.filter(user=self.user).order_by("id")[:30])
@@ -351,6 +434,13 @@ class ChikoozaEntityResolver:
             ),
             None,
         )
+
+    def _find_by_id(self, objects: list, object_id):
+        try:
+            object_id = int(object_id)
+        except (TypeError, ValueError):
+            return None
+        return next((obj for obj in objects if int(obj.id) == object_id), None)
 
     def _ordinal_for_phrase(self, query: str, label: str) -> int | None:
         for word, value in self.ORDINAL_WORDS.items():
@@ -432,8 +522,9 @@ class ChikoozaEntityResolver:
 class ChikoozaLLMTextToSQLService:
     """
     U: Groq-backed Farmer AI SQL service adapted from the separate chatbot repo.
-    U: The old deterministic ChikoozaTextToSQLService remains as fallback; this
-    U: class adds stronger natural-language coverage, conversation context, and
+    U: The old deterministic ChikoozaTextToSQLService remains in the repo for
+    U: reference/tests, but the live class does not silently fall back to it.
+    U: This class adds natural-language SQL planning, conversation context, and
     U: key-rotated LLM calls while still executing only tenant-safe SQL plans.
     """
 
@@ -450,7 +541,10 @@ class ChikoozaLLMTextToSQLService:
         self.user = user
         self.executor = TenantSafeSQLExecutor()
         self.prompt_builder = ChikoozaSQLPromptBuilder()
-        self.fallback_service = fallback_service or ChikoozaTextToSQLService(user=user)
+        # U: OLD: fallback_service defaulted to ChikoozaTextToSQLService, so
+        # U: Groq SQL failures silently returned rule-engine answers.
+        # self.fallback_service = fallback_service or ChikoozaTextToSQLService(user=user)
+        self.fallback_service = fallback_service
         self.entity_resolver = entity_resolver or ChikoozaEntityResolver(user=user)
         self.client = groq_client or GroqChatClient(
             model=os.getenv("AIBOT_SQL_MODEL", "llama-3.3-70b-versatile"),
@@ -465,27 +559,20 @@ class ChikoozaLLMTextToSQLService:
         return self.client.has_keys
 
     def answer(self, question: str, history: list[dict] | None = None) -> dict:
-        if is_broad_summary_query(question):
-            # U: NEW: broad "show me all data" questions use the deterministic
-            # U: summary plan so Groq cannot reduce them to one random metric.
-            return self._fallback_answer(
-                question,
-                history,
-                reason="Broad account summary query.",
-            )
-
-        deterministic = self._known_deterministic_answer(question, history)
-        if deterministic:
-            return deterministic
+        # U: OLD: broad and known farm-data queries were short-circuited into
+        # U: the rule/intent service before Groq could plan SQL.
+        # if is_broad_summary_query(question):
+        #     return self._fallback_answer(question, history, reason="Broad account summary query.")
+        # deterministic = self._known_deterministic_answer(question, history)
+        # if deterministic:
+        #     return deterministic
 
         if not self.is_available:
-            return self._fallback_answer(
-                question, history, reason="Groq is not configured."
-            )
+            return self._sql_error_response("Groq is not configured.")
 
         last_error: Exception | None = None
         error_feedback = ""
-        entity_resolution = self.entity_resolver.resolve(question)
+        entity_resolution = self.entity_resolver.resolve(question, history=history)
         if entity_resolution.direct_response:
             return entity_resolution.direct_response
 
@@ -505,6 +592,7 @@ class ChikoozaLLMTextToSQLService:
                     history,
                     entity_context=entity_resolution.context,
                 )
+                metadata = self._entity_metadata(entity_resolution.context)
                 return {
                     "status": "success",
                     "data": rows[0] if len(rows) == 1 else rows,
@@ -516,6 +604,7 @@ class ChikoozaLLMTextToSQLService:
                     "route": TEXT_TO_SQL,
                     "metric": plan.metric,
                     "engine": "groq_sql",
+                    **metadata,
                 }
             except BlockedAIQuery as exc:
                 return {
@@ -530,9 +619,7 @@ class ChikoozaLLMTextToSQLService:
                 error_feedback = str(exc)[:500]
                 logger.warning("Groq SQL attempt failed: %s", exc)
 
-        return self._fallback_answer(
-            question, history, reason=str(last_error or "Unknown LLM SQL failure.")
-        )
+        return self._sql_error_response(str(last_error or "Unknown LLM SQL failure."))
 
     def _build_plan(
         self,
@@ -621,9 +708,12 @@ class ChikoozaLLMTextToSQLService:
         history: list[dict] | None,
         entity_context: str = "",
     ) -> str:
-        deterministic = self._deterministic_metric_answer(rows, entity_context)
-        if deterministic:
-            return deterministic
+        # U: OLD: some metric rows skipped Groq answer formatting and returned
+        # U: a rule-formatted sentence. The active path now always sends the
+        # U: tenant-safe SQL result to Groq for farmer-friendly wording.
+        # deterministic = self._deterministic_metric_answer(rows, entity_context)
+        # if deterministic:
+        #     return deterministic
 
         compact_rows = self._json_safe_rows(rows[:25])
         prompt = f"""
@@ -671,7 +761,7 @@ If the farmer used a rough phrase like "flock 1" but Entity Context resolved it 
 
     def _history_messages(self, history: list[dict]) -> list[dict[str, str]]:
         messages = []
-        for item in history[-8:]:
+        for item in history[-12:]:
             role = "assistant" if item.get("role") == "assistant" else "user"
             content = str(item.get("content", "")).strip()
             if content:
@@ -681,6 +771,8 @@ If the farmer used a rough phrase like "flock 1" but Entity Context resolved it 
     def _fallback_answer(
         self, question: str, history: list[dict] | None, *, reason: str
     ) -> dict:
+        if self.fallback_service is None:
+            return self._sql_error_response(reason)
         logger.info("Using deterministic Farmer AI fallback: %s", reason)
         response = self.fallback_service.answer(question, history=history)
         response["engine"] = "rule_based_fallback"
@@ -700,6 +792,50 @@ If the farmer used a rough phrase like "flock 1" but Entity Context resolved it 
             response["fallback_reason"] = "Deterministic Chikooza farm-data query."
             return response
         return None
+
+    def _sql_error_response(self, reason: str) -> dict:
+        logger.warning("Groq SQL Farmer AI failed without rule fallback: %s", reason)
+        return {
+            "status": "error",
+            "message": (
+                "I could not safely run the AI SQL planner for that question. "
+                "Please try again, or ask a more specific farm, flock, sales, purchase, "
+                "daily data, mortality, feed, FCR, or profit question."
+            ),
+            "details": reason,
+            "suggestion": (
+                "Example: 'daily data only for flock 3', 'total flocks in each farm', "
+                "or 'profit for second flock'."
+            ),
+            "route": TEXT_TO_SQL,
+            "engine": "groq_sql",
+        }
+
+    def _entity_metadata(self, entity_context: str) -> dict:
+        metadata = {}
+        farm_match = re.search(
+            r"(?:Resolved farm mention|Last referenced farm).*?farm_id=(\d+)",
+            entity_context,
+        )
+        flock_match = re.search(
+            r"(?:Resolved flock mention|Last referenced flock).*?flock_id=(\d+)",
+            entity_context,
+        )
+        if farm_match:
+            metadata["resolved_farm_id"] = int(farm_match.group(1))
+        if flock_match:
+            metadata["resolved_flock_id"] = int(flock_match.group(1))
+            flock_farm_match = re.search(
+                r"(?:Resolved flock mention|Last referenced flock).*?farm_id=(\d+)",
+                entity_context,
+            )
+            if flock_farm_match:
+                metadata["resolved_farm_id"] = int(flock_farm_match.group(1))
+        if flock_match:
+            metadata["intent_entity_type"] = "flock"
+        elif farm_match:
+            metadata["intent_entity_type"] = "farm"
+        return metadata
 
     def _deterministic_answer(self, plan: SQLPlan, rows: list[dict]) -> str:
         if not rows:
