@@ -5,7 +5,7 @@ import { useState, useEffect } from "react";
 import Accordion from 'react-bootstrap/Accordion'
 import axios from 'axios';
 import Modal from 'react-bootstrap/Modal';
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 
 const AddPurchase = () => {
     let [loading, setLoading] = useState(false);
@@ -19,6 +19,7 @@ const AddPurchase = () => {
     // U: NEW: keep the select state as one consistent string value.
     const [showInputArea, setShowInputArea] = useState("0");
     let [addData, setAddData] = useState({
+        farm_public_id: '0',
         flock_public_id: '0',
         type: '',
         date: null,
@@ -43,25 +44,69 @@ const AddPurchase = () => {
     let [flockerr, setFlockerr] = useState('');
     let [typeerr, setTypeerr] = useState('');
     let navigate = useNavigate()
+    const location = useLocation();
+    const prefillFarmId = String(location.state?.farmPublicId || "0");
+    const prefillFlockId = String(location.state?.flockPublicId || "0");
     const hasFarmPrerequisite = farms.some((farm) => String(farm.public_id) !== "0");
     const hasFlockOptions = flocks.some((item) => String(item.flock_public_id) !== "0");
 
     useEffect(() => {
+        let cancelled = false;
         let url = `${apiPath}farm/`;
         // U: OLD: config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
         axios.get(url, getAuthConfig()).then((res) => {
+            if (cancelled) {
+                return;
+            }
             if (res.data.results.length === 0) {
                 setFarms([{ public_id: 0, name: 'No farm available' }]);
             } else {
                 setFarms(res.data.results);
             }
+
+            if (prefillFarmId !== "0") {
+                // U: NEW: when dashboard sends a selected flock here, preserve it
+                // U: so farmers do not repeat farm/flock selection.
+                setAddData((current) => ({
+                    ...current,
+                    farm_public_id: prefillFarmId,
+                    flock_public_id: prefillFlockId,
+                }));
+                axios.get(`${apiPath}flocks/${prefillFarmId}/`, getAuthConfig()).then((flockRes) => {
+                    if (cancelled) {
+                        return;
+                    }
+                    setShowFlocks(1);
+                    if (flockRes.data.results.total_records === 0) {
+                        setFlocks([{ flock_public_id: 0, flock_name: 'No flock available' }]);
+                        setShowForm(0);
+                        return;
+                    }
+                    const flockList = flockRes.data.results.flock_list;
+                    const hasPrefillFlock = flockList.some((item) => String(item.flock_public_id) === prefillFlockId);
+                    setFlocks(flockList);
+                    setShowForm(hasPrefillFlock ? 1 : 0);
+                    setFlockerr(hasPrefillFlock ? '' : 'Please select a flock');
+                }).catch((err) => {
+                    if (!cancelled) {
+                        setFlocks([]);
+                    }
+                    handleUnauthorized(err, navigate);
+                });
+            }
         }).catch((err) => {
+            if (cancelled) {
+                return;
+            }
             setFarms([{ public_id: 0, name: 'No farm available' }]);
             handleUnauthorized(err, navigate);
         });
-    }, [navigate])
+        return () => {
+            cancelled = true;
+        };
+    }, [navigate, prefillFarmId, prefillFlockId])
     let changeFarm = (e) => {
-        setAddData({ ...addData, farm_public_id: e.target.value });
+        setAddData({ ...addData, farm_public_id: e.target.value, flock_public_id: "0" });
         // U: OLD: e.target.value === 0 compared a string to a number.
         if (e.target.value === "0") {
             //setFarm_public_iderr('Please select farm');
@@ -302,7 +347,7 @@ const AddPurchase = () => {
                                             <Label for="farmselect">Select Farm</Label>
                                             <FormGroup>
                                                 <div className="input-group">
-                                                    <Input onChange={changeFarm} defaultValue="0" id="farmSelect" name="farm" type="select">
+                                                    <Input onChange={changeFarm} value={addData.farm_public_id || "0"} id="farmSelect" name="farm" type="select">
                                                         <option value="0" disabled>Select Farm</option>
                                                         {
                                                             farms.map((item) => {

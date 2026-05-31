@@ -79,16 +79,16 @@ class Users(User, BaseModel):
     class Meta:
         db_table = "users"
 
-    mobile_number = models.BigIntegerField()
+    mobile_number = models.CharField(max_length=15)
 
 
 class Address(BaseModel):
     """
-    Model for store users detail's.
+    Model for storing user address details.
     """
 
     class Meta:
-        db_table = "Address"
+        db_table = "address"
 
     users = models.ForeignKey(
         Users, on_delete=models.CASCADE, related_name="users_address"

@@ -8,7 +8,7 @@ import Accordion from 'react-bootstrap/Accordion';
 // U: NEW: use the existing moment dependency directly to avoid the abandoned React wrapper.
 import Modal from 'react-bootstrap/Modal';
 import Spinner from 'react-bootstrap/Spinner';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import moment from "moment";
 
 const getFlockAgeInDays = (hatchDate) => {
@@ -46,6 +46,9 @@ const FlockSale = () => {
     let [submitError, setSubmitError] = useState('');
     let [loading, setLoading] = useState(false);
     const navigate = useNavigate();
+    const location = useLocation();
+    const prefillFarmId = String(location.state?.farmPublicId || "0");
+    const prefillFlockId = String(location.state?.flockPublicId || "0");
     const hasFarmPrerequisite = farms.some((farm) => String(farm.public_id) !== "0");
     const hasFlockOptions = flocks.some((item) => String(item.flock_public_id) !== "0");
 
@@ -142,20 +145,88 @@ const FlockSale = () => {
         window.location.reload();
     }
     useEffect(() => {
+        let cancelled = false;
         let url = `${apiPath}farm/`;
         // U: Replaced shared config mutation with per-request auth headers from getAuthConfig().
         // config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
         axios.get(url, getAuthConfig()).then((res) => {
+            if (cancelled) {
+                return;
+            }
             if (res.data.results.length === 0) {
                 setFarms([{ public_id: 0, name: 'No farm available' }]);
             } else {
                 setFarms(res.data.results);
             }
+
+            if (prefillFarmId !== "0") {
+                // U: NEW: dashboard can send the selected flock here so sale entry
+                // U: starts from the right farm/flock instead of a blank screen.
+                setData((current) => ({ ...current, farm: prefillFarmId, flock: null }));
+                axios.get(`${apiPath}flocks/${prefillFarmId}/`, getAuthConfig()).then((flockRes) => {
+                    if (cancelled) {
+                        return;
+                    }
+                    setShowFlocks(true);
+                    if (flockRes.data.results.total_records === 0) {
+                        setFlocks([{ flock_public_id: 0, flock_name: 'No flock available' }]);
+                        setShowFlockSale(false);
+                        return;
+                    }
+
+                    const flockList = flockRes.data.results.flock_list;
+                    const selected = flockList.find((item) => String(item.flock_public_id) === prefillFlockId);
+                    setFlocks(flockList);
+                    if (!selected) {
+                        setShowFlockSale(false);
+                        return;
+                    }
+
+                    setData((current) => ({
+                        ...current,
+                        farm: selected.farm_public_id || prefillFarmId,
+                        flock: selected.flock_public_id,
+                        selType: null,
+                        date: '',
+                        sellcount: '',
+                        selltwt: '',
+                        sellrate: '',
+                        sellamount: '',
+                    }));
+                    setFlock(selected);
+                    setShowFlockSale(true);
+                    setShowForm(false);
+                    setShowButton(false);
+                    setError({});
+
+                    axios.get(`${apiPath}dailyDataLastDate/${selected.flock_public_id}/`, getAuthConfig()).then((dailyRes) => {
+                        if (!cancelled) {
+                            setTotalChickCount(dailyRes.data.results.current_bird_count);
+                        }
+                    }).catch((err) => {
+                        if (!cancelled) {
+                            setTotalChickCount(selected.actual_birds);
+                        }
+                        handleUnauthorized(err, navigate);
+                    });
+                }).catch((err) => {
+                    if (!cancelled) {
+                        setFlocks([]);
+                    }
+                    handleUnauthorized(err, navigate);
+                });
+            }
         }).catch((err) => {
+            if (cancelled) {
+                return;
+            }
             setFarms([{ public_id: 0, name: 'No farm available' }]);
             handleUnauthorized(err, navigate);
         });
-    }, [navigate])
+        return () => {
+            cancelled = true;
+        };
+    }, [navigate, prefillFarmId, prefillFlockId])
     let changeFarm = (e) => {
         if (e.target.value === "0") {
             setFlocks([]);
@@ -182,7 +253,7 @@ const FlockSale = () => {
                 setShowForm(false);
                 setShowFlockSale(false);
                 setShowButton(false);
-                setData({ flock: null, selType: null, date: '', sellcount: '', selltwt: '', sellrate: '', sellamount: '' });
+                setData({ farm: e.target.value, flock: null, selType: null, date: '', sellcount: '', selltwt: '', sellrate: '', sellamount: '' });
                 setError({});
             }).catch((err) => {
                 //setFormError('No Flock available.');
@@ -511,7 +582,7 @@ const FlockSale = () => {
                                             <FormGroup>
                                                 <Label for="farmselect">Select Farm</Label>
                                                 <div className="input-group">
-                                                    <Input onChange={changeFarm} id="farmSelect" name="farm" type="select" defaultValue="0">
+                                                    <Input onChange={changeFarm} value={data.farm || "0"} id="farmSelect" name="farm" type="select">
                                                         <option value="0">Select Farm</option>
                                                         {
                                                             farms.map((item) => {
@@ -528,7 +599,7 @@ const FlockSale = () => {
                                                 <FormGroup>
                                                     <Label for="farmselect">Select Flock</Label>
                                                     <div className="input-group">
-                                                        <Input onChange={changeFlock} id="flockSelect" name="flock" type="select" defaultValue="0">
+                                                        <Input onChange={changeFlock} value={data.flock || "0"} id="flockSelect" name="flock" type="select">
                                                             <option value="0">Select Flocks</option>
                                                             {
                                                                 flocks.map((item) => {
@@ -553,7 +624,7 @@ const FlockSale = () => {
                                                 <FormGroup>
                                                     <Label for="farmselect">Select Sale Type</Label>
                                                     <div className="input-group">
-                                                        <Input onChange={changeFlockSale} id="saleSelect" name="sale" type="select" defaultValue="0">
+                                                        <Input onChange={changeFlockSale} value={data.selType || "0"} id="saleSelect" name="sale" type="select">
                                                             <option value="0">Select Sale Type</option>
                                                             <option value="partial_lifting">Partial Lifting</option>
                                                             <option value="final_lifting">Final Lifting</option>

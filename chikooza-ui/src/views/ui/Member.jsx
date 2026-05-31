@@ -247,6 +247,9 @@ const Member = () => {
     const hasDailyData = hasChartData;
     const hasPurchases = recordStatus.hasPurchases;
     const hasSales = recordStatus.hasSales;
+    const selectedRecordState = selectedFlock !== "0"
+      ? { farmPublicId: selectedFarm, flockPublicId: selectedFlock }
+      : undefined;
 
     return [
       {
@@ -275,6 +278,7 @@ const Member = () => {
         helper: "Track feed, medicine, labour, equipment, and other costs.",
         complete: hasPurchases,
         href: hasPurchases ? "/listpurchase" : hasFlock ? "/addpurchase" : "/addflock",
+        state: selectedRecordState,
         action: hasPurchases ? "Review purchases" : hasFlock ? "Add purchase" : "Add flock first",
       },
       {
@@ -282,6 +286,7 @@ const Member = () => {
         helper: "Add partial or final lifting details for profit reports.",
         complete: hasSales,
         href: hasSales ? "/viewsale" : hasFlock ? "/flocksale" : "/addflock",
+        state: selectedRecordState,
         action: hasSales ? "Review sales" : hasFlock ? "Add sale" : "Add flock first",
       },
       {
@@ -292,7 +297,7 @@ const Member = () => {
         action: hasDailyData && (hasPurchases || hasSales) ? "Ask Farmer AI" : "Open reports",
       },
     ];
-  }, [farmCount, flockCount, hasChartData, recordStatus.hasPurchases, recordStatus.hasSales]);
+  }, [farmCount, flockCount, hasChartData, recordStatus.hasPurchases, recordStatus.hasSales, selectedFarm, selectedFlock]);
 
   const nextSetupStep = setupSteps.find((step) => !step.complete) || setupSteps[setupSteps.length - 1];
 
@@ -396,7 +401,7 @@ const Member = () => {
               <div>
                 <h2>{step.title}</h2>
                 <p>{step.helper}</p>
-                <Link to={step.href}>{step.action}</Link>
+                <Link to={step.href} state={step.state}>{step.action}</Link>
               </div>
             </article>
           ))}
