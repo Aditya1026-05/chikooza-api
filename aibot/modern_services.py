@@ -1,7 +1,9 @@
 import logging
+import calendar
 import os
 import re
 from dataclasses import dataclass
+from datetime import date, datetime, timedelta
 
 from django.db import connection
 
@@ -72,11 +74,19 @@ def is_broad_summary_query(question: str) -> bool:
 
 
 @dataclass(frozen=True)
+class DateRange:
+    start: date
+    end: date
+    label: str
+
+
+@dataclass(frozen=True)
 class SQLPlan:
     sql: str
     params: list
     metric: str
     result_type: str
+    date_range: DateRange | None = None
 
 
 @dataclass(frozen=True)
@@ -452,6 +462,7 @@ class ChikoozaTextToSQLService:
         if not query:
             return None
 
+        date_range = self._date_range_from_query(query)
         entity_filter = self.resolve_entity_filters(query, history=history)
         if entity_filter.missing_response:
             return None
@@ -467,7 +478,7 @@ class ChikoozaTextToSQLService:
                 query, "farm"
             ):
                 return self._farm_list_plan(farm_id=farm_id)
-            return self._summary_plan()
+            return self._summary_plan(date_range=date_range)
 
         if self._is_entity_detail_query(query, "flock", entity_filter):
             return self._flock_list_plan(farm_id=farm_id, flock_id=flock_id)
@@ -476,7 +487,7 @@ class ChikoozaTextToSQLService:
             return self._farm_list_plan(farm_id=farm_id)
 
         if any(word in query for word in ("profit", "loss", "net", "earning")):
-            return self._profit_plan(farm_id, flock_id)
+            return self._profit_plan(farm_id, flock_id, date_range=date_range)
 
         if self._is_count_query(query) and re.search(r"\bfarms?\b", query):
             return self._aggregate_plan(
@@ -511,6 +522,8 @@ class ChikoozaTextToSQLService:
                 farm_id=farm_id,
                 flock_id=flock_id,
                 extra_conditions=["sale_id IS NOT NULL"],
+                date_column="sale_date",
+                date_range=date_range,
             )
 
         if self._is_count_query(query) and "purchase" in query:
@@ -522,6 +535,8 @@ class ChikoozaTextToSQLService:
                 farm_id=farm_id,
                 flock_id=flock_id,
                 extra_conditions=["purchase_date IS NOT NULL"],
+                date_column="purchase_date",
+                date_range=date_range,
             )
 
         if self._is_list_query(query, "farm"):
@@ -537,6 +552,7 @@ class ChikoozaTextToSQLService:
                 "COALESCE(SUM(sale_amount), 0)",
                 "total_sales",
                 "money",
+                "sale_date",
             ),
             (
                 ("purchase", "purchases", "expense", "expenses", "spent", "spend"),
@@ -544,6 +560,7 @@ class ChikoozaTextToSQLService:
                 "COALESCE(SUM(purchase_amount), 0)",
                 "total_purchases",
                 "money",
+                "purchase_date",
             ),
             (
                 ("flock cost", "initial cost", "chick cost"),
@@ -551,6 +568,7 @@ class ChikoozaTextToSQLService:
                 "COALESCE(SUM(DISTINCT flock_cost), 0)",
                 "flock_cost",
                 "money",
+                None,
             ),
             (
                 ("mortality", "deaths", "death", "dead birds", "birds died", "died"),
@@ -558,6 +576,7 @@ class ChikoozaTextToSQLService:
                 "COALESCE(SUM(birds_died), 0)",
                 "mortality",
                 "count",
+                "record_date",
             ),
             (
                 ("average weight", "bird weight", "body weight", "weight"),
@@ -565,6 +584,7 @@ class ChikoozaTextToSQLService:
                 "COALESCE(AVG(average_bird_weight), 0)",
                 "average_weight",
                 "decimal",
+                "record_date",
             ),
             (
                 ("current birds", "bird count", "birds left", "birds", "bird"),
@@ -572,6 +592,7 @@ class ChikoozaTextToSQLService:
                 "COALESCE(SUM(birds_current), 0)",
                 "current_birds",
                 "count",
+                "record_date",
             ),
             (
                 ("feed consumed", "feed consumption", "feed intake", "feed"),
@@ -579,6 +600,7 @@ class ChikoozaTextToSQLService:
                 "COALESCE(SUM(feed_consumed_kg), 0)",
                 "feed_consumed",
                 "quantity",
+                "record_date",
             ),
             (
                 ("fcr", "feed conversion"),
@@ -586,13 +608,18 @@ class ChikoozaTextToSQLService:
                 "COALESCE(AVG(fcr), 0)",
                 "fcr",
                 "decimal",
+                "record_date",
             ),
         )
 
-        for keywords, view, expression, metric, result_type in metric_map:
+        for keywords, view, expression, metric, result_type, date_column in metric_map:
             if any(keyword in query for keyword in keywords):
                 if metric == "current_birds":
-                    return self._current_birds_plan(farm_id, flock_id)
+                    return self._current_birds_plan(
+                        farm_id,
+                        flock_id,
+                        date_range=date_range,
+                    )
                 return self._aggregate_plan(
                     view=view,
                     expression=expression,
@@ -600,6 +627,8 @@ class ChikoozaTextToSQLService:
                     result_type=result_type,
                     farm_id=farm_id,
                     flock_id=flock_id,
+                    date_column=date_column,
+                    date_range=date_range,
                 )
 
         return None
@@ -646,9 +675,14 @@ class ChikoozaTextToSQLService:
         farm_id: int | None = None,
         flock_id: int | None = None,
         extra_conditions: list[str] | None = None,
+        date_column: str | None = None,
+        date_range: DateRange | None = None,
     ) -> SQLPlan:
         where_sql, params = self._where_clause(farm_id=farm_id, flock_id=flock_id)
         conditions = list(extra_conditions or [])
+        date_conditions, date_params = self._date_conditions(date_column, date_range)
+        conditions.extend(date_conditions)
+        params.extend(date_params)
         if conditions:
             where_sql = f"{where_sql} AND {' AND '.join(conditions)}"
         return SQLPlan(
@@ -656,6 +690,7 @@ class ChikoozaTextToSQLService:
             params=params,
             metric=metric,
             result_type=result_type,
+            date_range=date_range,
         )
 
     def _farm_list_plan(self, farm_id: int | None = None) -> SQLPlan:
@@ -709,10 +744,27 @@ class ChikoozaTextToSQLService:
             result_type="table",
         )
 
-    def _profit_plan(self, farm_id: int | None, flock_id: int | None) -> SQLPlan:
+    def _profit_plan(
+        self,
+        farm_id: int | None,
+        flock_id: int | None,
+        date_range: DateRange | None = None,
+    ) -> SQLPlan:
         sale_where, sale_params = self._where_clause(farm_id=farm_id, flock_id=flock_id)
+        sale_where, sale_params = self._apply_date_range(
+            sale_where,
+            sale_params,
+            "sale_date",
+            date_range,
+        )
         purchase_where, purchase_params = self._where_clause(
             farm_id=farm_id, flock_id=flock_id
+        )
+        purchase_where, purchase_params = self._apply_date_range(
+            purchase_where,
+            purchase_params,
+            "purchase_date",
+            date_range,
         )
         flock_cost_where, flock_cost_params = self._where_clause(
             farm_id=farm_id, flock_id=flock_id
@@ -742,14 +794,38 @@ class ChikoozaTextToSQLService:
             params=params,
             metric="profit_loss",
             result_type="money",
+            date_range=date_range,
         )
 
-    def _current_birds_plan(self, farm_id: int | None, flock_id: int | None) -> SQLPlan:
+    def _current_birds_plan(
+        self,
+        farm_id: int | None,
+        flock_id: int | None,
+        date_range: DateRange | None = None,
+    ) -> SQLPlan:
         # U: OLD code summed birds_current across every daily row, which double
         # U: counted the same flock over time.
         # U: NEW code sums only the latest daily row for each flock.
         current_where, current_params = self._where_clause(
             farm_id=farm_id, flock_id=flock_id, table_alias="current_rows"
+        )
+        current_where, current_params = self._apply_date_range(
+            current_where,
+            current_params,
+            "current_rows.record_date",
+            date_range,
+        )
+        compare_where = (
+            "compare_rows.owner_id = %s "
+            "AND compare_rows.flock_id = current_rows.flock_id "
+            "AND compare_rows.daily_data_id IS NOT NULL"
+        )
+        compare_params = [self.user.id]
+        compare_where, compare_params = self._apply_date_range(
+            compare_where,
+            compare_params,
+            "compare_rows.record_date",
+            date_range,
         )
         sql = f"""
             SELECT COALESCE(SUM(current_rows.birds_current), 0) AS result
@@ -759,35 +835,87 @@ class ChikoozaTextToSQLService:
               AND current_rows.record_date = (
                   SELECT MAX(compare_rows.record_date)
                   FROM ai_dailydata_data_view compare_rows
-                  WHERE compare_rows.owner_id = %s
-                    AND compare_rows.flock_id = current_rows.flock_id
-                    AND compare_rows.daily_data_id IS NOT NULL
+                  WHERE {compare_where}
               )
         """
         return SQLPlan(
             sql=re.sub(r"\s+", " ", sql).strip(),
-            params=current_params + [self.user.id],
+            params=current_params + compare_params,
             metric="current_birds",
             result_type="count",
+            date_range=date_range,
         )
 
-    def _summary_plan(self) -> SQLPlan:
-        sql = """
+    def _summary_plan(self, date_range: DateRange | None = None) -> SQLPlan:
+        current_where, current_params = self._apply_date_range(
+            "current_rows.owner_id = %s",
+            [self.user.id],
+            "current_rows.record_date",
+            date_range,
+        )
+        compare_where, compare_params = self._apply_date_range(
+            "compare_rows.owner_id = %s AND compare_rows.flock_id = current_rows.flock_id AND compare_rows.daily_data_id IS NOT NULL",
+            [self.user.id],
+            "compare_rows.record_date",
+            date_range,
+        )
+        sale_where, sale_params = self._apply_date_range(
+            "owner_id = %s",
+            [self.user.id],
+            "sale_date",
+            date_range,
+        )
+        purchase_where, purchase_params = self._apply_date_range(
+            "owner_id = %s",
+            [self.user.id],
+            "purchase_date",
+            date_range,
+        )
+        feed_where, feed_params = self._apply_date_range(
+            "owner_id = %s",
+            [self.user.id],
+            "record_date",
+            date_range,
+        )
+        mortality_where, mortality_params = self._apply_date_range(
+            "owner_id = %s",
+            [self.user.id],
+            "record_date",
+            date_range,
+        )
+        fcr_where, fcr_params = self._apply_date_range(
+            "owner_id = %s AND fcr IS NOT NULL",
+            [self.user.id],
+            "record_date",
+            date_range,
+        )
+        sql = f"""
             SELECT
                 (SELECT COUNT(DISTINCT farm_id) FROM ai_farm_flock_data_view WHERE owner_id = %s AND farm_id IS NOT NULL) AS farm_count,
                 (SELECT COUNT(DISTINCT flock_id) FROM ai_farm_flock_data_view WHERE owner_id = %s AND flock_id IS NOT NULL) AS flock_count,
-                (SELECT COALESCE(SUM(current_rows.birds_current), 0) FROM ai_dailydata_data_view current_rows WHERE current_rows.owner_id = %s AND current_rows.daily_data_id IS NOT NULL AND current_rows.record_date = (SELECT MAX(compare_rows.record_date) FROM ai_dailydata_data_view compare_rows WHERE compare_rows.owner_id = %s AND compare_rows.flock_id = current_rows.flock_id AND compare_rows.daily_data_id IS NOT NULL)) AS current_birds,
-                (SELECT COALESCE(SUM(sale_amount), 0) FROM ai_sale_data_view WHERE owner_id = %s) AS total_sales,
-                (SELECT COALESCE(SUM(purchase_amount), 0) FROM ai_purchase_data_view WHERE owner_id = %s) AS total_purchases,
-                (SELECT COALESCE(SUM(feed_consumed_kg), 0) FROM ai_dailydata_data_view WHERE owner_id = %s) AS total_feed_consumed,
-                (SELECT COALESCE(SUM(birds_died), 0) FROM ai_dailydata_data_view WHERE owner_id = %s) AS total_mortality,
-                (SELECT COALESCE(AVG(fcr), 0) FROM ai_dailydata_data_view WHERE owner_id = %s AND fcr IS NOT NULL) AS average_fcr
+                (SELECT COALESCE(SUM(current_rows.birds_current), 0) FROM ai_dailydata_data_view current_rows WHERE {current_where} AND current_rows.daily_data_id IS NOT NULL AND current_rows.record_date = (SELECT MAX(compare_rows.record_date) FROM ai_dailydata_data_view compare_rows WHERE {compare_where})) AS current_birds,
+                (SELECT COALESCE(SUM(sale_amount), 0) FROM ai_sale_data_view WHERE {sale_where}) AS total_sales,
+                (SELECT COALESCE(SUM(purchase_amount), 0) FROM ai_purchase_data_view WHERE {purchase_where}) AS total_purchases,
+                (SELECT COALESCE(SUM(feed_consumed_kg), 0) FROM ai_dailydata_data_view WHERE {feed_where}) AS total_feed_consumed,
+                (SELECT COALESCE(SUM(birds_died), 0) FROM ai_dailydata_data_view WHERE {mortality_where}) AS total_mortality,
+                (SELECT COALESCE(AVG(fcr), 0) FROM ai_dailydata_data_view WHERE {fcr_where}) AS average_fcr
         """
+        params = (
+            [self.user.id, self.user.id]
+            + current_params
+            + compare_params
+            + sale_params
+            + purchase_params
+            + feed_params
+            + mortality_params
+            + fcr_params
+        )
         return SQLPlan(
             sql=re.sub(r"\s+", " ", sql).strip(),
-            params=[self.user.id] * 9,
+            params=params,
             metric="farm_record_summary",
             result_type="summary",
+            date_range=date_range,
         )
 
     def _where_clause(
@@ -806,6 +934,156 @@ class ChikoozaTextToSQLService:
             conditions.append(f"{prefix}flock_id = %s")
             params.append(flock_id)
         return " AND ".join(conditions), params
+
+    def _apply_date_range(
+        self,
+        where_sql: str,
+        params: list,
+        date_column: str | None,
+        date_range: DateRange | None,
+    ) -> tuple[str, list]:
+        conditions, date_params = self._date_conditions(date_column, date_range)
+        if not conditions:
+            return where_sql, params
+        return f"{where_sql} AND {' AND '.join(conditions)}", params + date_params
+
+    def _date_conditions(
+        self,
+        date_column: str | None,
+        date_range: DateRange | None,
+    ) -> tuple[list[str], list]:
+        if not date_column or not date_range:
+            return [], []
+        return [
+            f"{date_column} >= %s",
+            f"{date_column} <= %s",
+        ], [date_range.start, date_range.end]
+
+    def _date_range_from_query(self, query: str) -> DateRange | None:
+        today = self._today()
+        explicit_range = self._explicit_date_range(query)
+        if explicit_range:
+            return explicit_range
+
+        if re.search(r"\btoday\b", query):
+            return DateRange(today, today, "today")
+        if re.search(r"\byesterday\b", query):
+            day = today - timedelta(days=1)
+            return DateRange(day, day, "yesterday")
+
+        last_days = re.search(r"\blast\s+(\d{1,3})\s+days?\b", query)
+        if last_days:
+            days = max(1, int(last_days.group(1)))
+            return DateRange(today - timedelta(days=days - 1), today, f"last {days} days")
+
+        if re.search(r"\bthis\s+week\b", query):
+            start = today - timedelta(days=today.weekday())
+            return DateRange(start, today, "this week")
+        if re.search(r"\blast\s+week\b", query):
+            this_week_start = today - timedelta(days=today.weekday())
+            start = this_week_start - timedelta(days=7)
+            end = this_week_start - timedelta(days=1)
+            return DateRange(start, end, "last week")
+
+        if re.search(r"\bthis\s+month\b", query):
+            start = today.replace(day=1)
+            end = today.replace(day=calendar.monthrange(today.year, today.month)[1])
+            return DateRange(start, end, "this month")
+        if re.search(r"\blast\s+month\b", query):
+            year = today.year
+            month = today.month - 1
+            if month == 0:
+                month = 12
+                year -= 1
+            return self._month_range(year, month, "last month")
+
+        if re.search(r"\bthis\s+year\b", query):
+            return DateRange(date(today.year, 1, 1), date(today.year, 12, 31), "this year")
+        if re.search(r"\blast\s+year\b", query):
+            year = today.year - 1
+            return DateRange(date(year, 1, 1), date(year, 12, 31), "last year")
+
+        month_range = self._month_name_range(query, today.year)
+        if month_range:
+            return month_range
+        return None
+
+    def _explicit_date_range(self, query: str) -> DateRange | None:
+        date_pattern = r"\d{4}-\d{1,2}-\d{1,2}|\d{1,2}[/-]\d{1,2}[/-]\d{4}"
+        patterns = (
+            rf"\bbetween\s+({date_pattern})\s+(?:and|to)\s+({date_pattern})\b",
+            rf"\bfrom\s+({date_pattern})\s+(?:to|till|until|through)\s+({date_pattern})\b",
+        )
+        for pattern in patterns:
+            match = re.search(pattern, query)
+            if not match:
+                continue
+            start = self._parse_date_value(match.group(1))
+            end = self._parse_date_value(match.group(2))
+            if start and end:
+                if start > end:
+                    start, end = end, start
+                return DateRange(start, end, f"{start.isoformat()} to {end.isoformat()}")
+        return None
+
+    def _month_name_range(self, query: str, default_year: int) -> DateRange | None:
+        month_names = {
+            "jan": 1,
+            "january": 1,
+            "feb": 2,
+            "february": 2,
+            "mar": 3,
+            "march": 3,
+            "apr": 4,
+            "april": 4,
+            "may": 5,
+            "jun": 6,
+            "june": 6,
+            "jul": 7,
+            "july": 7,
+            "aug": 8,
+            "august": 8,
+            "sep": 9,
+            "sept": 9,
+            "september": 9,
+            "oct": 10,
+            "october": 10,
+            "nov": 11,
+            "november": 11,
+            "dec": 12,
+            "december": 12,
+        }
+        match = re.search(
+            r"\b(?:in|for|during)\s+"
+            r"(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|"
+            r"jul(?:y)?|aug(?:ust)?|sep(?:t|tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)"
+            r"(?:\s+(\d{4}))?\b",
+            query,
+        )
+        if not match:
+            return None
+        month = month_names[match.group(1)]
+        year = int(match.group(2) or default_year)
+        return self._month_range(year, month, f"{match.group(1)} {year}")
+
+    def _month_range(self, year: int, month: int, label: str) -> DateRange:
+        return DateRange(
+            date(year, month, 1),
+            date(year, month, calendar.monthrange(year, month)[1]),
+            label,
+        )
+
+    def _parse_date_value(self, value: str) -> date | None:
+        value = value.strip()
+        for fmt in ("%Y-%m-%d", "%d-%m-%Y", "%d/%m/%Y"):
+            try:
+                return datetime.strptime(value, fmt).date()
+            except ValueError:
+                continue
+        return None
+
+    def _today(self) -> date:
+        return date.today()
 
     def _extract_filter_id(self, query: str, label: str) -> int | None:
         match = re.search(rf"\b{label}\s*(?:id)?\s*#?(\d+)\b", query)
@@ -928,8 +1206,9 @@ class ChikoozaTextToSQLService:
             flock_cost = float(row.get("flock_cost") or 0)
             net = float(row.get("result") or 0)
             status = "profit" if net > 0 else "loss" if net < 0 else "break-even"
+            period = self._period_suffix(plan)
             return (
-                f"Total sales: Rs. {total_sales:,.2f}, total purchases: Rs. {total_purchases:,.2f}, "
+                f"Total sales{period}: Rs. {total_sales:,.2f}, total purchases{period}: Rs. {total_purchases:,.2f}, "
                 f"flock cost: Rs. {flock_cost:,.2f}. Net result: Rs. {net:,.2f} ({status})."
             )
 
@@ -947,17 +1226,23 @@ class ChikoozaTextToSQLService:
 
         value = row.get("result", 0)
         label = plan.metric.replace("_", " ")
+        period = self._period_suffix(plan)
         if plan.metric == "feed_consumed":
-            return f"Total feed consumed: {float(value or 0):,.2f} kg."
+            return f"Total feed consumed{period}: {float(value or 0):,.2f} kg."
         if plan.metric == "current_birds":
-            return f"Current birds: {value or 0}."
+            return f"Current birds{period}: {value or 0}."
         if plan.metric == "mortality":
-            return f"Total mortality: {value or 0} birds."
+            return f"Total mortality{period}: {value or 0} birds."
         if plan.result_type == "money":
-            return f"{label.title()}: Rs. {float(value or 0):,.2f}."
+            return f"{label.title()}{period}: Rs. {float(value or 0):,.2f}."
         if plan.result_type == "decimal":
-            return f"{label.title()}: {float(value or 0):,.2f}."
-        return f"{label.title()}: {value or 0}."
+            return f"{label.title()}{period}: {float(value or 0):,.2f}."
+        return f"{label.title()}{period}: {value or 0}."
+
+    def _period_suffix(self, plan: SQLPlan) -> str:
+        if not plan.date_range:
+            return ""
+        return f" for {plan.date_range.label}"
 
     def _response_data(self, plan: SQLPlan, rows: list[dict]):
         if plan.result_type == "table":

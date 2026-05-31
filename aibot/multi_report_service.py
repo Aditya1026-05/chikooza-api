@@ -65,6 +65,7 @@ class ChikoozaMultiReportService:
             }
         report = {
             "requested_metrics": sorted(spec["metrics"]),
+            "date_range": self._json_safe(spec.get("date_range")),
             "account": (
                 self._account_section(spec, history=history)
                 if spec["include_account"]
@@ -143,6 +144,7 @@ class ChikoozaMultiReportService:
             metrics.add("fcr")
 
         wants_all = self._wants_all_metrics(query)
+        date_range = self._date_range_from_query(query)
         include_farms = bool(re.search(r"\bfarms?\b", query))
         include_flocks = bool(re.search(r"\b(?:flocks?|batches?)\b", query))
         breakdown_farms = include_farms and self._wants_breakdown(query, "farm")
@@ -185,11 +187,20 @@ class ChikoozaMultiReportService:
             "breakdown_flocks": breakdown_flocks,
             "wants_all": wants_all,
             "include_account": True,
+            "date_range": date_range,
         }
 
     def _account_section(self, spec: dict, history: list | None) -> dict:
         account = {}
         for metric in self._ordered_metrics(spec["metrics"]):
+            if spec.get("date_range") and metric not in {"farm_count", "flock_count"}:
+                account[metric] = self._metric_by_id(
+                    metric,
+                    farm_id=None,
+                    flock_id=None,
+                    date_range=spec.get("date_range"),
+                )
+                continue
             safe_question = self.ACCOUNT_TASKS.get(metric)
             if safe_question:
                 account[metric] = self._safe_answer(safe_question, history=history)
@@ -255,6 +266,7 @@ class ChikoozaMultiReportService:
             farm_id=farm_id,
             flock_id=flock_id if target_entity_type == "flock" else None,
             history=None,
+            date_range=spec.get("date_range"),
         )
         return [
             {
@@ -292,6 +304,7 @@ class ChikoozaMultiReportService:
                     farm_id=row.get("farm_id"),
                     flock_id=None,
                     history=history,
+                    date_range=spec.get("date_range"),
                 ),
             }
             for row in rows
@@ -307,6 +320,7 @@ class ChikoozaMultiReportService:
                     farm_id=row.get("farm_id"),
                     flock_id=row.get("flock_id"),
                     history=history,
+                    date_range=spec.get("date_range"),
                 ),
             }
             for row in rows
@@ -319,21 +333,37 @@ class ChikoozaMultiReportService:
         farm_id: int | None,
         flock_id: int | None,
         history: list | None,
+        date_range=None,
     ) -> dict:
         metrics = {}
         for metric in self._ordered_metrics(spec["metrics"]):
             if metric in {"farm_count", "flock_count"}:
                 continue
-            response = self._metric_by_id(metric, farm_id=farm_id, flock_id=flock_id)
+            response = self._metric_by_id(
+                metric,
+                farm_id=farm_id,
+                flock_id=flock_id,
+                date_range=date_range,
+            )
             if response:
                 metrics[metric] = response
         return metrics
 
     def _metric_by_id(
-        self, metric: str, *, farm_id: int | None, flock_id: int | None
+        self,
+        metric: str,
+        *,
+        farm_id: int | None,
+        flock_id: int | None,
+        date_range=None,
     ) -> dict | None:
         try:
-            plan = self._plan_for_metric(metric, farm_id=farm_id, flock_id=flock_id)
+            plan = self._plan_for_metric(
+                metric,
+                farm_id=farm_id,
+                flock_id=flock_id,
+                date_range=date_range,
+            )
             if not plan:
                 return None
             rows = self.deterministic_service.executor.execute(plan)
@@ -357,7 +387,12 @@ class ChikoozaMultiReportService:
             }
 
     def _plan_for_metric(
-        self, metric: str, *, farm_id: int | None, flock_id: int | None
+        self,
+        metric: str,
+        *,
+        farm_id: int | None,
+        flock_id: int | None,
+        date_range=None,
     ):
         service = self.deterministic_service
         if metric == "sales":
@@ -368,6 +403,8 @@ class ChikoozaMultiReportService:
                 "money",
                 farm_id=farm_id,
                 flock_id=flock_id,
+                date_column="sale_date",
+                date_range=date_range,
             )
         if metric == "purchases":
             return service._aggregate_plan(
@@ -377,11 +414,17 @@ class ChikoozaMultiReportService:
                 "money",
                 farm_id=farm_id,
                 flock_id=flock_id,
+                date_column="purchase_date",
+                date_range=date_range,
             )
         if metric == "profit":
-            return service._profit_plan(farm_id, flock_id)
+            return service._profit_plan(farm_id, flock_id, date_range=date_range)
         if metric == "current_birds":
-            return service._current_birds_plan(farm_id, flock_id)
+            return service._current_birds_plan(
+                farm_id,
+                flock_id,
+                date_range=date_range,
+            )
         if metric == "mortality":
             return service._aggregate_plan(
                 "ai_dailydata_data_view",
@@ -390,6 +433,8 @@ class ChikoozaMultiReportService:
                 "count",
                 farm_id=farm_id,
                 flock_id=flock_id,
+                date_column="record_date",
+                date_range=date_range,
             )
         if metric == "feed":
             return service._aggregate_plan(
@@ -399,6 +444,8 @@ class ChikoozaMultiReportService:
                 "quantity",
                 farm_id=farm_id,
                 flock_id=flock_id,
+                date_column="record_date",
+                date_range=date_range,
             )
         if metric == "weight":
             return service._aggregate_plan(
@@ -408,6 +455,8 @@ class ChikoozaMultiReportService:
                 "decimal",
                 farm_id=farm_id,
                 flock_id=flock_id,
+                date_column="record_date",
+                date_range=date_range,
             )
         if metric == "fcr":
             return service._aggregate_plan(
@@ -417,6 +466,8 @@ class ChikoozaMultiReportService:
                 "decimal",
                 farm_id=farm_id,
                 flock_id=flock_id,
+                date_column="record_date",
+                date_range=date_range,
             )
         return None
 
@@ -680,6 +731,12 @@ class ChikoozaMultiReportService:
             )
         )
 
+    def _date_range_from_query(self, query: str):
+        parser = getattr(self.deterministic_service, "_date_range_from_query", None)
+        if not parser:
+            return None
+        return parser(query)
+
     def _answer_text(self, response: dict | None) -> str:
         return str((response or {}).get("answer") or "").strip()
 
@@ -714,6 +771,12 @@ class ChikoozaMultiReportService:
         return re.sub(r"\s+", " ", (value or "").lower()).strip()
 
     def _json_safe(self, value):
+        if all(hasattr(value, attr) for attr in ("start", "end", "label")):
+            return {
+                "start": self._json_safe(value.start),
+                "end": self._json_safe(value.end),
+                "label": value.label,
+            }
         if isinstance(value, Decimal):
             return float(value)
         if isinstance(value, (datetime, date)):

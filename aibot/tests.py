@@ -1,3 +1,4 @@
+from datetime import date
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -614,6 +615,94 @@ class ChikoozaModernAgentSecurityTests(SimpleTestCase):
         self.assertIn("Your account summary", answer)
         self.assertIn("95 current birds", answer)
         self.assertIn("120.50 kg feed consumed", answer)
+
+    def test_sales_query_supports_this_month_date_filter(self):
+        service = ChikoozaTextToSQLService(user=self.user)
+
+        with patch.object(
+            ChikoozaTextToSQLService,
+            "_today",
+            return_value=date(2026, 5, 31),
+        ):
+            plan = service.build_plan("total sales this month")
+
+        self.assertEqual(plan.metric, "total_sales")
+        self.assertIn("sale_date >= %s", plan.sql)
+        self.assertIn("sale_date <= %s", plan.sql)
+        self.assertEqual(plan.params, [7, date(2026, 5, 1), date(2026, 5, 31)])
+        self.assertEqual(plan.date_range.label, "this month")
+
+    def test_daily_metric_query_supports_last_week_date_filter(self):
+        service = ChikoozaTextToSQLService(user=self.user)
+
+        with patch.object(
+            ChikoozaTextToSQLService,
+            "_today",
+            return_value=date(2026, 5, 31),
+        ):
+            plan = service.build_plan("feed used last week")
+
+        self.assertEqual(plan.metric, "feed_consumed")
+        self.assertIn("record_date >= %s", plan.sql)
+        self.assertIn("record_date <= %s", plan.sql)
+        self.assertEqual(plan.params, [7, date(2026, 5, 18), date(2026, 5, 24)])
+        self.assertEqual(plan.date_range.label, "last week")
+
+    def test_mortality_query_supports_explicit_between_dates(self):
+        service = ChikoozaTextToSQLService(user=self.user)
+
+        plan = service.build_plan("mortality between 2026-01-01 and 2026-01-31")
+
+        self.assertEqual(plan.metric, "mortality")
+        self.assertIn("record_date >= %s", plan.sql)
+        self.assertIn("record_date <= %s", plan.sql)
+        self.assertEqual(plan.params, [7, date(2026, 1, 1), date(2026, 1, 31)])
+
+    def test_profit_query_supports_month_name_with_flock_filter(self):
+        service = ChikoozaTextToSQLService(user=self.user)
+        farm = SimpleNamespace(id=42, public_id=9001, name="Red Farm")
+        flock = SimpleNamespace(
+            id=77,
+            public_id=5001,
+            name="Alpha Batch",
+            farm_id=42,
+            farm=farm,
+        )
+        service._farms = lambda: [farm]
+        service._flocks = lambda: [flock]
+
+        with patch.object(
+            ChikoozaTextToSQLService,
+            "_today",
+            return_value=date(2026, 5, 31),
+        ):
+            plan = service.build_plan("profit for first flock in January")
+
+        self.assertEqual(plan.metric, "profit_loss")
+        self.assertIn("sale_date >= %s", plan.sql)
+        self.assertIn("purchase_date >= %s", plan.sql)
+        self.assertIn(date(2026, 1, 1), plan.params)
+        self.assertIn(date(2026, 1, 31), plan.params)
+        self.assertIn(42, plan.params)
+        self.assertIn(77, plan.params)
+
+    def test_current_birds_query_uses_latest_record_inside_date_range(self):
+        service = ChikoozaTextToSQLService(user=self.user)
+
+        with patch.object(
+            ChikoozaTextToSQLService,
+            "_today",
+            return_value=date(2026, 5, 31),
+        ):
+            plan = service.build_plan("current birds this month")
+
+        self.assertEqual(plan.metric, "current_birds")
+        self.assertIn("current_rows.record_date >= %s", plan.sql)
+        self.assertIn("compare_rows.record_date >= %s", plan.sql)
+        self.assertEqual(
+            plan.params,
+            [7, date(2026, 5, 1), date(2026, 5, 31), 7, date(2026, 5, 1), date(2026, 5, 31)],
+        )
 
 
 class FakeGroqClient:
@@ -1286,6 +1375,22 @@ class ChikoozaIntentArchitectureTests(SimpleTestCase):
         self.assertIn("Flock-wise details", response["answer"])
         self.assertIn("Test Farm", response["answer"])
         self.assertIn("Test Flock", response["answer"])
+
+    def test_multi_report_service_applies_month_filter_to_complete_data(self):
+        deterministic = ChikoozaTextToSQLService(user=self.user)
+        deterministic.executor = FakeMultiReportExecutor()
+        service = ChikoozaMultiReportService(deterministic)
+
+        with patch.object(
+            ChikoozaTextToSQLService,
+            "_today",
+            return_value=date(2026, 5, 31),
+        ):
+            response = service.answer("show all data for January")
+
+        self.assertEqual(response["data"]["date_range"]["start"], "2026-01-01")
+        self.assertEqual(response["data"]["date_range"]["end"], "2026-01-31")
+        self.assertIn("for january 2026", response["answer"])
 
     def test_multi_report_service_scopes_complete_data_to_resolved_flock(self):
         deterministic = ChikoozaTextToSQLService(user=self.user)
