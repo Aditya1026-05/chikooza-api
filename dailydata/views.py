@@ -1,4 +1,5 @@
 import datetime
+import re
 
 # Create your views here.
 from oauth2_provider.contrib.rest_framework import (
@@ -721,7 +722,13 @@ class PDFView(viewsets.ViewSet):
             flock = _flock_queryset_for_request(request).get(
                 public_id=request.GET.get("flock_public_id")
             )
-            daily_data = _dailydata_queryset_for_request(request).filter(flock=flock)
+            daily_data = _dailydata_queryset_for_request(request).filter(flock=flock).order_by("date")
+            start_date = request.GET.get("start_date") or request.GET.get("from_date")
+            end_date = request.GET.get("end_date") or request.GET.get("to_date")
+            if start_date:
+                daily_data = daily_data.filter(date__gte=start_date)
+            if end_date:
+                daily_data = daily_data.filter(date__lte=end_date)
         
             result_data = []
 
@@ -748,6 +755,15 @@ class PDFView(viewsets.ViewSet):
                 result_data.append(base_data)
 #MV-23-6-25- 17-10 change end
 
+            totals = {
+                "mortality": sum(item.get("mortality", 0) or 0 for item in result_data),
+                "feed_intake": sum(item.get("feed_intake", 0) or 0 for item in result_data),
+                "latest_birds": result_data[-1].get("current_bird_count", 0) if result_data else 0,
+                "latest_feed_stock": result_data[-1].get("feed_stock", 0) if result_data else 0,
+            }
+            safe_flock_name = re.sub(r"[^A-Za-z0-9]+", "_", flock.name).strip("_") or "Flock"
+            filename = f"Chikooza_DailyDataSheet_{safe_flock_name}_{datetime.date.today().isoformat()}.pdf"
+
             return render_to_pdf(
                 template_name,
                 {
@@ -764,8 +780,14 @@ class PDFView(viewsets.ViewSet):
                     },
                     "generated_on": datetime.date.today(),
                     "total_records": len(result_data),
+                    "date_range": {
+                        "start": start_date or "All",
+                        "end": end_date or "All",
+                    },
+                    "totals": totals,
 #MV-23-6-25- 17-10 change end
                 },
+                filename=filename,
             )
         except Flock.DoesNotExist:
             return error_response(

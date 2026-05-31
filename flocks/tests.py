@@ -95,6 +95,17 @@ class FlockTenantIsolationTests(TestCase):
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
+    def test_summary_handles_flock_without_daily_data(self):
+        response = FlockSummaryView.retrieve(
+            self._request(self.owner),
+            pk=self.owner_flock.public_id,
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertFalse(response.data["results"]["has_daily_data"])
+        self.assertEqual(response.data["results"]["daily_data_count"], 0)
+        self.assertEqual(response.data["results"]["current_bird_count"], 100)
+
     def test_create_rejects_other_users_farm(self):
         with self.assertRaises(Farm.DoesNotExist):
             AddFlockService.execute(

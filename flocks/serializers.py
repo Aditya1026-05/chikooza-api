@@ -1,5 +1,6 @@
 import datetime
 
+from django.db.models import Sum
 from rest_framework import serializers, status
 from rest_framework.exceptions import ValidationError
 
@@ -239,6 +240,12 @@ class FlockSummarySerializer(serializers.Serializer):
     incentives = serializers.SerializerMethodField()
     other_taxes = serializers.SerializerMethodField()
     current_bird_count = serializers.SerializerMethodField()
+    # U: NEW: report screens need explicit readiness flags instead of inferring
+    # U: state from blank/zero values.
+    has_daily_data = serializers.SerializerMethodField()
+    daily_data_count = serializers.SerializerMethodField()
+    purchase_count = serializers.SerializerMethodField()
+    sales_count = serializers.SerializerMethodField()
 
     class Meta:
         model = Flock
@@ -257,8 +264,30 @@ class FlockSummarySerializer(serializers.Serializer):
             "labour","equipment","sales_data",
 #MV-23-6-25- 17-10 change end
 
-            "penalties", "incentives", "other_taxes", "current_bird_count"
+            "penalties", "incentives", "other_taxes", "current_bird_count",
+            "has_daily_data", "daily_data_count", "purchase_count", "sales_count",
         ]
+
+    # U: OLD: many report fields called DailyData.objects.filter(...).last()
+    # U: directly and crashed when a flock had no daily data yet.
+    # U: NEW: central helpers keep totals consistent and let reports show a
+    # U: clear "not enough data yet" state.
+    def _latest_daily_data(self, obj):
+        return DailyData.objects.filter(flock=obj).order_by("date").last()
+
+    def _sum_purchase(self, obj, purchase_type, field="cost"):
+        return (
+            Purchase.objects.filter(flock=obj, type=purchase_type)
+            .aggregate(total=Sum(field))
+            .get("total")
+            or 0
+        )
+
+    def _purchase_count(self, obj):
+        return Purchase.objects.filter(flock=obj).count()
+
+    def _sales_count(self, obj):
+        return Sales.objects.filter(flock=obj).count()
 
     def get_age(self, obj):
         date = datetime.datetime.today().date()
@@ -266,28 +295,18 @@ class FlockSummarySerializer(serializers.Serializer):
         return age.days
 
     def get_total_feed(self, obj):
-        quantity = 0
-        purchases = Purchase.objects.filter(flock=obj, type='Feed')
-        for purchase in purchases:
-            quantity += purchase.quantity
-        return quantity
+        return self._sum_purchase(obj, "Feed", "quantity")
 
     def get_medicine(self, obj):
-        cost = 0
-        purchases = Purchase.objects.filter(flock=obj, type='Medicine')
-        for purchase in purchases:
-            cost += purchase.cost
-        return cost
+        return self._sum_purchase(obj, "Medicine")
 
     def get_vaccine(self, obj):
-        cost = 0
-        purchases = Purchase.objects.filter(flock=obj, type='Vaccination')
-        for purchase in purchases:
-            cost += purchase.cost
-        return cost
+        return self._sum_purchase(obj, "Vaccination")
 
     def get_current_bird_count(self, obj):
-        daily_data = DailyData.objects.filter(flock=obj).last()
+        daily_data = self._latest_daily_data(obj)
+        if not daily_data:
+            return obj.actual_birds
         # return daily_data.current_bird_count
         
 #MV-23-6-25- 17-10 new get_current_bird_count logic
@@ -303,61 +322,24 @@ class FlockSummarySerializer(serializers.Serializer):
 #MV-23-6-25- 17-10 change end
 
     def get_other(self, obj):
-        cost = 0
-        purchases = Purchase.objects.filter(flock=obj, type='Other')
-        for purchase in purchases:
-            cost += purchase.cost
-        return cost
+        return self._sum_purchase(obj, "Other")
     
 #MV-23-6-25- 17-10 function def for labor & equip
     def get_labour(self, obj):
-        cost = 0
-        purchases = Purchase.objects.filter(flock=obj, type='Labour')
-        for purchase in purchases:
-            cost += purchase.cost
-        return cost
+        return self._sum_purchase(obj, "Labour")
     
     def get_equipment(self, obj):
-        cost = 0
-        purchases = Purchase.objects.filter(flock=obj, type='Equipment')
-        for purchase in purchases:
-            cost += purchase.cost
-        return cost
+        return self._sum_purchase(obj, "Equipment")
 #MV-23-6-25- 17-10 change end
 
 
     def get_total_cost(self, obj):
-        vaccine_cost = 0
-        other_cost = 0
-        med_cost = 0
-        
-#MV-23-6-25- 17-10 added var
-        equip_cost = 0
-        lab_cost = 0
-        feed_cost = 0
-#MV-23-6-25- 17-10 change end
-
-        purchases = Purchase.objects.filter(flock=obj, type='Vaccination')
-        for purchase in purchases:
-            vaccine_cost += purchase.cost
-        purchases = Purchase.objects.filter(flock=obj, type='Other')
-        for purchase in purchases:
-            other_cost += purchase.cost
-        purchases = Purchase.objects.filter(flock=obj, type='Medicine')
-        for purchase in purchases:
-            med_cost += purchase.cost
-            
-#MV-23-6-25- 17-10 costs for 3
-        purchases = Purchase.objects.filter(flock=obj, type='Equipment')
-        for purchase in purchases:
-            equip_cost += purchase.cost
-        purchases = Purchase.objects.filter(flock=obj, type='Labour')
-        for purchase in purchases:
-            lab_cost += purchase.cost
-        purchases = Purchase.objects.filter(flock=obj, type='Feed')
-        for purchase in purchases:
-            feed_cost += purchase.cost
-#MV-23-6-25- 17-10 change end
+        vaccine_cost = self.get_vaccine(obj)
+        other_cost = self.get_other(obj)
+        med_cost = self.get_medicine(obj)
+        equip_cost = self.get_equipment(obj)
+        lab_cost = self.get_labour(obj)
+        feed_cost = self.get_total_feed_cost(obj)
 
         # if obj.chick_cost is not None:
         #     return med_cost + other_cost + vaccine_cost 
@@ -374,49 +356,59 @@ class FlockSummarySerializer(serializers.Serializer):
         
 
     def get_chick_cost_per_kg(self, obj):
-        if obj.chick_cost is not None:
+        if obj.chick_cost:
             return obj.actual_birds / obj.chick_cost
         return 0
 
     def get_total_feed_cost(self, obj):
-        cost = 0
-        purchases = Purchase.objects.filter(flock=obj, type='Feed')
-        for purchase in purchases:
-            cost += purchase.cost
-        return cost
+        return self._sum_purchase(obj, "Feed")
 
     def get_feed_cost_per_kg(self, obj):
         quantity = 0
         cost = 0
         purchases = Purchase.objects.filter(flock=obj, type='Feed')
         for purchase in purchases:
-            quantity += purchase.quantity
+            quantity += purchase.quantity or 0
             cost += purchase.cost
+        if quantity == 0:
+            return 0
         return round(cost / quantity, 2)
 
     def get_mortality(self, obj):
-        daily_data = DailyData.objects.filter(flock=obj).last()
+        daily_data = self._latest_daily_data(obj)
+        if not daily_data:
+            return 0
         return obj.actual_birds - daily_data.current_bird_count
 
     def get_total_mort(self, obj):
-        daily_data = DailyData.objects.filter(flock=obj).last()
+        daily_data = self._latest_daily_data(obj)
+        if not daily_data:
+            return 0
         return daily_data.total_mort
 
     def get_feed_intake(self, obj):
-        daily_data = DailyData.objects.filter(flock=obj).last()
+        daily_data = self._latest_daily_data(obj)
+        if not daily_data:
+            return 0
         return daily_data.total_feed
 
     def get_average_feed(self, obj):
-        daily_data = DailyData.objects.filter(flock=obj).last()
+        daily_data = self._latest_daily_data(obj)
+        if not daily_data:
+            return 0
         return daily_data.total_average_feed
 
     def get_average_bird_weight(self, obj):
-        daily_data = DailyData.objects.filter(flock=obj).last()
+        daily_data = self._latest_daily_data(obj)
+        if not daily_data:
+            return 0
         date = daily_data.date
         yesterday = date - datetime.timedelta(days=1)
         average_bird_weight = daily_data.average_bird_weight
         if average_bird_weight == 0:
-            yes = DailyData.objects.get(flock=obj, date=yesterday)
+            yes = DailyData.objects.filter(flock=obj, date=yesterday).first()
+            if not yes:
+                return 0
             res = yes.average_bird_weight
             d_date = yes.date
         else:
@@ -425,11 +417,15 @@ class FlockSummarySerializer(serializers.Serializer):
         return f'{res} on {d_date}'
 
     def get_fcr(self, obj):
-        daily_data = DailyData.objects.filter(flock=obj).last()
+        daily_data = self._latest_daily_data(obj)
+        if not daily_data:
+            return 0
         return f'{daily_data.total_fcr} on {daily_data.date}'
 
     def get_feed_stock(self, obj):
-        daily_data = DailyData.objects.filter(flock=obj).last()
+        daily_data = self._latest_daily_data(obj)
+        if not daily_data:
+            return self.get_total_feed(obj)
         return daily_data.feed_stock
 
     # def get_status(self, obj):
@@ -488,7 +484,7 @@ class FlockSummarySerializer(serializers.Serializer):
         for sale in sales:
             sales_total_weight += sale.total_weight
             sales_amount += sale.cost
-        if sales_total_weight is not 0:
+        if sales_total_weight != 0:
             return round(sales_amount / sales_total_weight, 2)
         else:
             return 0
@@ -554,12 +550,27 @@ class FlockSummarySerializer(serializers.Serializer):
             sales = Sales.objects.filter(flock=obj).order_by('date')
             return [
                 {
+                    'public_id': sale.public_id,
                     'date': sale.date,
                     'lifting_count': sale.lifting_count,
+                    'total_weight': round(sale.total_weight, 2),
                     'average_weight': round(sale.average_weight, 2),
+                    'rate_per_kg': round(sale.rate_per_kg, 2),
                     'cost': sale.cost,
                     'sales_type': sale.sales_type,
                 }
                 for sale in sales
             ]
 #MV-23-6-25- 17-10 change end
+
+    def get_has_daily_data(self, obj):
+        return DailyData.objects.filter(flock=obj).exists()
+
+    def get_daily_data_count(self, obj):
+        return DailyData.objects.filter(flock=obj).count()
+
+    def get_purchase_count(self, obj):
+        return self._purchase_count(obj)
+
+    def get_sales_count(self, obj):
+        return self._sales_count(obj)

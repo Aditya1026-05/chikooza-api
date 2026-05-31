@@ -15,26 +15,33 @@
       }
 
       body {
-        color: #17231b;
+        color: #241514;
         font-family: Helvetica, Arial, sans-serif;
         font-size: 9px;
         line-height: 1.35;
       }
 
+      .header {
+        background: #7f1d1d;
+        color: #fffaf5;
+        margin: -14mm -10mm 12px;
+        padding: 14px 18px;
+      }
+
       h1 {
-        color: #1f7a4d;
+        color: #fffaf5;
         font-size: 18px;
         margin: 0 0 4px;
       }
 
       .subtitle {
-        color: #66756b;
+        color: #fed7aa;
         font-size: 10px;
-        margin-bottom: 12px;
+        margin: 0;
       }
 
       .meta {
-        border: 1px solid #d8e5d5;
+        border: 1px solid #e8d6cd;
         margin-bottom: 12px;
         padding: 8px;
       }
@@ -44,8 +51,33 @@
       }
 
       .label {
-        color: #66756b;
+        color: #8a6f68;
         font-weight: bold;
+      }
+
+      .kpis {
+        margin-bottom: 12px;
+      }
+
+      .kpis td {
+        border: 1px solid #e8d6cd;
+        padding: 7px;
+      }
+
+      .kpi-label {
+        color: #8a6f68;
+        display: block;
+        font-size: 7px;
+        font-weight: bold;
+        text-transform: uppercase;
+      }
+
+      .kpi-value {
+        color: #41100d;
+        display: block;
+        font-size: 12px;
+        font-weight: bold;
+        margin-top: 2px;
       }
 
       table {
@@ -54,21 +86,21 @@
       }
 
       th {
-        background: #1f7a4d;
-        color: #ffffff;
+        background: #41100d;
+        color: #fffaf5;
         font-size: 8px;
         padding: 4px 3px;
         text-align: left;
       }
 
       td {
-        border-bottom: 1px solid #dfe8dc;
+        border-bottom: 1px solid #eadbd4;
         padding: 4px 3px;
         vertical-align: top;
       }
 
       tr:nth-child(even) td {
-        background: #f5f8f2;
+        background: #fff7ed;
       }
 
       .num {
@@ -76,8 +108,8 @@
       }
 
       .empty {
-        border: 1px solid #d8e5d5;
-        color: #66756b;
+        border: 1px dashed #b42318;
+        color: #5b332d;
         padding: 18px;
         text-align: center;
       }
@@ -88,8 +120,10 @@
     </style>
   </head>
   <body>
-    <h1>Chikooza Daily Flock Data</h1>
-    <div class="subtitle">Daily operations, feed, mortality, weight, FCR, and flock-health notes.</div>
+    <div class="header">
+      <h1>Chikooza Daily Flock Data</h1>
+      <div class="subtitle">Daily operations, feed, mortality, weight, FCR, and flock-health notes.</div>
+    </div>
 
     <table class="meta">
       <tr>
@@ -101,6 +135,21 @@
         <td><span class="label">Hatch Date:</span> {{ flock.hatch_date|date:"Y-m-d"|default:"-" }}</td>
         <td><span class="label">Opening Birds:</span> {{ flock.actual_birds|default:"-" }}</td>
         <td><span class="label">Generated:</span> {{ generated_on|date:"Y-m-d" }} | {{ total_records }} records</td>
+      </tr>
+      <tr>
+        <td><span class="label">Date From:</span> {{ date_range.start|default:"All" }}</td>
+        <td><span class="label">Date To:</span> {{ date_range.end|default:"All" }}</td>
+        <td><span class="label">Export:</span> Backend PDF</td>
+      </tr>
+    </table>
+
+    <table class="kpis">
+      <tr>
+        <td><span class="kpi-label">Records</span><span class="kpi-value">{{ total_records|default:"0" }}</span></td>
+        <td><span class="kpi-label">Total Mortality</span><span class="kpi-value">{{ totals.mortality|default:"0" }}</span></td>
+        <td><span class="kpi-label">Feed Used</span><span class="kpi-value">{{ totals.feed_intake|default:"0" }} kg</span></td>
+        <td><span class="kpi-label">Latest Birds</span><span class="kpi-value">{{ totals.latest_birds|default:"0" }}</span></td>
+        <td><span class="kpi-label">Feed Stock</span><span class="kpi-value">{{ totals.latest_feed_stock|default:"0" }} kg</span></td>
       </tr>
     </table>
 
@@ -156,7 +205,10 @@
         </tbody>
       </table>
     {% else %}
-      <div class="empty">No daily data records were found for this flock.</div>
+      <div class="empty">
+        <strong>Not enough data yet.</strong><br>
+        No daily data records were found for this flock and date range.
+      </div>
     {% endif %}
   </body>
 </html>

@@ -1,187 +1,233 @@
-//MV-23-6-25- 17-10 new values & change in column names
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import axios from "axios";
 import {
   Row,
   Col,
   Table,
   Card,
-  CardTitle,
   CardBody,
-  Form,
   FormGroup,
   Label,
   Input,
-  CardHeader,
 } from "reactstrap";
 import "../../assets/css/header.css";
-import { contentArea, apiPath, getAuthConfig, handleUnauthorized } from "../../Constants";
-import { useState, useEffect } from "react";
-import axios from "axios";
-// import '../ui/custom.css'
-// U: OLD: import jsPDF from "jspdf";
-// U: OLD: import "jspdf-autotable";
-// U: NEW: lazy-load the PDF runtime only when the user exports.
-import { loadAutoTable, loadJsPDF } from "../../utils/pdf";
-import { useNavigate } from "react-router-dom";
+import "../../assets/css/reports.css";
+import { apiPath, getAuthConfig, handleUnauthorized } from "../../Constants";
+import {
+  addPdfFooter,
+  addPdfReportHeader,
+  loadAutoTable,
+  loadJsPDF,
+} from "../../utils/pdf";
+import {
+  buildReportFilename,
+  filterRowsByDate,
+  formatDate,
+  formatNumber,
+  getAgeInDays,
+  sortByDate,
+  summarizeDailyRows,
+  todayIso,
+  toNumber,
+} from "../../utils/reporting";
 
+// U: OLD: this report used doc.html() on the DOM and exported "Daily Data Sheet.pdf".
+// U: NEW: render filtered report rows once, then export the same rows through jsPDF tables.
 const DailyDataSheet = () => {
-  const [showFlock, setShowFlock] = useState(false);
-  const [showForm, setShowForm] = useState(false);
-  let [flocks, setFlocks] = useState([]);
-  let [flock, setFlock] = useState([]);
-  let [farms, setFarms] = useState([]);
-  let [dailydatalist, setDailyDataList] = useState([]);
+  const [farms, setFarms] = useState([]);
+  const [flocks, setFlocks] = useState([]);
+  const [selectedFarmId, setSelectedFarmId] = useState("0");
+  const [selectedFlockId, setSelectedFlockId] = useState("0");
+  const [selectedFlock, setSelectedFlock] = useState(null);
+  const [dailyDataList, setDailyDataList] = useState([]);
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [isLoadingFlocks, setIsLoadingFlocks] = useState(false);
+  const [isLoadingReport, setIsLoadingReport] = useState(false);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
+  const [reportError, setReportError] = useState("");
   const navigate = useNavigate();
 
   useEffect(() => {
-    let url = `${apiPath}farm/`;
-    // U: OLD: config.headers["Authorization"] = `Bearer ${localStorage.getItem("token")}`;
     axios
-      .get(url, getAuthConfig())
+      .get(`${apiPath}farm/`, getAuthConfig())
       .then((res) => {
-        if (res.data.results.length === 0) {
-          setFarms([{ public_id: 0, name: "No farm available" }]);
-        } else {
-          setFarms(res.data.results);
-        }
+        setFarms(res.data.results.length ? res.data.results : []);
       })
       .catch((err) => {
-        setFarms([{ public_id: 0, name: "No farm available" }]);
+        setFarms([]);
         handleUnauthorized(err, navigate);
       });
   }, [navigate]);
-  let changeFarm = (e) => {
-    // U: OLD: e.target.value === 0 compared a string value to a number.
-    if (e.target.value === "0") {
-      setShowFlock(false);
-      setShowForm(false);
-      setFlocks([]);
-      setDailyDataList([]);
-    } else {
-      let url = `${apiPath}flocks/${e.target.value}/`;
-      // U: OLD: config.headers["Authorization"] was mutated before each request.
-      axios
-        .get(url, getAuthConfig())
-        .then((res) => {
-          if (res.data.results.total_records === 0) {
-            setFlocks([
-              { flock_public_id: 0, flock_name: "No flock available" },
-            ]);
-          } else {
-            //setData({...data,farm:e.target.value,flock:null,seltype:null});
-            setFlocks(res.data.results.flock_list);
-          }
-          setShowFlock(true);
-        })
-        .catch((err) => {
-          //setFormError('No Flock available.');
-          handleUnauthorized(err, navigate);
-        });
+
+  const filteredRows = useMemo(() => {
+    return sortByDate(filterRowsByDate(dailyDataList, startDate, endDate));
+  }, [dailyDataList, startDate, endDate]);
+
+  const dailyTotals = useMemo(() => summarizeDailyRows(filteredRows), [filteredRows]);
+  const hasSelectedFlock = selectedFlockId !== "0" && selectedFlock;
+  const hasAnyDailyData = dailyDataList.length > 0;
+  const hasFilteredRows = filteredRows.length > 0;
+
+  const changeFarm = (event) => {
+    const farmPublicId = event.target.value;
+    setSelectedFarmId(farmPublicId);
+    setSelectedFlockId("0");
+    setSelectedFlock(null);
+    setDailyDataList([]);
+    setFlocks([]);
+    setReportError("");
+
+    if (farmPublicId === "0") {
+      return;
     }
-  };
-  let changeFlock = (e) => {
-    if (e.target.value === "0") {
-      setShowForm(false);
-      setFlock([]);
-      setDailyDataList([]);
-    } else {
-      // U: OLD: strict comparison between numeric flock_public_id and string select value prevented lookup.
-      const selectedFlock = flocks.find((u) => String(u.flock_public_id) === e.target.value);
-      if (!selectedFlock) {
-        setShowForm(false);
-        setDailyDataList([]);
-        return;
-      }
-      setShowForm(true);
-      setFlock(selectedFlock);
-      getDailyDataList(selectedFlock.flock_public_id);
-    }
-  };
-  const getDailyDataList = (flockPublicId) => {
-    // U: OLD: this used flock state immediately after setFlock(), so it could request the previous flock.
-    let url = `${apiPath}dailyDataList/?flock_public_id=${flockPublicId}`;
+
+    setIsLoadingFlocks(true);
     axios
-      .get(url, getAuthConfig())
+      .get(`${apiPath}flocks/${farmPublicId}/`, getAuthConfig())
       .then((res) => {
-        setDailyDataList(res.data.results.daily_data_list);
+        setFlocks(res.data.results.total_records ? res.data.results.flock_list : []);
+      })
+      .catch((err) => {
+        setFlocks([]);
+        handleUnauthorized(err, navigate);
+      })
+      .finally(() => setIsLoadingFlocks(false));
+  };
+
+  const changeFlock = (event) => {
+    const flockPublicId = event.target.value;
+    setSelectedFlockId(flockPublicId);
+    setDailyDataList([]);
+    setReportError("");
+
+    if (flockPublicId === "0") {
+      setSelectedFlock(null);
+      return;
+    }
+
+    const nextFlock = flocks.find((item) => String(item.flock_public_id) === flockPublicId);
+    setSelectedFlock(nextFlock || null);
+    if (nextFlock) {
+      getDailyDataList(nextFlock.flock_public_id);
+    }
+  };
+
+  const getDailyDataList = (flockPublicId) => {
+    setIsLoadingReport(true);
+    axios
+      .get(`${apiPath}dailyDataList/?flock_public_id=${flockPublicId}`, getAuthConfig())
+      .then((res) => {
+        setDailyDataList(res.data.results.daily_data_list || []);
       })
       .catch((err) => {
         setDailyDataList([]);
+        setReportError("Could not load daily data for this flock.");
         handleUnauthorized(err, navigate);
-      });
+      })
+      .finally(() => setIsLoadingReport(false));
+  };
+
+  const resetFilters = () => {
+    setStartDate("");
+    setEndDate("");
+  };
+
+  const dateRangeLabel = () => {
+    if (!startDate && !endDate) {
+      return "All dates";
+    }
+    return `${startDate ? formatDate(startDate) : "Start"} to ${endDate ? formatDate(endDate) : "Today"}`;
+  };
+
+  const buildPdfRows = () => {
+    return filteredRows.map((item) => {
+      const currentBirds = toNumber(item.current_bird_count);
+      const cumFeedPerBird = currentBirds > 0
+        ? (toNumber(item.total_feed) * 1000) / currentBirds
+        : 0;
+
+      return [
+        formatDate(item.date),
+        getAgeInDays(selectedFlock?.hatch_date, item.date),
+        formatNumber(item.current_bird_count, 0),
+        formatNumber(item.mortality, 0),
+        `${formatNumber(item.cum_mort, 0)} (${formatNumber(item.total_mortality_percentage, 2)}%)`,
+        formatNumber(item.feed_intake, 2),
+        formatNumber(item.average_feed, 2),
+        formatNumber(item.total_feed, 2),
+        currentBirds > 0 ? formatNumber(cumFeedPerBird, 2) : "-",
+        toNumber(item.average_bird_weight) > 0 ? formatNumber(item.average_bird_weight, 0) : "-",
+        toNumber(item.average_bird_weight) > 0 ? formatNumber(item.fcr, 2) : "-",
+        formatNumber(item.feed_stock, 2),
+        item.remarks || "-",
+      ];
+    });
   };
 
   const downloadPdf = async () => {
+    if (!hasFilteredRows || !selectedFlock) {
+      return;
+    }
+
     setIsExportingPdf(true);
-    const unit = "pt";
-    const size = "A4"; // Use A1, A2, A3 or A4
-    const orientation = "landscape"; // portrait or landscape
-
     try {
-      const [jsPDF, autoTable] = await Promise.all([
-        loadJsPDF(),
-        loadAutoTable(),
-      ]);
-      const doc = new jsPDF(orientation, unit, size);
-      doc.setFontSize(15);
-      const headers = [
-        [
-          "Date",
-          "Age(In Days)",
-          "Bird Count",
-          "Mort",
-          "Cum Mort(%)",
-          "Daily Feed Kg(bags)",
-          "Feed/Bird(gm)",
-          "Cum Feed",
-          "Cum Feed/Bird(gm)",
-          "Avg Brd Wt",
-          "FCR (Adj FCR)",
-          "Fd Stk",
-          "Remarks",
+      const [jsPDF, autoTable] = await Promise.all([loadJsPDF(), loadAutoTable()]);
+      const doc = new jsPDF("landscape", "pt", "a4");
+      const startY = addPdfReportHeader(doc, {
+        title: "Daily Data Sheet",
+        subtitle: "Filtered operational records for mortality, feed, weight, FCR, and current bird count.",
+        meta: [
+          { label: "Farm", value: selectedFlock.farm_name || "-" },
+          { label: "Flock", value: selectedFlock.flock_name || "-" },
+          { label: "Date range", value: dateRangeLabel() },
+          { label: "Generated", value: formatDate(todayIso()) },
         ],
-      ];
-      const data = dailydatalist.map((elt, index) => {
-        const currentBirds = parseFloat(elt.current_bird_count);
-        const cumFeedPerBird = currentBirds > 0
-          ? ((parseFloat(elt.total_feed) * 1000) / currentBirds).toFixed(2)
-          : "-";
+      });
 
-        return [
-          elt.date,
-          index + 1,
-          elt.current_bird_count,
-          elt.mortality,
-          `${elt.cum_mort} (${elt.total_mortality_percentage.toFixed(2)}%)`,
-          elt.feed_intake,
-          elt.average_feed,
-          elt.total_feed,
-          cumFeedPerBird,
-          elt.average_bird_weight <= 0 ? "-" : elt.average_bird_weight,
-          elt.average_bird_weight <= 0
-            ? "-"
-            : `${elt.total_fcr.toFixed(2)} (${elt.fcr.toFixed(2)})`,
-          elt.feed_stock,
-          elt.remarks,
-        ];
+      autoTable(doc, {
+        startY,
+        head: [[
+          "Date",
+          "Age",
+          "Birds",
+          "Mort.",
+          "Cum Mort.",
+          "Feed Kg",
+          "Feed/Bird",
+          "Cum Feed",
+          "Cum Feed/Bird",
+          "Avg Wt",
+          "FCR",
+          "Feed Stock",
+          "Remarks",
+        ]],
+        body: buildPdfRows(),
+        foot: [[
+          "Totals",
+          "",
+          formatNumber(dailyTotals.latestBirdCount, 0),
+          formatNumber(dailyTotals.totalMortality, 0),
+          "",
+          formatNumber(dailyTotals.totalFeed, 2),
+          "",
+          "",
+          "",
+          "",
+          formatNumber(dailyTotals.averageFcr, 2),
+          formatNumber(dailyTotals.latestFeedStock, 2),
+          `${dailyTotals.recordCount} records`,
+        ]],
+        styles: { fontSize: 7.5, cellPadding: 4, overflow: "linebreak" },
+        headStyles: { fillColor: [65, 16, 13], textColor: [255, 250, 245] },
+        footStyles: { fillColor: [255, 247, 237], textColor: [65, 16, 13], fontStyle: "bold" },
+        alternateRowStyles: { fillColor: [255, 250, 245] },
+        margin: { left: 28, right: 28 },
       });
-      let content = {
-        startY: 200,
-        head: headers,
-        body: data,
-      };
-      autoTable(doc, content);
-      await new Promise((resolve) => {
-        doc.html(document.querySelector("#flock_summary"), {
-          callback: function (doc) {
-            doc.save("Daily Data Sheet.pdf");
-            resolve();
-          },
-          margin: [0, 0, 0, 0],
-          x: 55,
-          y: 15,
-        });
-      });
+
+      addPdfFooter(doc);
+      doc.save(buildReportFilename("DailyDataSheet", selectedFlock.flock_name));
     } finally {
       setIsExportingPdf(false);
     }
@@ -190,338 +236,189 @@ const DailyDataSheet = () => {
   return (
     <Row>
       <Col>
-        <Card className="pb-4">
-          <CardTitle
-            tag="h6"
-            className="border-bottom p-3 mb-0 font_family_sub fs-4"
-          >
-            Daily Data Sheet
-          </CardTitle>
-          <CardBody>
-            {showForm === true ? (
-              <div className="pdf-button">
-                <button
-                  type="button"
-                  onClick={downloadPdf}
-                  disabled={isExportingPdf}
-                  className="btn btn-outline-secondary font_family_content fs-5"
+        <Card className="report-page">
+          <div className="report-page__header">
+            <div>
+              <div className="report-page__eyebrow">Operations report</div>
+              <h1 className="report-page__title">Daily Data Sheet</h1>
+              <p className="report-page__subtitle">
+                Select a farm, flock, and optional date range. The table and PDF use the same filtered rows and totals.
+              </p>
+            </div>
+          </div>
+          <CardBody className="report-page__body">
+            <div className="report-filter-grid">
+              <FormGroup>
+                <Label for="farmSelect">Farm</Label>
+                <Input id="farmSelect" type="select" value={selectedFarmId} onChange={changeFarm}>
+                  <option value="0">Select farm</option>
+                  {farms.map((item) => (
+                    <option key={item.public_id} value={item.public_id}>
+                      {item.name}
+                    </option>
+                  ))}
+                </Input>
+              </FormGroup>
+              <FormGroup>
+                <Label for="flockSelect">Flock</Label>
+                <Input
+                  disabled={selectedFarmId === "0" || isLoadingFlocks}
+                  id="flockSelect"
+                  type="select"
+                  value={selectedFlockId}
+                  onChange={changeFlock}
                 >
-                  {isExportingPdf ? "Exporting..." : "Export as PDF"}
-                </button>
-              </div>
-            ) : (
-              <div></div>
-            )}
-            <Row className="mt-3">
-              <Col sm="12" md={{ offset: 2, size: 8 }}>
-                <div className={contentArea}>
-                  <div className="gridmargin">
-                    <Form>
-                      <FormGroup>
-                        <Label
-                          for="farmselect"
-                          className="font_family_sub fs-4"
-                        >
-                          Select Farm
-                        </Label>
-                        <div className="input-group">
-                          <Input
-                            onChange={changeFarm}
-                            defaultValue="0"
-                            id="farmSelect"
-                            name="farm"
-                            type="select"
-                            className="font_family_content fs-5"
-                          >
-                            <option
-                              value="0"
-                              disabled
-                              className="font_family_content fs-5"
-                            >
-                              Select Farm
-                            </option>
-                            {farms.map((item) => {
-                              return (
-                                <option
-                                  key={item.public_id}
-                                  value={item.public_id}
-                                  className="font_family_content fs-5"
-                                >
-                                  {item.name}
-                                </option>
-                              );
-                            })}
-                          </Input>
-                        </div>
-                      </FormGroup>
-                      {showFlock && (
-                        <FormGroup>
-                          <Label
-                            for="farmselect"
-                            className="font_family_sub fs-4"
-                          >
-                            Select Flock
-                          </Label>
-                          <div className="input-group">
-                            <Input
-                              onChange={changeFlock}
-                              defaultValue="0"
-                              id="flockSelect"
-                              name="flock"
-                              type="select"
-                              className="font_family_content fs-5"
-                            >
-                              <option
-                                value="0"
-                                disabled
-                                className="font_family_content fs-5"
-                              >
-                                Select Flocks
-                              </option>
-                              {flocks.map((item) => {
-                                return (
-                                  <option
-                                    key={item.flock_public_id}
-                                    value={item.flock_public_id}
-                                    className="font_family_content fs-5"
-                                  >
-                                    {item.flock_name}
-                                  </option>
-                                );
-                              })}
-                            </Input>
-                          </div>
-                        </FormGroup>
-                      )}
-                      {showForm && (
-                        <>
-                          <div>
-                            <Card>
-                              <CardHeader
-                                id="flock_summary"
-                                style={{ backgroundColor: "rgb(242,242,242)" }}
-                              >
-                                <div className="row">
-                                  <div className="col-md-5">
-                                    <CardTitle
-                                      tag="h6"
-                                      className="border-bottom p-3 mb-0"
-                                    >
-                                      <span className="font_family_sub fs-5 ">
-                                        {" "}
-                                        Flock Name:{" "}
-                                      </span>{" "}
-                                      <span className="px-1 fs-6 font_family_content">
-                                        {" "}
-                                        {flock.flock_name}
-                                      </span>
-                                      <br />
-                                      <span className="font_family_sub fs-5">
-                                        Hatch Date:{" "}
-                                      </span>{" "}
-                                      <span className="px-1 fs-6 font_family_content">
-                                        {" "}
-                                        {flock.hatch_date}
-                                      </span>
-                                      <br />
-                                      <span className="font_family_sub fs-5">
-                                        {" "}
-                                        Bird Count:{" "}
-                                      </span>{" "}
-                                      <span className="px-1 fs-6 font_family_content">
-                                        {" "}
-                                        {flock.actual_birds}
-                                      </span>
-                                      <br />
-                                      <span className="font_family_sub fs-5">
-                                        Integration?{" "}
-                                      </span>{" "}
-                                      <span className="px-1 fs-6 font_family_content">
-                                        {" "}
-                                        {flock.integration === true
-                                          ? "Yes"
-                                          : "No"}
-                                      </span>
-                                      <br />
-                                      <span className=" font_family_sub fs-5">
-                                        Day 1 Wt (gm){" "}
-                                      </span>{" "}
-                                      <span className="px-1 fs-6 font_family_content">
-                                        {" "}
-                                        {flock.chick_weight}
-                                      </span>
-                                    </CardTitle>
-                                  </div>
-                                  <div className="col-md-2"></div>
-                                  <div className="col-md-5">
-                                    <CardTitle
-                                      tag="h6"
-                                      className="border-bottom p-3 mb-0"
-                                    >
-                                      <span className=" font_family_sub fs-5">
-                                        Farm Name:{" "}
-                                      </span>{" "}
-                                      <span className="px-1 fs-6 font_family_content">
-                                        {" "}
-                                        {flock.farm_name}
-                                      </span>
-                                      <br />
-                                      <span className=" font_family_sub fs-5">
-                                        Address:{" "}
-                                      </span>
-                                      <span className="px-1 fs-6 font_family_content">
-                                        {" "}
-                                        {flock.address}
-                                      </span>
-                                      <br />
-                                      <span className=" font_family_sub fs-5">
-                                        {" "}
-                                        Phone:{" "}
-                                      </span>{" "}
-                                      <span className="px-1 fs-6 font_family_content">
-                                        {" "}
-                                        {flock.mobile_number}
-                                      </span>
-                                      <br />
-                                      <span className=" font_family_sub fs-5">
-                                        EC Shed?{" "}
-                                      </span>{" "}
-                                      <span className="px-1 fs-6 font_family_content">
-                                        {" "}
-                                        {flock.ec_shed === true ? "Yes" : "No"}
-                                      </span>
-                                    </CardTitle>
-                                  </div>
-                                </div>
-                              </CardHeader>
-                              <CardBody>
-                                <Table
-                                  className="no-wrap mt-3 align-middle table-responsive table-bordered table-striped"
-                                  responsive
-                                  borderless
-                                >
-                                  <thead>
-                                    <tr>
-                                      <th className=" font_family_sub fs-6">
-                                        Date
-                                      </th>
-                                      <th className=" font_family_sub fs-6">
-                                        Age(In Days)
-                                      </th>
-                                      <th className=" font_family_sub fs-6">
-                                        Bird Count
-                                      </th>
-                                      <th className=" font_family_sub fs-6">
-                                        Mort
-                                      </th>
-                                      <th className=" font_family_sub fs-6">
-                                        Cum Mort (%)
-                                      </th>
-                                      <th className=" font_family_sub fs-6">
-                                        Daily Feed Kg(bags)
-                                      </th>
-                                      <th className=" font_family_sub fs-6">
-                                        Feed/Bird(gm)
-                                      </th>
-                                      <th className=" font_family_sub fs-6">
-                                        Cum Feed
-                                      </th>
-                                      <th className=" font_family_sub fs-6">
-                                        Cum Feed/Bird(gm)
-                                      </th>
-                                      <th className=" font_family_sub fs-6">
-                                        Avg Brd Wt
-                                      </th>
-                                      <th className=" font_family_sub fs-6">
-                                        FCR
-                                      </th>
-                                      <th className=" font_family_sub fs-6">
-                                        Fd Stk
-                                      </th>
-                                      <th className=" font_family_sub fs-6">
-                                        Remarks
-                                      </th>
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {dailydatalist?.length > 0 &&
-                                      dailydatalist.map((item, index) => {
-                                        const currentBirds = parseFloat(
-                                          item.current_bird_count
-                                        );
-                                        const cumFeedPerBird =
-                                          currentBirds > 0
-                                            ? (
-                                                (parseFloat(item.total_feed) *
-                                                  1000) /
-                                                currentBirds
-                                              ).toFixed(2)
-                                            : "-";
+                  <option value="0">{isLoadingFlocks ? "Loading flocks..." : "Select flock"}</option>
+                  {flocks.map((item) => (
+                    <option key={item.flock_public_id} value={item.flock_public_id}>
+                      {item.flock_name}
+                    </option>
+                  ))}
+                </Input>
+              </FormGroup>
+              <FormGroup>
+                <Label for="startDate">From date</Label>
+                <Input id="startDate" type="date" value={startDate} max={endDate || todayIso()} onChange={(event) => setStartDate(event.target.value)} />
+              </FormGroup>
+              <FormGroup>
+                <Label for="endDate">To date</Label>
+                <Input id="endDate" type="date" value={endDate} min={startDate || undefined} max={todayIso()} onChange={(event) => setEndDate(event.target.value)} />
+              </FormGroup>
+            </div>
 
-                                        return (
-                                          <tr key={item.flock_public_id}>
-                                            <td className="fs-6 font_family_content">
-                                              {item.date}
-                                            </td>
-                                            <td className="fs-6 font_family_content">
-                                              {index + 1}
-                                            </td>
-                                            <td className="fs-6 font_family_content">
-                                              {item.current_bird_count}
-                                            </td>
-                                            <td className="fs-6 font_family_content">
-                                              {item.mortality}
-                                            </td>
-                                            <td className="fs-6 font_family_content">
-                                              {item.cum_mort} (
-                                              {item.total_mortality_percentage.toFixed(
-                                                2
-                                              )}
-                                              %)
-                                            </td>
-                                            <td className="fs-6 font_family_content">
-                                              {item.feed_intake}
-                                            </td>
-                                            <td className="fs-6 font_family_content">
-                                              {item.average_feed}
-                                            </td>
-                                            <td className="fs-6 font_family_content">
-                                              {item.total_feed}
-                                            </td>
-                                            <td className="fs-6 font_family_content">
-                                              {cumFeedPerBird}
-                                            </td>
-                                            <td className="fs-6 font_family_content">
-                                              {item.average_bird_weight <= 0
-                                                ? "-"
-                                                : item.average_bird_weight}
-                                            </td>
-                                            <td className="fs-6 font_family_content">
-                                              {item.average_bird_weight <= 0
-                                                ? "-"
-                                                : `${item.fcr.toFixed(2)}`}
-                                            </td>
-                                            <td className="fs-6 font_family_content">
-                                              {item.feed_stock}
-                                            </td>
-                                            <td className="fs-6 font_family_content">
-                                              {item.remarks}
-                                            </td>
-                                          </tr>
-                                        );
-                                      })}
-                                  </tbody>
-                                </Table>
-                              </CardBody>
-                            </Card>
-                          </div>
-                        </>
-                      )}
-                    </Form>
+            <div className="report-actions">
+              <button type="button" className="report-reset-button" onClick={resetFilters}>
+                Clear dates
+              </button>
+              <button
+                type="button"
+                className="report-export-button"
+                onClick={downloadPdf}
+                disabled={!hasFilteredRows || isExportingPdf}
+              >
+                {isExportingPdf ? "Exporting..." : "Export PDF"}
+              </button>
+            </div>
+
+            {reportError && (
+              <div className="report-empty-state">
+                <strong>Report could not load</strong>
+                {reportError}
+              </div>
+            )}
+
+            {!hasSelectedFlock && (
+              <div className="report-empty-state">
+                <strong>Select a flock to view the report.</strong>
+                Daily reports are built from saved daily flock records.
+              </div>
+            )}
+
+            {hasSelectedFlock && !isLoadingReport && !hasAnyDailyData && (
+              <div className="report-empty-state">
+                <strong>Not enough data yet.</strong>
+                Add daily data for this flock before exporting a daily data report.
+              </div>
+            )}
+
+            {hasSelectedFlock && hasAnyDailyData && !hasFilteredRows && (
+              <div className="report-empty-state">
+                <strong>No records in this date range.</strong>
+                Clear the date filter or choose a range that includes saved daily data.
+              </div>
+            )}
+
+            {hasFilteredRows && (
+              <>
+                <div className="report-kpi-grid">
+                  <div className="report-kpi">
+                    <span>Records</span>
+                    <strong>{dailyTotals.recordCount}</strong>
+                  </div>
+                  <div className="report-kpi">
+                    <span>Total mortality</span>
+                    <strong>{formatNumber(dailyTotals.totalMortality, 0)}</strong>
+                  </div>
+                  <div className="report-kpi">
+                    <span>Feed used</span>
+                    <strong>{formatNumber(dailyTotals.totalFeed, 2)} kg</strong>
+                  </div>
+                  <div className="report-kpi">
+                    <span>Latest birds</span>
+                    <strong>{formatNumber(dailyTotals.latestBirdCount, 0)}</strong>
                   </div>
                 </div>
-              </Col>
-            </Row>
+
+                <div className="report-section-card">
+                  <div className="report-section-card__header">
+                    <h3>{selectedFlock?.flock_name} daily records</h3>
+                    <span className="report-muted">{dateRangeLabel()}</span>
+                  </div>
+                  <Table responsive className="report-table">
+                    <thead>
+                      <tr>
+                        <th>Date</th>
+                        <th>Age</th>
+                        <th>Birds</th>
+                        <th>Mort.</th>
+                        <th>Cum Mort.</th>
+                        <th>Feed Kg</th>
+                        <th>Feed/Bird</th>
+                        <th>Cum Feed</th>
+                        <th>Cum Feed/Bird</th>
+                        <th>Avg Wt</th>
+                        <th>FCR</th>
+                        <th>Feed Stock</th>
+                        <th>Remarks</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredRows.map((item) => {
+                        const currentBirds = toNumber(item.current_bird_count);
+                        const cumFeedPerBird = currentBirds > 0
+                          ? (toNumber(item.total_feed) * 1000) / currentBirds
+                          : 0;
+
+                        return (
+                          <tr key={item.public_id || `${item.flock_public_id}-${item.date}`}>
+                            <td>{formatDate(item.date)}</td>
+                            <td>{getAgeInDays(selectedFlock?.hatch_date, item.date)}</td>
+                            <td>{formatNumber(item.current_bird_count, 0)}</td>
+                            <td>{formatNumber(item.mortality, 0)}</td>
+                            <td>{formatNumber(item.cum_mort, 0)} ({formatNumber(item.total_mortality_percentage, 2)}%)</td>
+                            <td>{formatNumber(item.feed_intake, 2)}</td>
+                            <td>{formatNumber(item.average_feed, 2)}</td>
+                            <td>{formatNumber(item.total_feed, 2)}</td>
+                            <td>{currentBirds > 0 ? formatNumber(cumFeedPerBird, 2) : "-"}</td>
+                            <td>{toNumber(item.average_bird_weight) > 0 ? formatNumber(item.average_bird_weight, 0) : "-"}</td>
+                            <td>{toNumber(item.average_bird_weight) > 0 ? formatNumber(item.fcr, 2) : "-"}</td>
+                            <td>{formatNumber(item.feed_stock, 2)}</td>
+                            <td>{item.remarks || "-"}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                    <tfoot>
+                      <tr>
+                        <td>Total</td>
+                        <td></td>
+                        <td>{formatNumber(dailyTotals.latestBirdCount, 0)}</td>
+                        <td>{formatNumber(dailyTotals.totalMortality, 0)}</td>
+                        <td></td>
+                        <td>{formatNumber(dailyTotals.totalFeed, 2)}</td>
+                        <td></td>
+                        <td></td>
+                        <td></td>
+                        <td></td>
+                        <td>{formatNumber(dailyTotals.averageFcr, 2)}</td>
+                        <td>{formatNumber(dailyTotals.latestFeedStock, 2)}</td>
+                        <td>{dailyTotals.recordCount} records</td>
+                      </tr>
+                    </tfoot>
+                  </Table>
+                </div>
+              </>
+            )}
           </CardBody>
         </Card>
       </Col>
@@ -530,4 +427,3 @@ const DailyDataSheet = () => {
 };
 
 export default DailyDataSheet;
-//MV-23-6-25- 17-10 change end

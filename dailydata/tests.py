@@ -240,10 +240,19 @@ class DailyDataTenantIsolationTests(TestCase):
                 },
                 "generated_on": self.day,
                 "total_records": 1,
+                "date_range": {"start": "2026-01-01", "end": "2026-01-31"},
+                "totals": {
+                    "mortality": 1,
+                    "feed_intake": 10,
+                    "latest_birds": 99,
+                    "latest_feed_stock": 90,
+                },
             },
         )
 
         self.assertIn("Chikooza Daily Flock Data", html)
+        self.assertIn("Total Mortality", html)
+        self.assertIn("Date From", html)
         self.assertIn("Mort. %", html)
         self.assertIn("Feed Intake", html)
         self.assertIn("Owner Daily Flock", html)
@@ -259,6 +268,7 @@ class DailyDataTenantIsolationTests(TestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response["Content-Type"], "application/pdf")
+        self.assertIn("Chikooza_DailyDataSheet_Owner_Daily_Flock", response["Content-Disposition"])
         self.assertGreater(len(response.content), 0)
 
     def test_pdf_export_rejects_other_users_flock(self):
