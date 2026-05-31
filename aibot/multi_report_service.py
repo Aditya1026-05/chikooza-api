@@ -151,6 +151,10 @@ class ChikoozaMultiReportService:
             metrics.add("fcr")
 
         wants_all = self._wants_all_metrics(query)
+        if getattr(intent, "source", "") == "rule_summary_detail_followup":
+            # U: NEW: "now tell this in detail" after an account summary should
+            # U: expand the previous account summary into full farm/flock detail.
+            wants_all = True
         date_range = self._date_range_from_query(query)
         include_farms = bool(re.search(r"\bfarms?\b", query))
         include_flocks = bool(re.search(r"\b(?:flocks?|batches?)\b", query))

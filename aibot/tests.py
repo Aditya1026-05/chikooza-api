@@ -2098,6 +2098,39 @@ class ChikoozaFarmerAIImprovementTests(SimpleTestCase):
         self.assertIn("Your account summary", response["answer"])
         self.assertNotIn("Short version", response["answer"])
 
+    def test_detail_followup_after_account_summary_expands_full_report(self):
+        deterministic = ChikoozaTextToSQLService(user=self.user)
+        deterministic._farms = lambda: [self.red_farm, self.blue_farm]
+        deterministic._flocks = lambda: [self.alpha, self.beta]
+        deterministic.executor = FakeScopedFarmExecutor()
+        agent = ChikoozaIntentAgentService(
+            user=self.user,
+            deterministic_service=deterministic,
+        )
+        history = [
+            {"role": "user", "content": "show me my farm summary"},
+            {
+                "role": "assistant",
+                "content": (
+                    "Your account summary: 2 farms, 2 flocks, 285 current birds, "
+                    "Rs. 1,000.00 sales, Rs. 250.00 purchases."
+                ),
+                "intent": "farm_summary",
+                "metric": "farm_record_summary",
+            },
+        ]
+
+        response = agent.answer("now tell this in detail", history=history)
+
+        self.assertEqual(response["intent"], "multi_farm_report")
+        self.assertEqual(response["intent_source"], "rule_summary_detail_followup")
+        self.assertIn("Farm-wise details", response["answer"])
+        self.assertIn("Flock-wise details", response["answer"])
+        self.assertIn("Red Farm", response["answer"])
+        self.assertIn("Blue Farm", response["answer"])
+        self.assertIn("Alpha Batch", response["answer"])
+        self.assertIn("Beta Batch", response["answer"])
+
     def test_calculated_answers_explain_their_source(self):
         cases = (
             (

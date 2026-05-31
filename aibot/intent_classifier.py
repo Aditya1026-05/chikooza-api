@@ -75,6 +75,14 @@ class ChikoozaIntentClassifier:
 
     def classify(self, question: str, history: list | None = None) -> ChikoozaIntent:
         query = self._normalize(question)
+        if self._is_account_summary_detail_followup(query, history):
+            # U: NEW: after "show my farm summary", follow-ups like
+            # U: "now tell this in detail" mean expand the whole account
+            # U: summary into farm-wise and flock-wise detail, not "this flock".
+            return self._intent(
+                "multi_farm_report",
+                source="rule_summary_detail_followup",
+            )
         context_entity_type = self._contextual_entity_type(query, history)
         context_reference = self._entity_reference_from_text(query, "current")
         if self._is_complete_data_query(query):
@@ -703,6 +711,29 @@ Return JSON only.
                 query,
             )
         )
+
+    def _is_account_summary_detail_followup(
+        self, query: str, history: list | None
+    ) -> bool:
+        if not history:
+            return False
+        if not re.search(
+            r"\b(?:detail|details|detailed|in detail|more detail|full detail|expand|explain this|tell this)\b",
+            query,
+        ):
+            return False
+        if re.search(r"\b(?:farm|flock|batch)\b", query):
+            return False
+
+        for item in reversed(history[-12:]):
+            metric = str(item.get("metric", "")).strip().lower()
+            intent = str(item.get("intent", "")).strip().lower()
+            content = self._normalize(str(item.get("content", "")))
+            if metric == "farm_record_summary" or intent == "farm_summary":
+                return True
+            if "your account summary" in content:
+                return True
+        return False
 
     def _looks_like_list_query(self, query: str) -> bool:
         return any(
