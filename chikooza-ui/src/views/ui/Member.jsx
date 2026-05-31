@@ -34,6 +34,127 @@ const baseChartOptions = {
   },
 };
 
+const emptyRecordStatus = {
+  dailyCount: 0,
+  purchaseCount: 0,
+  salesCount: 0,
+  lastDailyDate: "",
+  currentBirdCount: null,
+  loading: false,
+  error: "",
+};
+
+const readDashboardDraft = (key) => {
+  try {
+    return JSON.parse(localStorage.getItem(key) || "{}");
+  } catch {
+    return {};
+  }
+};
+
+const hasAnyValue = (record, keys) => {
+  return keys.some((key) => {
+    const value = record?.[key];
+    return value !== undefined && value !== null && value !== "" && value !== "0" && value !== 0;
+  });
+};
+
+const findContinueDraft = (selectedFarm, selectedFlock) => {
+  // U: NEW: form autosave is useful only if the dashboard gives farmers a
+  // U: direct way to return to meaningful unfinished work.
+  const storageKeys = Object.keys(localStorage);
+  const dayDataKey = storageKeys.find((key) => {
+    if (!key.startsWith("chikooza-day-data-draft-")) {
+      return false;
+    }
+    const draft = readDashboardDraft(key);
+    return Number(draft.dailyStep || 0) > 0 || hasAnyValue(draft.addData, ["mortality", "feed_intake", "average_bird_weight"]);
+  });
+
+  if (dayDataKey) {
+    const match = dayDataKey.match(/^chikooza-day-data-draft-(\d+)-(\d{4}-\d{2}-\d{2})$/);
+    if (match && selectedFarm !== "0") {
+      return {
+        title: "Continue daily data entry",
+        helper: "Your unfinished flock-day record is saved locally.",
+        action: "Resume daily data",
+        href: `/daydata/${selectedFarm}/${match[1]}/${match[2]}`,
+      };
+    }
+    return {
+      title: "Continue daily data entry",
+      helper: "Choose the saved flock and day to finish your daily record.",
+      action: "Resume daily data",
+      href: "/flockdailydata",
+    };
+  }
+
+  const saleDraft = readDashboardDraft("chikooza-flock-sale-draft");
+  if (Number(saleDraft.saleStep || 0) > 0 || hasAnyValue(saleDraft.data, ["selType", "date", "sellcount", "selltwt", "sellrate"])) {
+    return {
+      title: "Continue flock sale",
+      helper: "Your unfinished sale and buyer details are saved locally.",
+      action: "Resume sale",
+      href: "/flocksale",
+      state: selectedFlock !== "0" ? { farmPublicId: selectedFarm, flockPublicId: selectedFlock } : undefined,
+    };
+  }
+
+  const purchaseDraft = readDashboardDraft("chikooza-add-purchase-draft");
+  if (Number(purchaseDraft.purchaseStep || 0) > 0 || hasAnyValue(purchaseDraft.data, ["type", "date", "cost", "remarks"])) {
+    return {
+      title: "Continue purchase entry",
+      helper: "Your unfinished purchase details are saved locally.",
+      action: "Resume purchase",
+      href: "/addpurchase",
+      state: selectedFlock !== "0" ? { farmPublicId: selectedFarm, flockPublicId: selectedFlock } : undefined,
+    };
+  }
+
+  const flockDraft = readDashboardDraft("chikooza-add-flock-draft");
+  if (hasAnyValue(flockDraft, ["farm_public_id", "flock_name", "hatch_date", "flock_size", "actual_birds"])) {
+    return {
+      title: "Continue flock setup",
+      helper: "Your unfinished flock details are saved locally.",
+      action: "Resume flock",
+      href: "/addflock",
+    };
+  }
+
+  const farmDraft = readDashboardDraft("chikooza-add-farm-draft");
+  if (hasAnyValue(farmDraft, ["farmname", "address", "cityorvillage", "pincode", "numberofsheds"])) {
+    return {
+      title: "Continue farm setup",
+      helper: "Your unfinished farm details are saved locally.",
+      action: "Resume farm",
+      href: "/addfarm",
+    };
+  }
+
+  const dailySelectorDraft = readDashboardDraft("chikooza-daily-selector-draft");
+  if (String(dailySelectorDraft.selectedFlockId || "0") !== "0") {
+    return {
+      title: "Continue daily data",
+      helper: "Return to your previously selected flock and choose the next day.",
+      action: "Resume daily data",
+      href: "/flockdailydata",
+    };
+  }
+
+  return null;
+};
+
+const formatDashboardDate = (value) => {
+  if (!value) {
+    return "Not recorded";
+  }
+  return new Intl.DateTimeFormat("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(new Date(value));
+};
+
 const Member = () => {
   const [graphError, setGraphError] = useState("");
   const [showFlock, setShowFlock] = useState(false);
@@ -49,12 +170,7 @@ const Member = () => {
   const [week, setWeek] = useState([]);
   const [weight, setWeight] = useState([]);
   const [fcr, setFcr] = useState([]);
-  const [recordStatus, setRecordStatus] = useState({
-    hasPurchases: false,
-    hasSales: false,
-    loading: false,
-    error: "",
-  });
+  const [recordStatus, setRecordStatus] = useState(emptyRecordStatus);
   const navigate = useNavigate();
 
   const getsetFlockData2 = useCallback((flockId) => {
@@ -86,23 +202,22 @@ const Member = () => {
 
   const loadRecordStatus = useCallback((flockId) => {
     if (!flockId || flockId === "0") {
-      setRecordStatus({
-        hasPurchases: false,
-        hasSales: false,
-        loading: false,
-        error: "",
-      });
+      setRecordStatus(emptyRecordStatus);
       return;
     }
 
     setRecordStatus((current) => ({ ...current, loading: true, error: "" }));
 
-    // U: NEW: dashboard workflow should reflect saved data, not hard-code
-    // U: Purchases/Sales as incomplete forever.
+    // U: OLD: dashboard inferred daily completion from chart availability and
+    // U: only checked purchase/sale booleans. NEW: load real saved-record counts.
     Promise.allSettled([
+      axios.get(`${apiPath}dailyDataDetail/?flock_public_id=${flockId}`, getAuthConfig()),
       axios.get(`${apiPath}purchase/?flock_public_id=${flockId}`, getAuthConfig()),
       axios.get(`${apiPath}sales/?flock_public_id=${flockId}`, getAuthConfig()),
-    ]).then(([purchaseResult, saleResult]) => {
+    ]).then(([dailyResult, purchaseResult, saleResult]) => {
+      if (dailyResult.status === "rejected") {
+        handleUnauthorized(dailyResult.reason, navigate);
+      }
       if (purchaseResult.status === "rejected") {
         handleUnauthorized(purchaseResult.reason, navigate);
       }
@@ -110,6 +225,10 @@ const Member = () => {
         handleUnauthorized(saleResult.reason, navigate);
       }
 
+      const dailyList =
+        dailyResult.status === "fulfilled"
+          ? dailyResult.value.data?.results?.daily_data_list || []
+          : [];
       const purchaseList =
         purchaseResult.status === "fulfilled"
           ? purchaseResult.value.data?.results?.purchase_list || []
@@ -118,12 +237,18 @@ const Member = () => {
         saleResult.status === "fulfilled"
           ? saleResult.value.data?.results?.sales_list || []
           : [];
+      const latestDailyData = dailyList[dailyList.length - 1];
       const failed =
-        purchaseResult.status === "rejected" || saleResult.status === "rejected";
+        dailyResult.status === "rejected" ||
+        purchaseResult.status === "rejected" ||
+        saleResult.status === "rejected";
 
       setRecordStatus({
-        hasPurchases: purchaseList.length > 0,
-        hasSales: salesList.length > 0,
+        dailyCount: dailyList.length,
+        purchaseCount: purchaseList.length,
+        salesCount: salesList.length,
+        lastDailyDate: latestDailyData?.date || "",
+        currentBirdCount: latestDailyData?.birds_count ?? latestDailyData?.current_bird_count ?? null,
         loading: false,
         error: failed ? "Some saved-record checks could not be loaded." : "",
       });
@@ -221,13 +346,16 @@ const Member = () => {
     setSelectedFlock(String(flock.flock_public_id));
   };
 
-  const selectedFarmLabel = useMemo(() => {
-    return farms.find((farm) => String(farm.public_id) === selectedFarm)?.name || "No farm selected";
+  const selectedFarmRecord = useMemo(() => {
+    return farms.find((farm) => String(farm.public_id) === selectedFarm);
   }, [farms, selectedFarm]);
 
-  const selectedFlockLabel = useMemo(() => {
-    return flocks.find((flock) => String(flock.flock_public_id) === selectedFlock)?.flock_name || "No flock selected";
+  const selectedFlockRecord = useMemo(() => {
+    return flocks.find((flock) => String(flock.flock_public_id) === selectedFlock);
   }, [flocks, selectedFlock]);
+
+  const selectedFarmLabel = selectedFarmRecord?.name || "No farm selected";
+  const selectedFlockLabel = selectedFlockRecord?.flock_name || "No flock selected";
 
   const farmCount = useMemo(() => {
     return farms.filter((farm) => String(farm.public_id) !== "0").length;
@@ -240,16 +368,17 @@ const Member = () => {
   const hasMortalityData = currentCount.length > 0 || mortality.length > 0;
   const hasWeightData = weight.length > 0 || fcr.length > 0;
   const hasChartData = showForm && (hasMortalityData || hasWeightData);
+  const hasDailyData = recordStatus.dailyCount > 0;
+  const hasPurchases = recordStatus.purchaseCount > 0;
+  const hasSales = recordStatus.salesCount > 0;
+  const reportsReady = hasDailyData;
+  const selectedRecordState = selectedFlock !== "0"
+    ? { farmPublicId: selectedFarm, flockPublicId: selectedFlock }
+    : undefined;
 
   const setupSteps = useMemo(() => {
     const hasFarm = farmCount > 0;
     const hasFlock = flockCount > 0;
-    const hasDailyData = hasChartData;
-    const hasPurchases = recordStatus.hasPurchases;
-    const hasSales = recordStatus.hasSales;
-    const selectedRecordState = selectedFlock !== "0"
-      ? { farmPublicId: selectedFarm, flockPublicId: selectedFlock }
-      : undefined;
 
     return [
       {
@@ -290,16 +419,95 @@ const Member = () => {
         action: hasSales ? "Review sales" : hasFlock ? "Add sale" : "Add flock first",
       },
       {
-        title: "Review reports and AI",
-        helper: "Use reports and Farmer AI once records are entered.",
-        complete: hasDailyData && (hasPurchases || hasSales),
-        href: hasDailyData && (hasPurchases || hasSales) ? "/chatbot" : "/dailydatasheet",
-        action: hasDailyData && (hasPurchases || hasSales) ? "Ask Farmer AI" : "Open reports",
+        title: "Review reports",
+        helper: "Open daily and flock reports once daily records exist.",
+        complete: reportsReady,
+        href: reportsReady ? "/dailydatasheet" : "/flockdailydata",
+        action: reportsReady ? "Open reports" : "Add daily data first",
       },
     ];
-  }, [farmCount, flockCount, hasChartData, recordStatus.hasPurchases, recordStatus.hasSales, selectedFarm, selectedFlock]);
+  }, [farmCount, flockCount, hasDailyData, hasPurchases, hasSales, reportsReady, selectedRecordState]);
 
   const nextSetupStep = setupSteps.find((step) => !step.complete) || setupSteps[setupSteps.length - 1];
+  const continueDraft = useMemo(() => {
+    return findContinueDraft(selectedFarm, selectedFlock);
+  }, [selectedFarm, selectedFlock]);
+  const continueAction = continueDraft || {
+    title: `Next recommended step: ${nextSetupStep.title}`,
+    helper: nextSetupStep.helper,
+    action: nextSetupStep.action,
+    href: nextSetupStep.href,
+    state: nextSetupStep.state,
+  };
+
+  const completionCards = [
+    {
+      title: "Daily data",
+      value: `${recordStatus.dailyCount} saved`,
+      helper: recordStatus.lastDailyDate ? `Latest: ${formatDashboardDate(recordStatus.lastDailyDate)}` : "No daily entry yet",
+      complete: hasDailyData,
+    },
+    {
+      title: "Purchases",
+      value: `${recordStatus.purchaseCount} saved`,
+      helper: hasPurchases ? "Costs are available for reports" : "Add feed or other costs",
+      complete: hasPurchases,
+    },
+    {
+      title: "Sales",
+      value: `${recordStatus.salesCount} saved`,
+      helper: hasSales ? "Sale records are available" : "Add lifting details when ready",
+      complete: hasSales,
+    },
+    {
+      title: "Reports",
+      value: reportsReady ? "Ready" : "Waiting",
+      helper: reportsReady ? "Daily and flock reports can be opened" : "Add daily data to unlock reports",
+      complete: reportsReady,
+    },
+  ];
+
+  const quickActions = useMemo(() => {
+    if (farmCount === 0) {
+      return [
+        { title: "Create your first farm", helper: "Start with location and shed details.", href: "/addfarm", action: "Add farm" },
+      ];
+    }
+    if (flockCount === 0) {
+      return [
+        { title: "Add a flock", helper: "Connect a broiler batch to the selected farm.", href: "/addflock", action: "Add flock" },
+        { title: "Review farm", helper: "Check or update the selected farm details.", href: "/managefarm", action: "Manage farm" },
+      ];
+    }
+    return [
+      {
+        title: hasDailyData ? "Record next daily data" : "Add first daily data",
+        helper: hasDailyData ? "Keep mortality, feed, weight and FCR current." : "Daily records unlock charts and reports.",
+        href: "/flockdailydata",
+        action: hasDailyData ? "Continue daily data" : "Start daily data",
+      },
+      {
+        title: hasPurchases ? "Add another purchase" : "Add first purchase",
+        helper: hasPurchases ? "Record the next feed, medicine or operating cost." : "Track costs so profit reports stay accurate.",
+        href: "/addpurchase",
+        state: selectedRecordState,
+        action: "Add purchase",
+      },
+      {
+        title: hasSales ? "Review saved sales" : "Record first sale",
+        helper: hasSales ? "Review lifting history for this flock." : "Add lifting details when birds are sold.",
+        href: hasSales ? "/viewsale" : "/flocksale",
+        state: selectedRecordState,
+        action: hasSales ? "View sales" : "Add sale",
+      },
+      {
+        title: reportsReady ? "Open reports" : "Unlock reports",
+        helper: reportsReady ? "Review daily sheets and flock summaries." : "Reports become useful after the first daily record.",
+        href: reportsReady ? "/dailydatasheet" : "/flockdailydata",
+        action: reportsReady ? "View reports" : "Add daily data",
+      },
+    ];
+  }, [farmCount, flockCount, hasDailyData, hasPurchases, hasSales, reportsReady, selectedRecordState]);
 
   const chartEmptyState = useMemo(() => {
     if (farmCount === 0) {
@@ -318,13 +526,21 @@ const Member = () => {
         action: "Add flock",
       };
     }
+    if (recordStatus.dailyCount === 1) {
+      return {
+        title: "Add one more daily entry",
+        body: "Your first daily record is saved. Add the next day to unlock trend charts for bird count, mortality, weight, and FCR.",
+        href: "/flockdailydata",
+        action: "Add next daily data",
+      };
+    }
     return {
       title: "No daily chart data yet",
       body: "Add daily flock data to view mortality, bird count, weight, and FCR charts here.",
       href: "/flockdailydata",
       action: "Add daily data",
     };
-  }, [farmCount, flockCount]);
+  }, [farmCount, flockCount, recordStatus.dailyCount]);
 
   const mortalityOptions = {
     ...baseChartOptions,
@@ -388,21 +604,126 @@ const Member = () => {
         </div>
       </section>
 
-      {/* U: NEW: show the recommended farm setup sequence so new farmers know what to enter first. */}
-      <section className="member-workflow-card">
-        <div className="member-card-heading">
-          <span>Recommended setup flow</span>
-          <strong>Next: {nextSetupStep.title}</strong>
+      <section className="member-continue-card">
+        <div>
+          <span>{continueDraft ? "Continue where you left off" : "Recommended next action"}</span>
+          <strong>{continueAction.title}</strong>
+          <p>{continueAction.helper}</p>
         </div>
-        <div className="member-workflow-steps" aria-label="Recommended farmer setup workflow">
-          {setupSteps.map((step, index) => (
-            <article key={step.title} className={step.complete ? "is-complete" : ""}>
-              <div className="member-workflow-index">{step.complete ? "OK" : index + 1}</div>
-              <div>
-                <h2>{step.title}</h2>
-                <p>{step.helper}</p>
-                <Link to={step.href} state={step.state}>{step.action}</Link>
-              </div>
+        <Link to={continueAction.href} state={continueAction.state}>{continueAction.action}</Link>
+      </section>
+
+      {selectedFlock !== "0" && (
+        <section className="member-completion-card">
+          <div className="member-card-heading">
+            <span>Selected flock completion</span>
+            <strong>{selectedFlockLabel}</strong>
+          </div>
+          <div className="member-completion-grid">
+            {completionCards.map((item) => (
+              <article key={item.title} className={item.complete ? "is-complete" : ""}>
+                <span>{item.title}</span>
+                <strong>{item.value}</strong>
+                <p>{item.helper}</p>
+              </article>
+            ))}
+          </div>
+          {recordStatus.loading && <p className="member-card-note">Checking saved flock records...</p>}
+          {!recordStatus.loading && recordStatus.error && <p className="member-card-note is-error">{recordStatus.error}</p>}
+        </section>
+      )}
+
+      <section className="member-context-grid">
+        <article className="member-context-card">
+          <div className="member-card-heading">
+            <span>Selected farm</span>
+            <strong>{selectedFarmLabel}</strong>
+          </div>
+          {selectedFarmRecord ? (
+            <>
+              <dl>
+                <div><dt>Location</dt><dd>{[selectedFarmRecord.city, selectedFarmRecord.state_name].filter(Boolean).join(", ") || "Not added"}</dd></div>
+                <div><dt>Sheds</dt><dd>{selectedFarmRecord.shed_count ?? "Not added"}</dd></div>
+                <div><dt>Status</dt><dd>{selectedFarmRecord.status ? "Active" : "Inactive"}</dd></div>
+                <div><dt>Flocks in view</dt><dd>{flockCount}</dd></div>
+              </dl>
+              <Link to="/managefarm">Manage farm</Link>
+            </>
+          ) : (
+            <div className="member-context-empty">
+              <p>Add a farm to start connecting flocks, daily records, purchases, and sales.</p>
+              <Link to="/addfarm">Add farm</Link>
+            </div>
+          )}
+        </article>
+
+        <article className="member-context-card">
+          <div className="member-card-heading">
+            <span>Selected flock</span>
+            <strong>{selectedFlockLabel}</strong>
+          </div>
+          {selectedFlockRecord ? (
+            <>
+              <dl>
+                <div><dt>Breed</dt><dd>{selectedFlockRecord.chick_breed || "Not added"}</dd></div>
+                <div><dt>Hatch date</dt><dd>{formatDashboardDate(selectedFlockRecord.hatch_date)}</dd></div>
+                <div><dt>Initial birds</dt><dd>{selectedFlockRecord.actual_birds ?? "Not added"}</dd></div>
+                <div><dt>Current birds</dt><dd>{recordStatus.currentBirdCount ?? selectedFlockRecord.actual_birds ?? "Not recorded"}</dd></div>
+              </dl>
+              <Link to="/manageflock">Manage flock</Link>
+            </>
+          ) : (
+            <div className="member-context-empty">
+              <p>Add a flock under the selected farm before recording operational data.</p>
+              <Link to={farmCount > 0 ? "/addflock" : "/addfarm"}>{farmCount > 0 ? "Add flock" : "Add farm first"}</Link>
+            </div>
+          )}
+        </article>
+      </section>
+
+      {farmCount === 0 && (
+        <section className="member-first-run-card">
+          <span>First-time setup</span>
+          <strong>Start with one farm, then add the active flock.</strong>
+          <p>The dashboard will progressively unlock daily data, purchases, sales, reports, and Farmer AI as records are saved.</p>
+          <Link to="/addfarm">Create first farm</Link>
+        </section>
+      )}
+
+      {/* U: NEW: keep the detailed setup map for new farms only. Established
+          U: farmers get the compact completion and quick-action cards instead. */}
+      {farmCount > 0 && flockCount === 0 && (
+        <section className="member-workflow-card">
+          <div className="member-card-heading">
+            <span>Recommended setup flow</span>
+            <strong>Next: {nextSetupStep.title}</strong>
+          </div>
+          <div className="member-workflow-steps" aria-label="Recommended farmer setup workflow">
+            {setupSteps.map((step, index) => (
+              <article key={step.title} className={step.complete ? "is-complete" : ""}>
+                <div className="member-workflow-index">{step.complete ? "OK" : index + 1}</div>
+                <div>
+                  <h2>{step.title}</h2>
+                  <p>{step.helper}</p>
+                  <Link to={step.href} state={step.state}>{step.action}</Link>
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+      )}
+
+      <section className="member-quick-card">
+        <div className="member-card-heading">
+          <span>Quick actions</span>
+          <strong>{flockCount > 0 ? `Keep ${selectedFlockLabel} up to date` : "Complete the missing setup first"}</strong>
+        </div>
+        <div className="member-quick-grid">
+          {quickActions.map((item) => (
+            <article key={item.title}>
+              <h2>{item.title}</h2>
+              <p>{item.helper}</p>
+              <Link to={item.href} state={item.state}>{item.action}</Link>
             </article>
           ))}
         </div>
@@ -446,19 +767,23 @@ const Member = () => {
               <strong>{flockCount}</strong>
             </div>
             <div>
+              <span>Daily entries</span>
+              <strong>{recordStatus.dailyCount}</strong>
+            </div>
+            <div>
               <span>Purchases</span>
-              <strong>{recordStatus.hasPurchases ? "Yes" : "No"}</strong>
+              <strong>{recordStatus.purchaseCount}</strong>
             </div>
             <div>
               <span>Sales</span>
-              <strong>{recordStatus.hasSales ? "Yes" : "No"}</strong>
+              <strong>{recordStatus.salesCount}</strong>
             </div>
           </div>
           <div className="member-record-status" role="status">
-            {recordStatus.loading && "Checking saved purchases and sales..."}
+            {recordStatus.loading && "Checking saved daily data, purchases, and sales..."}
             {!recordStatus.loading && recordStatus.error && recordStatus.error}
             {!recordStatus.loading && !recordStatus.error && selectedFlock !== "0" && (
-              "Workflow status is based on the selected flock."
+              `Latest daily entry: ${formatDashboardDate(recordStatus.lastDailyDate)}.`
             )}
           </div>
         </aside>
