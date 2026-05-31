@@ -5,7 +5,7 @@ import { useState, useEffect } from "react";
 import Accordion from 'react-bootstrap/Accordion'
 import axios from 'axios';
 import Modal from 'react-bootstrap/Modal';
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 const AddPurchase = () => {
     let [loading, setLoading] = useState(false);
@@ -41,7 +41,10 @@ const AddPurchase = () => {
     let [item_typeerr, setItem_typeerr] = useState('');
     let [quantityerr, setQuantityerr] = useState('');
     let [flockerr, setFlockerr] = useState('');
+    let [typeerr, setTypeerr] = useState('');
     let navigate = useNavigate()
+    const hasFarmPrerequisite = farms.some((farm) => String(farm.public_id) !== "0");
+    const hasFlockOptions = flocks.some((item) => String(item.flock_public_id) !== "0");
 
     useEffect(() => {
         let url = `${apiPath}farm/`;
@@ -62,6 +65,9 @@ const AddPurchase = () => {
         // U: OLD: e.target.value === 0 compared a string to a number.
         if (e.target.value === "0") {
             //setFarm_public_iderr('Please select farm');
+            setShowFlocks(0);
+            setShowForm(0);
+            setFlocks([]);
         } else {
             let url = `${apiPath}flocks/${e.target.value}/`;
             axios.get(url, getAuthConfig()).then((res) => {
@@ -81,6 +87,7 @@ const AddPurchase = () => {
     let changeFlocks = (e) => {
         if (e.target.value === "0") {
             setFlockerr('Flock is not valid');
+            setAddData({ ...addData, flock_public_id: "0" });
             setShowForm(0);
         } else {
             setFlockerr('');
@@ -92,6 +99,18 @@ const AddPurchase = () => {
         e.preventDefault();
         setLoading(false);
         let error = 0;
+        if (addData.flock_public_id === "0" || addData.flock_public_id === 0 || addData.flock_public_id === null) {
+            setFlockerr('Please select a flock before adding a purchase');
+            error = 1;
+        } else {
+            setFlockerr('');
+        }
+        if (showInputArea === "0" || addData.type === '') {
+            setTypeerr('Please select purchase type');
+            error = 1;
+        } else {
+            setTypeerr('');
+        }
 
         if (showInputArea === 'F') {
             if (addData.cost < 0 || addData.cost === null) { setCosterr('This fields is not valid'); error = 1; } else { setCosterr(''); }
@@ -174,6 +193,7 @@ const AddPurchase = () => {
     }
     const showInputs = (e) => {
         setShowInputArea(e.target.value);
+        setTypeerr('');
         //console.log(addData);
         if (e.target.value === 'F') {
             setAddData({ ...addData, type: "Feed", quantity: 0 });
@@ -271,6 +291,13 @@ const AddPurchase = () => {
                                 <div className={contentArea}>
                                     <div className='gridmargin'>
                                         {(err !== '') && <Alert color="danger">{err}</Alert>}
+                                        {!hasFarmPrerequisite && (
+                                            <div className="form-prerequisite-card">
+                                                <span>Farm required</span>
+                                                <p>Add a farm and flock first. Purchases are saved against a flock so reports and Farmer AI can calculate costs correctly.</p>
+                                                <Link to="/addfarm">Add farm first</Link>
+                                            </div>
+                                        )}
                                         <Form onSubmit={save}>
                                             <Label for="farmselect">Select Farm</Label>
                                             <FormGroup>
@@ -305,6 +332,13 @@ const AddPurchase = () => {
                                                     <small className="text-danger">{flockerr}</small>
                                                 </FormGroup>
                                                 : null}
+                                            {(showFlocks === 1 && !hasFlockOptions) ?
+                                                <div className="form-prerequisite-card">
+                                                    <span>Flock required</span>
+                                                    <p>This farm does not have a flock yet. Add a flock before entering feed, medicine, equipment, labour, or other purchases.</p>
+                                                    <Link to="/addflock">Add flock</Link>
+                                                </div>
+                                                : null}
                                             {(showForm === 1) ?
                                                 <>
                                                     <Accordion defaultActiveKey="0" className="mb-3">
@@ -328,8 +362,15 @@ const AddPurchase = () => {
                                                                             <option value="L">Labour</option>
                                                                             <option value="O">Other</option>
                                                                         </Input>
+                                                                        <small className="text-danger">{typeerr}</small>
                                                                     </Col>
                                                                 </Row>
+                                                                {showInputArea === "0" && (
+                                                                    <div className="form-helper-panel mt-3">
+                                                                        <strong>Select purchase type</strong>
+                                                                        <p>Choose feed, medicine, vaccination, equipment, labour, or other. The form will show only the fields required for that type.</p>
+                                                                    </div>
+                                                                )}
 
                                                                 {/* Feed Data */}
                                                                 {

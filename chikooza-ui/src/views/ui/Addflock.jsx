@@ -4,7 +4,7 @@ import { contentArea, apiPath, getAuthConfig, handleUnauthorized } from "../../C
 import { useState, useEffect } from "react";
 import axios from 'axios';
 import Modal from 'react-bootstrap/Modal';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import moment from "moment";
 
 const FLOCK_DRAFT_KEY = "chikooza-add-flock-draft";
@@ -109,6 +109,8 @@ const AddFlock = () => {
         localStorage.setItem(FLOCK_DRAFT_KEY, JSON.stringify(addData));
     }, [addData]);
 
+    const hasFarmPrerequisite = farms.some((farm) => String(farm.public_id) !== "0");
+
     useEffect(() => {
         if (String(addData.integration) === "1") {
             setIntegration(1);
@@ -120,30 +122,18 @@ const AddFlock = () => {
     const save = (e) => {
         e.preventDefault();
         setLoading(false);
-        let error = 0;
-        if (addData.farm_public_id === 0 || addData.farm_public_id === "0" || addData.farm_public_id === null) { setFarm_public_iderr('Please select farm'); error = 1; } else { setFarm_public_iderr(''); }
-        if (addData.hatch_date.trim() === '') { setHatch_dateerr('Hatch date is required'); error = 1; } else { setHatch_dateerr(''); }
-        if (addData.flock_name.trim() === '') { setFlock_nameerr('Flock name is required'); error = 1; } else { setFlock_nameerr(''); }
-        if (Number(addData.flock_size) <= 0 || addData.flock_size === null) { setFlock_sizeerr('Flock size is required'); error = 1; } else { setFlock_sizeerr(''); }
-        if (Number(addData.actual_birds) <= 0 || addData.actual_birds === null) { setActual_birdserr('Flock Actual birds count is required'); error = 1; } else { setActual_birdserr(''); }
-        if (addData.breed_public_id === 0 || addData.breed_public_id === "0" || addData.breed_public_id === null) { setBreed_public_iderr('Please select Breed'); error = 1; } else { setBreed_public_iderr(''); }
-        if (addData.hatchery_name.trim() === '') { setHatchery_nameerr('Hatchery name is required'); error = 1; } else { setHatchery_nameerr(''); }
-        if (Number(addData.chick_weight) <= 0 || addData.flock_size === null) { setChick_weighterr('Day one weight is required'); error = 1; } else { setChick_weighterr(''); }
-        if (addData.ec_shed === 0 || addData.ec_shed === "0" || addData.ec_shed === null) { setEc_shederr('Please select ec shed'); error = 1; } else { setEc_shederr(''); }
-        if (addData.feed_sys === 0 || addData.feed_sys === "0" || addData.feed_sys === null) { setFeed_syserr('Please select feed system'); error = 1; } else { setFeed_syserr(''); }
-        if (addData.drinking_sys === 0 || addData.drinking_sys === "0" || addData.drinking_sys === null) { setDrinking_syserr('Please select Drinking System'); error = 1; } else { setDrinking_syserr(''); }
-        if (addData.integration === 0 || addData.integration === "0" || addData.integration === null) {
-            setIntegrationerr('Please select integration'); error = 1;
-            if (Number(addData.chick_cost) <= 0 || addData.chick_cost === null) { setChick_costerr('Chicks Cost is required'); error = 1; } else { setChick_costerr(''); }
-        } else {
-            setIntegrationerr('');
-            if (String(addData.integration) === "1") {
-                if (addData.integrator_public_id === 0 || addData.integrator_public_id === "0" || addData.integrator_public_id === null) { setIntegrator_public_iderr('Please select Drinking System'); error = 1; } else { setIntegrator_public_iderr(''); }
-            } else if (String(addData.integration) === "2") {
-                if (Number(addData.chick_cost) <= 0 || addData.chick_cost === null) { setChick_costerr('Chicks Cost is required'); error = 1; } else { setChick_costerr(''); }
-            }
+        const validations = [
+            validateFarmStep(),
+            validateBatchStep(),
+            validateSourceStep(),
+            validateSystemsStep(),
+        ];
+        const firstInvalidStep = validations.findIndex((isValid) => !isValid);
+        if (firstInvalidStep !== -1) {
+            setFlockStep(firstInvalidStep);
+            return;
         }
-        if (error === 0) {
+        if (validations.every(Boolean)) {
             setLoading(true)
             // if (addData.integration === 1) {
             //     addData.integration = true;
@@ -266,10 +256,59 @@ const AddFlock = () => {
         navigate('/member');
     }
     const goNextStep = () => {
+        // U: NEW: keep the flock wizard sequential so farmers do not save half-filled batches.
+        const validators = [validateFarmStep, validateBatchStep, validateSourceStep, validateSystemsStep];
+        if (validators[flockStep] && !validators[flockStep]()) {
+            return;
+        }
         setFlockStep((currentStep) => Math.min(currentStep + 1, flockSteps.length - 1));
     };
     const goPreviousStep = () => {
         setFlockStep((currentStep) => Math.max(currentStep - 1, 0));
+    };
+    const validateFarmStep = () => {
+        if (!hasFarmPrerequisite) {
+            setFarm_public_iderr('Add a farm first, then create a flock.');
+            return false;
+        }
+        if (addData.farm_public_id === 0 || addData.farm_public_id === "0" || addData.farm_public_id === null) { setFarm_public_iderr('Please select farm'); return false; }
+        setFarm_public_iderr('');
+        return true;
+    };
+    const validateBatchStep = () => {
+        let valid = true;
+        if (addData.hatch_date.trim() === '') { setHatch_dateerr('Hatch date is required'); valid = false; } else { setHatch_dateerr(''); }
+        if (addData.flock_name.trim() === '') { setFlock_nameerr('Flock name is required'); valid = false; } else { setFlock_nameerr(''); }
+        if (Number(addData.flock_size) <= 0 || addData.flock_size === null) { setFlock_sizeerr('Flock size is required'); valid = false; } else { setFlock_sizeerr(''); }
+        if (Number(addData.actual_birds) <= 0 || addData.actual_birds === null) { setActual_birdserr('Actual bird count is required'); valid = false; } else { setActual_birdserr(''); }
+        if (Number(addData.actual_birds) > Number(addData.flock_size)) { setActual_birdserr('Actual birds cannot be more than flock size'); valid = false; }
+        return valid;
+    };
+    const validateSourceStep = () => {
+        let valid = true;
+        if (addData.breed_public_id === 0 || addData.breed_public_id === "0" || addData.breed_public_id === null) { setBreed_public_iderr('Please select breed'); valid = false; } else { setBreed_public_iderr(''); }
+        if (addData.hatchery_name.trim() === '') { setHatchery_nameerr('Hatchery name is required'); valid = false; } else { setHatchery_nameerr(''); }
+        if (addData.integration === 0 || addData.integration === "0" || addData.integration === null) {
+            setIntegrationerr('Please select integration'); valid = false;
+        } else {
+            setIntegrationerr('');
+            if (String(addData.integration) === "1") {
+                if (addData.integrator_public_id === 0 || addData.integrator_public_id === "0" || addData.integrator_public_id === null) { setIntegrator_public_iderr('Please select integration company'); valid = false; } else { setIntegrator_public_iderr(''); }
+                setChick_costerr('');
+            } else if (String(addData.integration) === "2") {
+                if (Number(addData.chick_cost) <= 0 || addData.chick_cost === null) { setChick_costerr('Chicks cost is required'); valid = false; } else { setChick_costerr(''); }
+                setIntegrator_public_iderr('');
+            }
+        }
+        return valid;
+    };
+    const validateSystemsStep = () => {
+        let valid = true;
+        if (Number(addData.chick_weight) <= 0 || addData.chick_weight === null) { setChick_weighterr('Day one weight is required'); valid = false; } else { setChick_weighterr(''); }
+        if (addData.ec_shed === 0 || addData.ec_shed === "0" || addData.ec_shed === null) { setEc_shederr('Please select EC shed'); valid = false; } else { setEc_shederr(''); }
+        if (addData.feed_sys === 0 || addData.feed_sys === "0" || addData.feed_sys === null) { setFeed_syserr('Please select feed system'); valid = false; } else { setFeed_syserr(''); }
+        if (addData.drinking_sys === 0 || addData.drinking_sys === "0" || addData.drinking_sys === null) { setDrinking_syserr('Please select drinking system'); valid = false; } else { setDrinking_syserr(''); }
+        return valid;
     };
     return (
         <Row>
@@ -296,6 +335,13 @@ const AddFlock = () => {
                                 <div className={contentArea}>
                                     <div className='gridmargin'>
                                         {(err !== '') && <Alert color="danger">{err}</Alert>}
+                                        {!hasFarmPrerequisite && (
+                                            <div className="form-prerequisite-card">
+                                                <span>Farm required</span>
+                                                <p>Create a farm before adding a flock. Flocks, daily data, purchases, sales, reports, and Farmer AI answers all depend on a farm.</p>
+                                                <Link to="/addfarm">Add farm first</Link>
+                                            </div>
+                                        )}
                                         <Form onSubmit={save}>
                                             <div className="form-stepper" aria-label="Flock setup steps">
                                                 {flockSteps.map((step, index) => (
@@ -488,7 +534,7 @@ const AddFlock = () => {
                                                     <Button className="btn" color="secondary" type="button" onClick={goPreviousStep}>Back</Button>
                                                 )}
                                                 {flockStep < flockSteps.length - 1 && (
-                                                    <Button className="btn" color="danger" type="button" onClick={goNextStep}>Next</Button>
+                                                    <Button className="btn" color="danger" type="button" onClick={goNextStep} disabled={!hasFarmPrerequisite && flockStep === 0}>Next</Button>
                                                 )}
                                                 {flockStep === flockSteps.length - 1 && (
                                                     loading ?

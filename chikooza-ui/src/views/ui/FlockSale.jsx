@@ -8,7 +8,7 @@ import Accordion from 'react-bootstrap/Accordion';
 // U: NEW: use the existing moment dependency directly to avoid the abandoned React wrapper.
 import Modal from 'react-bootstrap/Modal';
 import Spinner from 'react-bootstrap/Spinner';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import moment from "moment";
 
 const getFlockAgeInDays = (hatchDate) => {
@@ -46,6 +46,8 @@ const FlockSale = () => {
     let [submitError, setSubmitError] = useState('');
     let [loading, setLoading] = useState(false);
     const navigate = useNavigate();
+    const hasFarmPrerequisite = farms.some((farm) => String(farm.public_id) !== "0");
+    const hasFlockOptions = flocks.some((item) => String(item.flock_public_id) !== "0");
 
     function successMsg() {
         setShow(false);
@@ -53,13 +55,18 @@ const FlockSale = () => {
     const save = (e) => {
         setLoading(false)
         e.preventDefault();
-        let error = { status: 0, date: '', sellcount: '', selltwt: '', sellrate: '', sellamount: '' };
-        if (data.date === null || data.date === '') { error.date = 'Date is required.'; error.status = 1 } else { error.date = '' }
-        if (data.sellcount === null || Number(data.sellcount) < 0 || data.sellcount === '') { error.sellcount = 'Lifting Count is required.'; error.status = 1 } else { error.sellcount = '' }
-        if (data.selltwt === null || Number(data.selltwt) < 0 || data.selltwt === '') { error.selltwt = 'Total weight is required.'; error.status = 1 } else { error.selltwt = '' }
-        if (data.sellrate === null || Number(data.sellrate) < 0 || data.sellrate === '') { error.sellrate = 'Rate is required.'; error.status = 1 } else { error.sellrate = '' }
-        setError({ ...error, date: error.date, sellcount: error.sellcount, selltwt: error.selltwt, sellrate: error.sellrate, sellamount: error.sellamount });
-        if (error.status === 0) {
+        let validationError = { status: 0, date: '', sellcount: '', selltwt: '', sellrate: '', sellamount: '' };
+        const liftingCount = Number(data.sellcount);
+        const availableBirds = Number(totalChickCount || 0);
+        if (!data.flock) { validationError.sellcount = 'Please select flock first.'; validationError.status = 1 }
+        if (!data.selType || data.selType === "0") { validationError.sellcount = 'Please select sale type.'; validationError.status = 1 }
+        if (data.date === null || data.date === '') { validationError.date = 'Date is required.'; validationError.status = 1 } else if (moment(data.date).isAfter(moment(), "day")) { validationError.date = 'Sale date cannot be in the future.'; validationError.status = 1 } else { validationError.date = '' }
+        if (data.sellcount === null || liftingCount <= 0 || data.sellcount === '') { validationError.sellcount = 'Lifting count must be greater than 0.'; validationError.status = 1 } else if (availableBirds > 0 && liftingCount > availableBirds) { validationError.sellcount = `Lifting count cannot exceed current birds (${availableBirds}).`; validationError.status = 1 } else { validationError.sellcount = '' }
+        if (data.selltwt === null || Number(data.selltwt) <= 0 || data.selltwt === '') { validationError.selltwt = 'Total weight must be greater than 0.'; validationError.status = 1 } else { validationError.selltwt = '' }
+        if (data.sellrate === null || Number(data.sellrate) <= 0 || data.sellrate === '') { validationError.sellrate = 'Rate must be greater than 0.'; validationError.status = 1 } else { validationError.sellrate = '' }
+        if (error.phone || error.email) { validationError.status = 1 }
+        setError({ ...error, date: validationError.date, sellcount: validationError.sellcount, selltwt: validationError.selltwt, sellrate: validationError.sellrate, sellamount: validationError.sellamount });
+        if (validationError.status === 0) {
             setLoading(true)
             setSubmitError('');
             let saleData = {
@@ -164,8 +171,8 @@ const FlockSale = () => {
             // U: Replaced shared config mutation with per-request auth headers from getAuthConfig().
             // config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
             axios.get(url, getAuthConfig()).then((res) => {
-                if (res.data.results.total_records === 0) {
-                    setFlocks([{ flock_public_id: 0, flock_name: 'No flock available' }]);
+            if (res.data.results.total_records === 0) {
+                setFlocks([{ flock_public_id: 0, flock_name: 'No flock available' }]);
                 } else {
                     //setData({...data,farm:e.target.value,flock:null,seltype:null});
                     setFlocks(res.data.results.flock_list);
@@ -493,7 +500,14 @@ const FlockSale = () => {
                             <Col sm="12" md={{ offset: 2, size: 8 }}>
                                 <div className={contentArea}>
                                     <div className='gridmargin'>
-                                        <Form onSubmit={save}>
+                                            <Form onSubmit={save}>
+                                            {!hasFarmPrerequisite && (
+                                                <div className="form-prerequisite-card">
+                                                    <span>Farm required</span>
+                                                    <p>Add a farm and flock before recording sales. Sales are linked to a flock for profit/loss reports.</p>
+                                                    <Link to="/addfarm">Add farm first</Link>
+                                                </div>
+                                            )}
                                             <FormGroup>
                                                 <Label for="farmselect">Select Farm</Label>
                                                 <div className="input-group">
@@ -527,6 +541,13 @@ const FlockSale = () => {
                                                     </div>
                                                 </FormGroup>
                                             }
+                                            {showFlocks && !hasFlockOptions && (
+                                                <div className="form-prerequisite-card">
+                                                    <span>Flock required</span>
+                                                    <p>This farm does not have a flock yet. Add a flock before recording partial or final lifting sales.</p>
+                                                    <Link to="/addflock">Add flock</Link>
+                                                </div>
+                                            )}
                                             {
                                                 showFlockSale &&
                                                 <FormGroup>
@@ -540,6 +561,13 @@ const FlockSale = () => {
                                                     </div>
                                                 </FormGroup>
                                             }
+                                            {showFlockSale && Number(totalChickCount || 0) <= 0 && (
+                                                <div className="form-prerequisite-card">
+                                                    <span>Current birds missing</span>
+                                                    <p>The selected flock has no current bird count. Add daily data first so sales cannot exceed available birds.</p>
+                                                    <Link to="/flockdailydata">Add daily data</Link>
+                                                </div>
+                                            )}
                                             {
                                                 showButton &&
                                                 <div className="button-group mt-2">
@@ -584,7 +612,7 @@ const FlockSale = () => {
                                                                             } else {
                                                                                 setError({ ...error, date: '' }); setData({ ...data, date: e.target.value });
                                                                             }
-                                                                        }} name="date" placeholder="Sale Date" min={currentDate} type="date" className="form-control" aria-label="flockname" aria-describedby="basic-addon1" />
+                                                                        }} name="date" placeholder="Sale Date" min={flock.hatch_date || ""} max={currentDate} type="date" className="form-control" aria-label="flockname" aria-describedby="basic-addon1" />
                                                                         <small className="text-danger">{error.date}</small>
                                                                     </Col>
                                                                     {data.selType === "partial_lifting" ?
@@ -742,7 +770,7 @@ const FlockSale = () => {
                                                             </Button>
                                                             :
                                                             <Button className="btn" color="danger" type="submit" >Save</Button>
-                                                        }                                                        <Button color="warning" type="submit" className="text-black" onClick={closeAll} >Cancel</Button>
+                                                        }                                                        <Button color="warning" type="button" className="text-black" onClick={closeAll} >Cancel</Button>
                                                     </div>
                                                 </>
                                             }

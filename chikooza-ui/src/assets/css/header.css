@@ -958,6 +958,57 @@ input[type=number]::-webkit-inner-spin-button,
   margin-top: 1rem;
 }
 
+.form-prerequisite-card,
+.form-helper-panel {
+  background: #fff8f4;
+  border: 1px solid #f0ddd8;
+  border-radius: 0.95rem;
+  margin-bottom: 1rem;
+  padding: 1rem;
+}
+
+.form-prerequisite-card span {
+  color: #9f201d;
+  display: block;
+  font-size: 0.78rem;
+  font-weight: 850;
+  letter-spacing: 0.09em;
+  margin-bottom: 0.35rem;
+  text-transform: uppercase;
+}
+
+.form-prerequisite-card p,
+.form-helper-panel p {
+  color: #6d514c;
+  line-height: 1.6;
+  margin: 0 0 0.85rem;
+}
+
+.form-helper-panel strong {
+  color: #231615;
+  display: block;
+  font-size: 1rem;
+  margin-bottom: 0.35rem;
+}
+
+.form-prerequisite-card a {
+  align-items: center;
+  background: #b32620;
+  border-radius: 999px;
+  color: #ffffff;
+  display: inline-flex;
+  font-size: 0.86rem;
+  font-weight: 850;
+  justify-content: center;
+  padding: 0.58rem 0.9rem;
+  text-decoration: none;
+}
+
+.form-prerequisite-card a:hover {
+  background: #8f1f1b;
+  color: #ffffff;
+}
+
 .member-dashboard {
   display: grid;
   gap: clamp(1rem, 2vw, 1.4rem);

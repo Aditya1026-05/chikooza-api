@@ -90,15 +90,17 @@ const AddFarm = () => {
   let save = (e) => {
     e.preventDefault();
     setLoading(false);
-    let validationError = 0;
-    if (addData.country === 0 || addData.country === "0") { setCountryError('Please select country'); validationError = 1; } else { setCountryError(''); }
-    if (addData.state === 0 || addData.state === "0") { setStateError('Please select state'); validationError = 1; } else { setStateError(''); }
-    if (addData.farmname.trim() === '') { setFarmnameError('Please enter name'); validationError = 1; } else { setFarmnameError(''); }
-    if (addData.address.trim() === '') { setAddressError('Please enter address'); validationError = 1; } else { setAddressError(''); }
-    if (addData.pincode.trim() === '' || Number(addData.pincode.trim()) < 1) { setPincodeError('Please enter pincode'); validationError = 1; } else { setPincodeError(''); }
-    if (addData.numberofsheds.trim() === '' || Number(addData.numberofsheds.trim()) < 1) { setNumberofshedsError('Please enter no of sheds'); validationError = 1; } else { setNumberofshedsError(''); }
-    if (addData.cityorvillage.trim() === '') { setCityorvillageError('Please enter city/Village name'); validationError = 1; } else { setCityorvillageError(''); }
-    if (validationError === 0) {
+    const identityValid = validateFarmIdentity();
+    const locationValid = validateFarmLocation();
+    if (!identityValid) {
+      setFarmStep(0);
+      return;
+    }
+    if (!locationValid) {
+      setFarmStep(1);
+      return;
+    }
+    if (identityValid && locationValid) {
       setLoading(true);
       let farm = {
         name: addData.farmname,
@@ -161,10 +163,32 @@ const AddFarm = () => {
     navigate('/member')
   }
   const goNextStep = () => {
+    // U: NEW: do not let users reach review/save until the current farm step is valid.
+    if (farmStep === 0 && !validateFarmIdentity()) {
+      return;
+    }
+    if (farmStep === 1 && !validateFarmLocation()) {
+      return;
+    }
     setFarmStep((currentStep) => Math.min(currentStep + 1, farmSteps.length - 1));
   };
   const goPreviousStep = () => {
     setFarmStep((currentStep) => Math.max(currentStep - 1, 0));
+  };
+  const validateFarmIdentity = () => {
+    let valid = true;
+    if (addData.farmname.trim() === '') { setFarmnameError('Please enter farm name'); valid = false; } else { setFarmnameError(''); }
+    if (addData.numberofsheds.trim() === '' || Number(addData.numberofsheds.trim()) < 1) { setNumberofshedsError('Enter at least 1 shed'); valid = false; } else { setNumberofshedsError(''); }
+    return valid;
+  };
+  const validateFarmLocation = () => {
+    let valid = true;
+    if (addData.country === 0 || addData.country === "0") { setCountryError('Please select country'); valid = false; } else { setCountryError(''); }
+    if (addData.state === 0 || addData.state === "0") { setStateError('Please select state'); valid = false; } else { setStateError(''); }
+    if (addData.address.trim() === '') { setAddressError('Please enter address'); valid = false; } else { setAddressError(''); }
+    if (addData.cityorvillage.trim() === '') { setCityorvillageError('Please enter city or village'); valid = false; } else { setCityorvillageError(''); }
+    if (!/^[0-9]{4,10}$/.test(addData.pincode.trim())) { setPincodeError('Enter a valid numeric pincode'); valid = false; } else { setPincodeError(''); }
+    return valid;
   };
   return (
     <Row>

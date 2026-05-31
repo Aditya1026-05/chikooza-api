@@ -88,6 +88,8 @@ const ManageFlock = () => {
     let [modalShow, setModalShow] = useState(false);
     let [week, setWeek] = useState(null);
     let [days, setDays] = useState([]);
+    const hasFarmPrerequisite = farms.some((farm) => String(farm.public_id) !== "0");
+    const hasFlockOptions = flocks.some((item) => String(item.flock_public_id) !== "0");
     let handleShow = (e) => {
         // U: OLD: a long loose-equality if/else block manually listed every week.
         const selectedWeek = Number(e.target.value);
@@ -174,6 +176,13 @@ const ManageFlock = () => {
                             <Col sm="12" md={{ offset: 2, size: 8 }}>
                                 <div className={contentArea}>
                                     <div className='gridmargin'>
+                                        {!hasFarmPrerequisite && (
+                                            <div className="form-prerequisite-card">
+                                                <span>Farm required</span>
+                                                <p>Add a farm and flock before entering daily data. Daily data powers mortality, FCR, reports, and Farmer AI answers.</p>
+                                                <Link to="/addfarm">Add farm first</Link>
+                                            </div>
+                                        )}
                                         <Form onSubmit={save}>
                                             <FormGroup>
                                                 <Label for="farmselect">Select Farm</Label>
@@ -208,9 +217,20 @@ const ManageFlock = () => {
                                                     </div>
                                                 </FormGroup>
                                             }
+                                            {showFlock && !hasFlockOptions && (
+                                                <div className="form-prerequisite-card">
+                                                    <span>Flock required</span>
+                                                    <p>This farm does not have a flock yet. Create a flock before recording daily mortality, bird count, feed, weight, and FCR.</p>
+                                                    <Link to="/addflock">Add flock</Link>
+                                                </div>
+                                            )}
                                             {
                                                 showForm &&
                                                 <>
+                                                    <div className="form-helper-panel">
+                                                        <strong>Daily data entry order</strong>
+                                                        <p>Only the next open day should be filled. Completed days are green, the next available day is highlighted, and future days stay disabled.</p>
+                                                    </div>
                                                     <div>
                                                         <MyVerticallyCenteredModal show={modalShow} onHide={() => setModalShow(false)} />
                                                         <Button className="flockdate" value="1" onClick={handleShow}>
