@@ -883,41 +883,20 @@ const FlockSale = () => {
                                                     )}
                                                     {showFlockSale && (
                                                         <>
-                                                            <div className="record-review-toolbar">
+                                                            <div className="record-review-toolbar record-review-toolbar--compact">
                                                                 <div>
-                                                                    <span>Saved sales</span>
+                                                                    <span>Existing sales</span>
                                                                     <strong>{flock.flock_name || "Selected flock"}</strong>
-                                                                    <p>{existingSales.length} sale{existingSales.length === 1 ? "" : "s"} saved, Rs. {saleReviewTotal.toFixed(2)} total revenue.</p>
+                                                                    <p>{saleReviewLoading ? "Checking previous sales..." : `${existingSales.length} sale${existingSales.length === 1 ? "" : "s"} saved, Rs. ${saleReviewTotal.toFixed(2)} total revenue. Continue below to add a new sale.`}</p>
                                                                 </div>
-                                                                <Button color="danger" outline type="button" onClick={() => navigate("/viewsale", { state: { farmPublicId: data.farm, flockPublicId: data.flock } })}>Manage sales</Button>
+                                                                {existingSales.length > 0 && (
+                                                                    <Button color="danger" outline type="button" onClick={() => navigate("/viewsale", { state: { farmPublicId: data.farm, flockPublicId: data.flock } })}>Review existing</Button>
+                                                                )}
                                                             </div>
-                                                            {saleReviewLoading ? (
-                                                                <div className="record-review-empty">
-                                                                    <strong>Loading saved sales...</strong>
-                                                                    <p>Checking existing sale records for this flock.</p>
-                                                                </div>
-                                                            ) : existingSales.length > 0 ? (
-                                                                <div className="record-review-grid" aria-label="Saved sales">
-                                                                    {existingSales.slice(0, 6).map((item) => (
-                                                                        <article key={item.public_id}>
-                                                                            <div>
-                                                                                <span>{getSaleTypeLabel(item.sales_type)}</span>
-                                                                                <strong>Rs. {Number(item.cost || 0).toFixed(2)}</strong>
-                                                                                <p>{item.date || "Date not added"}</p>
-                                                                            </div>
-                                                                            <dl>
-                                                                                <div><dt>Birds sold</dt><dd>{item.lifting_count || 0}</dd></div>
-                                                                                <div><dt>Total weight</dt><dd>{item.total_weight || 0} kg</dd></div>
-                                                                                <div><dt>Rate</dt><dd>Rs. {item.rate_per_kg || 0}/kg</dd></div>
-                                                                            </dl>
-                                                                            <Button color="danger" outline type="button" onClick={() => navigate('/editsale', { state: { item } })}>Review / edit</Button>
-                                                                        </article>
-                                                                    ))}
-                                                                </div>
-                                                            ) : (
-                                                                <div className="record-review-empty">
-                                                                    <strong>No sales saved for this flock yet.</strong>
-                                                                    <p>Continue this wizard when birds are sold. Existing sales will appear here for quick review.</p>
+                                                            {!saleReviewLoading && existingSales.length > 0 && (
+                                                                <div className="record-summary-strip">
+                                                                    <strong>Recent:</strong> {existingSales.slice(0, 3).map((item) => `${getSaleTypeLabel(item.sales_type)} Rs. ${Number(item.cost || 0).toFixed(0)}`).join(", ")}
+                                                                    {existingSales.length > 3 ? `, +${existingSales.length - 3} more` : ""}
                                                                 </div>
                                                             )}
                                                         </>

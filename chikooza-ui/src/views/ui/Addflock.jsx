@@ -411,41 +411,25 @@ const AddFlock = () => {
                                                     </FormGroup>
                                                     {hasSelectedFarm && (
                                                         <>
-                                                            <div className="record-review-toolbar">
+                                                            <div className="record-review-toolbar record-review-toolbar--compact">
                                                                 <div>
-                                                                    <span>Saved flocks</span>
+                                                                    <span>Existing flocks</span>
                                                                     <strong>{selectedFarmRecord?.name || "Selected farm"}</strong>
-                                                                    <p>{existingFlocks.length} flock{existingFlocks.length === 1 ? "" : "s"} already saved here. Review them before adding another batch.</p>
+                                                                    <p>{flockReviewLoading ? "Checking saved flocks..." : `${existingFlocks.length} flock${existingFlocks.length === 1 ? "" : "s"} already saved. Continue below only if you are adding a new batch.`}</p>
                                                                 </div>
-                                                                <Button color="danger" outline type="button" onClick={() => navigate("/manageflock", { state: { farmPublicId: addData.farm_public_id } })}>Manage flocks</Button>
+                                                                {existingFlocks.length > 0 && (
+                                                                    <Button color="danger" outline type="button" onClick={() => navigate("/manageflock", { state: { farmPublicId: addData.farm_public_id } })}>Review existing</Button>
+                                                                )}
                                                             </div>
-                                                            {flockReviewLoading ? (
-                                                                <div className="record-review-empty">
-                                                                    <strong>Loading saved flocks...</strong>
-                                                                    <p>Checking batches already linked to this farm.</p>
-                                                                </div>
-                                                            ) : existingFlocks.length > 0 ? (
-                                                                <div className="record-review-grid" aria-label="Existing flocks for selected farm">
-                                                                    {existingFlocks.slice(0, 6).map((item) => (
-                                                                        <article key={item.flock_public_id}>
-                                                                            <div>
-                                                                                <span>Flock</span>
-                                                                                <strong>{item.flock_name}</strong>
-                                                                                <p>{item.farm_name ? `Farm: ${item.farm_name}` : "Selected farm"}</p>
-                                                                            </div>
-                                                                            <dl>
-                                                                                <div><dt>Breed</dt><dd>{item.chick_breed || "Not added"}</dd></div>
-                                                                                <div><dt>Hatch date</dt><dd>{item.hatch_date || "Not added"}</dd></div>
-                                                                                <div><dt>Birds</dt><dd>{item.actual_birds ?? "Not added"} / {item.flock_size ?? "Not added"}</dd></div>
-                                                                            </dl>
-                                                                            <Button color="danger" outline type="button" onClick={() => navigate("/manageflock", { state: { farmPublicId: addData.farm_public_id, flockPublicId: item.flock_public_id } })}>Review / edit</Button>
-                                                                        </article>
-                                                                    ))}
-                                                                </div>
-                                                            ) : (
-                                                                <div className="record-review-empty">
-                                                                    <strong>No flock saved under this farm yet.</strong>
-                                                                    <p>Continue this form to create the first flock for daily data, purchases, sales, reports, and Farmer AI.</p>
+                                                            {!flockReviewLoading && existingFlocks.length > 0 && (
+                                                                <div className="record-summary-strip">
+                                                                    <strong>Latest saved:</strong> {existingFlocks[0]?.flock_name || "Existing flock"}
+                                                                    <div className="record-summary-chips">
+                                                                        {existingFlocks.slice(0, 3).map((item) => (
+                                                                            <span key={item.flock_public_id}>{item.flock_name}</span>
+                                                                        ))}
+                                                                        {existingFlocks.length > 3 && <span>+{existingFlocks.length - 3} more</span>}
+                                                                    </div>
                                                                 </div>
                                                             )}
                                                         </>

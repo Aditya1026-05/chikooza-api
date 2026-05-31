@@ -317,15 +317,11 @@ const ManageFlock = () => {
                                             {
                                                 showForm && selectorStep === 1 &&
                                                 <>
-                                                    <div className="form-helper-panel">
-                                                        <strong>Daily data entry order</strong>
-                                                        <p>Only the next open day should be filled. Completed days are green, the next available day is highlighted, and future days stay disabled.</p>
-                                                    </div>
-                                                    <div className="record-review-toolbar">
+                                                    <div className="record-review-toolbar record-review-toolbar--compact">
                                                         <div>
-                                                            <span>Daily data review</span>
+                                                            <span>Daily data</span>
                                                             <strong>{flock.flock_name || "Selected flock"}</strong>
-                                                            <p>{dailyRecords.length} day{dailyRecords.length === 1 ? "" : "s"} completed. {latestDailyRecord ? `Latest entry: ${latestDailyRecord.date}.` : "No daily entry saved yet."}</p>
+                                                            <p>{dailyRecords.length} day{dailyRecords.length === 1 ? "" : "s"} completed. Select a week below or record the next open day.</p>
                                                         </div>
                                                         {nextDailyDate && (
                                                             <Button tag={Link} to={`/daydata/${flock.farm_public_id}/${flock.flock_public_id}/${nextDailyDate}`} color="danger" type="button">
@@ -333,32 +329,14 @@ const ManageFlock = () => {
                                                             </Button>
                                                         )}
                                                     </div>
-                                                    {recentDailyRecords.length > 0 ? (
-                                                        <div className="record-review-grid" aria-label="Recent daily data records">
-                                                            {recentDailyRecords.map((item, index) => (
-                                                                <article key={item.public_id || `${item.date}-${index}`}>
-                                                                    <div>
-                                                                        <span>Daily entry</span>
-                                                                        <strong>{item.date || `Day ${dailyRecords.length - index}`}</strong>
-                                                                        <p>Review recent flock health and growth values.</p>
-                                                                    </div>
-                                                                    <dl>
-                                                                        <div><dt>Current birds</dt><dd>{item.current_bird_count ?? "Not added"}</dd></div>
-                                                                        <div><dt>Mortality</dt><dd>{item.mortality ?? 0}</dd></div>
-                                                                        <div><dt>Feed</dt><dd>{item.feed_consumed ?? item.feed_intake ?? 0} kg</dd></div>
-                                                                        <div><dt>Avg weight</dt><dd>{item.average_weight ?? item.average_bird_weight ?? "Not added"}</dd></div>
-                                                                    </dl>
-                                                                    <Button tag={Link} to={`/daydata/${flock.farm_public_id}/${flock.flock_public_id}/${item.date}`} color="danger" outline type="button">Review / edit</Button>
-                                                                </article>
-                                                            ))}
-                                                        </div>
-                                                    ) : (
-                                                        <div className="record-review-empty">
-                                                            <strong>No daily data saved for this flock yet.</strong>
-                                                            <p>Start with day 1 so the dashboard, reports, and Farmer AI can track mortality, feed, weight, FCR, and current birds.</p>
-                                                            {nextDailyDate && (
-                                                                <Button tag={Link} to={`/daydata/${flock.farm_public_id}/${flock.flock_public_id}/${nextDailyDate}`} color="danger" type="button">Add first daily entry</Button>
-                                                            )}
+                                                    {latestDailyRecord && (
+                                                        <div className="record-summary-strip">
+                                                            <strong>Latest entry:</strong> {latestDailyRecord.date}
+                                                            <div className="record-summary-chips">
+                                                                <span>Birds {latestDailyRecord.current_bird_count ?? "NA"}</span>
+                                                                <span>Mortality {latestDailyRecord.mortality ?? 0}</span>
+                                                                <span>Feed {latestDailyRecord.feed_consumed ?? latestDailyRecord.feed_intake ?? 0} kg</span>
+                                                            </div>
                                                         </div>
                                                     )}
                                                     <div>

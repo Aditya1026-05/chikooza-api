@@ -680,6 +680,12 @@ textarea::placeholder {
   padding: 1rem;
 }
 
+.record-review-toolbar--compact {
+  align-items: flex-start;
+  margin-bottom: 0.75rem;
+  padding: 0.85rem 1rem;
+}
+
 .record-review-toolbar span,
 .record-review-grid article span {
   color: var(--ck-red-700);
@@ -714,6 +720,36 @@ textarea::placeholder {
   justify-content: flex-end;
 }
 
+.record-summary-strip {
+  background: #ffffff;
+  border: 1px dashed rgba(180, 35, 24, 0.22);
+  border-radius: var(--ck-radius-md);
+  color: var(--ck-text-muted);
+  margin-bottom: 1rem;
+  padding: 0.8rem 1rem;
+}
+
+.record-summary-strip strong {
+  color: var(--ck-text);
+}
+
+.record-summary-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-top: 0.55rem;
+}
+
+.record-summary-chips span {
+  background: var(--ck-red-75);
+  border: 1px solid rgba(180, 35, 24, 0.14);
+  border-radius: var(--ck-radius-pill);
+  color: var(--ck-red-850);
+  font-size: 0.82rem;
+  font-weight: 800;
+  padding: 0.35rem 0.6rem;
+}
+
 .record-review-grid {
   display: grid;
   gap: 0.85rem;
@@ -729,6 +765,17 @@ textarea::placeholder {
   display: grid;
   gap: 0.85rem;
   padding: 1rem;
+}
+
+.record-review-grid article.record-card-clickable {
+  cursor: pointer;
+  transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.record-review-grid article.record-card-clickable:hover {
+  border-color: var(--ck-red-500);
+  box-shadow: var(--ck-shadow-md);
+  transform: translateY(-1px);
 }
 
 .record-review-grid article.is-selected {

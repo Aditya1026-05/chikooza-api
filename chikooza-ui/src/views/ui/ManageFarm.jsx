@@ -322,7 +322,19 @@ const ManageFarm = () => {
                       {farmList.length > 0 ? (
                         <div className="record-review-grid" aria-label="Saved farms">
                           {farmList.map((item) => (
-                            <article key={item.public_id} className={String(item.public_id) === selectedFarmId ? "is-selected" : ""}>
+                            <article
+                              key={item.public_id}
+                              className={`record-card-clickable ${String(item.public_id) === selectedFarmId ? "is-selected" : ""}`}
+                              role="button"
+                              tabIndex="0"
+                              onClick={() => loadFarmForEdit(item.public_id)}
+                              onKeyDown={(event) => {
+                                if (event.key === "Enter" || event.key === " ") {
+                                  event.preventDefault();
+                                  loadFarmForEdit(item.public_id);
+                                }
+                              }}
+                            >
                               <div>
                                 <span>Farm</span>
                                 <strong>{item.name}</strong>
@@ -333,7 +345,10 @@ const ManageFarm = () => {
                                 <div><dt>Status</dt><dd>{item.status ? "Active" : "Inactive"}</dd></div>
                                 <div><dt>Pin</dt><dd>{item.pin || "Not added"}</dd></div>
                               </dl>
-                              <Button color="danger" outline type="button" onClick={() => loadFarmForEdit(item.public_id)}>Review / edit</Button>
+                              <Button color="danger" outline type="button" onClick={(event) => {
+                                event.stopPropagation();
+                                loadFarmForEdit(item.public_id);
+                              }}>Review / edit</Button>
                             </article>
                           ))}
                         </div>

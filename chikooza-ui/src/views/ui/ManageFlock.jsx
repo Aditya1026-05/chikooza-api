@@ -69,6 +69,7 @@ const ManageFlock = () => {
     const [selectedFarmId, setSelectedFarmId] = useState(startingFarmId);
     const [selectedFlockId, setSelectedFlockId] = useState(startingFlockId);
     const [flockStep, setFlockStep] = useState(initialDraft.flockStep);
+    let [addData, setAddData] = useState(initialDraft.data);
     const farmList = farms.filter((item) => String(item.public_id) !== "0");
     const flockList = flocks.filter((item) => String(item.flock_public_id) !== "0");
     const selectedFarmRecord = farmList.find((item) => String(item.public_id) === selectedFarmId);
@@ -140,7 +141,6 @@ const ManageFlock = () => {
         });
     }, [startingFarmId, navigate]);
 
-    let [addData, setAddData] = useState(initialDraft.data);
     let [hatch_dateerr, setHatch_dateerr] = useState(null);
     let [flock_sizeerr, setFlock_sizeerr] = useState(null);
     let [flock_nameerr, setFlock_nameerr] = useState(null);
@@ -564,7 +564,19 @@ const ManageFlock = () => {
                                                             {flockList.length > 0 ? (
                                                                 <div className="record-review-grid" aria-label="Saved flocks">
                                                                     {flockList.map((item) => (
-                                                                        <article key={item.flock_public_id} className={String(item.flock_public_id) === selectedFlockId ? "is-selected" : ""}>
+                                                                        <article
+                                                                            key={item.flock_public_id}
+                                                                            className={`record-card-clickable ${String(item.flock_public_id) === selectedFlockId ? "is-selected" : ""}`}
+                                                                            role="button"
+                                                                            tabIndex="0"
+                                                                            onClick={() => loadFlockForEdit(item.flock_public_id)}
+                                                                            onKeyDown={(event) => {
+                                                                                if (event.key === "Enter" || event.key === " ") {
+                                                                                    event.preventDefault();
+                                                                                    loadFlockForEdit(item.flock_public_id);
+                                                                                }
+                                                                            }}
+                                                                        >
                                                                             <div>
                                                                                 <span>Flock</span>
                                                                                 <strong>{item.flock_name}</strong>
@@ -575,7 +587,10 @@ const ManageFlock = () => {
                                                                                 <div><dt>Hatch date</dt><dd>{item.hatch_date || "Not added"}</dd></div>
                                                                                 <div><dt>Birds</dt><dd>{item.actual_birds ?? "Not added"} / {item.flock_size ?? "Not added"}</dd></div>
                                                                             </dl>
-                                                                            <Button color="danger" outline type="button" onClick={() => loadFlockForEdit(item.flock_public_id)}>Review / edit</Button>
+                                                                            <Button color="danger" outline type="button" onClick={(event) => {
+                                                                                event.stopPropagation();
+                                                                                loadFlockForEdit(item.flock_public_id);
+                                                                            }}>Review / edit</Button>
                                                                         </article>
                                                                     ))}
                                                                 </div>

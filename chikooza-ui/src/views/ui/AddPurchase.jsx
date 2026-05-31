@@ -516,41 +516,20 @@ const AddPurchase = () => {
                                                         : null}
                                                     {showForm === 1 && (
                                                         <>
-                                                            <div className="record-review-toolbar">
+                                                            <div className="record-review-toolbar record-review-toolbar--compact">
                                                                 <div>
-                                                                    <span>Saved purchases</span>
+                                                                    <span>Existing purchases</span>
                                                                     <strong>{selectedFlockRecord?.flock_name || "Selected flock"}</strong>
-                                                                    <p>{existingPurchases.length} purchase{existingPurchases.length === 1 ? "" : "s"} saved, Rs. {purchaseReviewTotal.toFixed(2)} total cost.</p>
+                                                                    <p>{purchaseReviewLoading ? "Checking previous costs..." : `${existingPurchases.length} purchase${existingPurchases.length === 1 ? "" : "s"} saved, Rs. ${purchaseReviewTotal.toFixed(2)} total cost. Continue below to add a new purchase.`}</p>
                                                                 </div>
-                                                                <Button color="danger" outline type="button" onClick={() => navigate("/listpurchase", { state: { farmPublicId: addData.farm_public_id, flockPublicId: addData.flock_public_id } })}>Manage purchases</Button>
+                                                                {existingPurchases.length > 0 && (
+                                                                    <Button color="danger" outline type="button" onClick={() => navigate("/listpurchase", { state: { farmPublicId: addData.farm_public_id, flockPublicId: addData.flock_public_id } })}>Review existing</Button>
+                                                                )}
                                                             </div>
-                                                            {purchaseReviewLoading ? (
-                                                                <div className="record-review-empty">
-                                                                    <strong>Loading saved purchases...</strong>
-                                                                    <p>Checking existing cost records for this flock.</p>
-                                                                </div>
-                                                            ) : existingPurchases.length > 0 ? (
-                                                                <div className="record-review-grid" aria-label="Saved purchases">
-                                                                    {existingPurchases.slice(0, 6).map((item) => (
-                                                                        <article key={item.public_id}>
-                                                                            <div>
-                                                                                <span>{purchaseTypeLabels[item.type] || item.type || "Purchase"}</span>
-                                                                                <strong>Rs. {Number(item.cost || 0).toFixed(2)}</strong>
-                                                                                <p>{item.date || "Date not added"}</p>
-                                                                            </div>
-                                                                            <dl>
-                                                                                <div><dt>Item</dt><dd>{item.item_name || item.company_name || "Not added"}</dd></div>
-                                                                                <div><dt>Quantity</dt><dd>{item.quantity || item.unit || "Not added"}</dd></div>
-                                                                                <div><dt>Remarks</dt><dd>{item.remarks || "Not added"}</dd></div>
-                                                                            </dl>
-                                                                            <Button tag={Link} to={`/viewpurchase/${item.flock_public_id}/${item.public_id}`} color="danger" outline type="button">Review</Button>
-                                                                        </article>
-                                                                    ))}
-                                                                </div>
-                                                            ) : (
-                                                                <div className="record-review-empty">
-                                                                    <strong>No purchases saved for this flock yet.</strong>
-                                                                    <p>Continue this form to add feed, medicine, vaccination, labour, equipment, or other costs.</p>
+                                                            {!purchaseReviewLoading && existingPurchases.length > 0 && (
+                                                                <div className="record-summary-strip">
+                                                                    <strong>Recent:</strong> {existingPurchases.slice(0, 3).map((item) => `${item.type || "Purchase"} Rs. ${Number(item.cost || 0).toFixed(0)}`).join(", ")}
+                                                                    {existingPurchases.length > 3 ? `, +${existingPurchases.length - 3} more` : ""}
                                                                 </div>
                                                             )}
                                                         </>
