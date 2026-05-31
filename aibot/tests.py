@@ -1112,6 +1112,23 @@ class ChikoozaIntentArchitectureTests(SimpleTestCase):
 
         self.assertEqual(intent.intent, "multi_farm_report")
 
+    def test_rule_intent_classifier_routes_complete_data_to_multi_report(self):
+        classifier = ChikoozaIntentClassifier(
+            user=self.user,
+            groq_client=FakeGroqClient([]),
+        )
+
+        for question in (
+            "show me all the data",
+            "show me my all data",
+            "give complete report",
+            "tell me everything",
+        ):
+            with self.subTest(question=question):
+                intent = classifier.classify(question)
+
+                self.assertEqual(intent.intent, "multi_farm_report")
+
     def test_rule_intent_classifier_uses_history_for_pronoun_detail(self):
         classifier = ChikoozaIntentClassifier(
             user=self.user,
@@ -1245,6 +1262,21 @@ class ChikoozaIntentArchitectureTests(SimpleTestCase):
         self.assertIn("Test Farm", response["answer"])
         self.assertIn("Test Flock", response["answer"])
 
+    def test_multi_report_service_expands_complete_data_to_farms_and_flocks(self):
+        deterministic = ChikoozaTextToSQLService(user=self.user)
+        deterministic.executor = FakeMultiReportExecutor()
+        service = ChikoozaMultiReportService(deterministic)
+
+        response = service.answer("show me all the data")
+
+        self.assertEqual(response["status"], "success")
+        self.assertEqual(response["metric"], "multi_farm_report")
+        self.assertIn("Account totals", response["answer"])
+        self.assertIn("Farm-wise details", response["answer"])
+        self.assertIn("Flock-wise details", response["answer"])
+        self.assertIn("Test Farm", response["answer"])
+        self.assertIn("Test Flock", response["answer"])
+
     def test_intent_agent_runs_multi_report_before_single_summary(self):
         deterministic = ChikoozaTextToSQLService(user=self.user)
         deterministic.executor = FakeMultiReportExecutor()
@@ -1259,4 +1291,19 @@ class ChikoozaIntentArchitectureTests(SimpleTestCase):
 
         self.assertEqual(response["intent"], "multi_farm_report")
         self.assertEqual(response["metric"], "multi_farm_report")
+        self.assertIn("Flock-wise details", response["answer"])
+
+    def test_intent_agent_runs_complete_data_questions_as_multi_report(self):
+        deterministic = ChikoozaTextToSQLService(user=self.user)
+        deterministic.executor = FakeMultiReportExecutor()
+        agent = ChikoozaIntentAgentService(
+            user=self.user,
+            deterministic_service=deterministic,
+        )
+
+        response = agent.answer("show me all the data")
+
+        self.assertEqual(response["intent"], "multi_farm_report")
+        self.assertEqual(response["metric"], "multi_farm_report")
+        self.assertIn("Farm-wise details", response["answer"])
         self.assertIn("Flock-wise details", response["answer"])

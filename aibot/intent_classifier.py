@@ -72,6 +72,16 @@ class ChikoozaIntentClassifier:
 
     def classify(self, question: str, history: list | None = None) -> ChikoozaIntent:
         query = self._normalize(question)
+        if self._is_complete_data_query(query):
+            # U: OLD: broad "show all my data" wording collapsed into one account summary.
+            # U: NEW: route it to the safe multi-report path so farmers get account totals
+            # U: plus farm/flock-wise details from fixed backend queries.
+            return self._intent(
+                "multi_farm_report",
+                entity_type=self._entity_type_from_text(query),
+                entity_reference=self._entity_reference_from_text(query, "current"),
+                source="rule_complete_data",
+            )
         if self._is_multi_query(query):
             return self._intent(
                 "multi_farm_report",
@@ -216,6 +226,13 @@ Return JSON only.
             return self._intent("greeting", source=source)
         if self._is_capability_query(query):
             return self._intent("capability_help", source=source)
+        if self._is_complete_data_query(query):
+            return self._intent(
+                "multi_farm_report",
+                entity_type=entity_type,
+                entity_reference=entity_reference,
+                source=source,
+            )
         if self._looks_like_other_query(query):
             return self._intent(
                 "other_entity",
@@ -419,6 +436,45 @@ Return JSON only.
                 "total things",
                 "what all i have",
                 "what do i have",
+            )
+        )
+
+    def _is_complete_data_query(self, query: str) -> bool:
+        """
+        U: Treat farmer wording that asks for complete records as a report request,
+        U: not a single summary metric. Keep plain "summary"/"overview" separate.
+        """
+        if not query:
+            return False
+        explicit_phrases = (
+            "everything",
+            "all data",
+            "all the data",
+            "all my data",
+            "my all data",
+            "total data",
+            "full data",
+            "complete data",
+            "all records",
+            "all my records",
+            "complete records",
+            "all details",
+            "all information",
+            "all their stuff",
+            "all stuff",
+            "all things",
+            "all my stuff",
+            "complete report",
+            "full report",
+        )
+        if any(phrase in query for phrase in explicit_phrases):
+            return True
+        return bool(
+            re.search(
+                r"\b(?:show|give|tell|display|list)\s+"
+                r"(?:me\s+)?(?:my\s+|our\s+)?(?:all|complete|full)\s+"
+                r"(?:the\s+)?(?:data|records|details|information|stuff|things)\b",
+                query,
             )
         )
 

@@ -50,6 +50,10 @@ class ChikoozaMultiReportService:
             "farms": [],
             "flocks": [],
             "target": [],
+            "requested_sections": {
+                "farms": spec["include_farms"],
+                "flocks": spec["include_flocks"],
+            },
             "limits": {"max_breakdown_items": self.MAX_BREAKDOWN_ITEMS},
         }
 
@@ -119,12 +123,15 @@ class ChikoozaMultiReportService:
 
         if wants_all:
             metrics.update(self.ALL_METRICS)
-            if include_farms:
-                metrics.add("farm_count")
-                breakdown_farms = True
-            if include_flocks:
-                metrics.add("flock_count")
-                breakdown_flocks = True
+            # U: OLD: "show all my data" only returned account totals unless the
+            # U: farmer explicitly said farms/flocks. U: NEW: complete-data
+            # U: wording includes both saved farms and saved flocks by default.
+            include_farms = True
+            include_flocks = True
+            metrics.add("farm_count")
+            metrics.add("flock_count")
+            breakdown_farms = True
+            breakdown_flocks = True
 
         if include_farms and self._mentions_count(query):
             metrics.add("farm_count")
@@ -354,12 +361,20 @@ class ChikoozaMultiReportService:
             lines.append("\nSelected item:")
             lines.extend(target_lines)
 
-        farm_lines = self._format_entity_breakdown("farm", report.get("farms") or [])
+        farm_lines = []
+        if (report.get("requested_sections") or {}).get("farms"):
+            farm_lines = self._format_entity_breakdown(
+                "farm", report.get("farms") or []
+            )
         if farm_lines:
             lines.append("\nFarm-wise details:")
             lines.extend(farm_lines)
 
-        flock_lines = self._format_entity_breakdown("flock", report.get("flocks") or [])
+        flock_lines = []
+        if (report.get("requested_sections") or {}).get("flocks"):
+            flock_lines = self._format_entity_breakdown(
+                "flock", report.get("flocks") or []
+            )
         if flock_lines:
             lines.append("\nFlock-wise details:")
             lines.extend(flock_lines)
@@ -490,8 +505,10 @@ class ChikoozaMultiReportService:
     def _wants_all_metrics(self, query: str) -> bool:
         return bool(
             re.search(
-                r"\b(?:all their stuff|all stuff|all data|all details|everything|inside each|inside every|"
-                r"each of the|every farm|every flock|individually|individual|full report|complete report)\b",
+                r"\b(?:all their stuff|all stuff|all data|all the data|all my data|my all data|"
+                r"all details|all records|all information|everything|full data|complete data|"
+                r"complete records|inside each|inside every|each of the|every farm|every flock|"
+                r"individually|individual|full report|complete report)\b",
                 query,
             )
         )
