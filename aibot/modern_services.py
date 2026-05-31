@@ -1339,20 +1339,22 @@ class ChikoozaTextToSQLService:
     def _calculation_explanation(self, metric: str) -> str:
         explanations = {
             "profit_loss": (
-                "Calculation: net result = recorded sales - recorded purchases - flock cost."
+                "Calculation: net result = recorded sales - recorded purchases - flock cost. "
+                "If any sale, purchase, or flock-cost entry is missing, this profit/loss will be incomplete."
             ),
             "current_birds": (
                 "Calculation: this adds the latest saved Daily Data current-bird count "
-                "for each matching flock, so older daily rows are not counted twice."
+                "for each matching flock, so older daily rows are not counted twice. "
+                "It uses daily records, not just the original flock size."
             ),
             "mortality": (
                 "Calculation: this adds the birds recorded as mortality in matching "
-                "Daily Data entries."
+                "Daily Data entries. If mortality has not been entered for a day, that day contributes zero."
             ),
             "fcr": (
                 "Calculation: this is the average of the saved daily FCR values. "
                 "Daily FCR is based on cumulative average feed per bird divided by "
-                "weight gain above chick weight."
+                "weight gain above chick weight. If feed or weight is missing, FCR may stay zero."
             ),
         }
         return explanations.get(metric, "")
@@ -1875,11 +1877,22 @@ class ChikoozaTextToSQLService:
     def _missing_entity_response(self, label: str, objects: list) -> dict:
         names = [self._object_name(obj) for obj in objects if self._object_name(obj)]
         available = ", ".join(names) if names else "none yet"
-        answer = (
-            f"I could not find that {label} in your account. "
-            f"Available {label}s: {available}. "
-            f"Ask using the {label} name, or use first/second {label} based on your list."
-        )
+        if not names:
+            setup_hint = (
+                "Add a flock under a farm first, then ask again."
+                if label == "flock"
+                else "Add a farm first, then ask again."
+            )
+            answer = (
+                f"I cannot answer that {label} question yet because no {label}s are saved "
+                f"in your account. Available {label}s: none yet. {setup_hint}"
+            )
+        else:
+            answer = (
+                f"I could not find that {label} in your account. "
+                f"Available {label}s: {available}. "
+                f"Ask using the exact {label} name, or say first/second {label} based on your list."
+            )
         return {
             "status": "success",
             "data": {f"available_{label}s": names},
@@ -2110,7 +2123,11 @@ class ChikoozaModernAgentService:
     ) -> str | None:
         query = normalize_ai_query(query_text)
         if not re.search(
-            r"\b(?:short|shorter|brief|summari[sz]e|summary|too big|big ans|big answer|small answer|in short)\b",
+            # U: NEW: only shorten a previous answer when the farmer clearly
+            # U: asks for a shorter response. Plain "farm summary" must still
+            # U: run the actual farm-summary query.
+            r"\b(?:short|shorter|brief|summari[sz]e\s+(?:that|it|this|previous)|"
+            r"too big|big ans|big answer|small answer|in short)\b",
             query,
         ):
             return None

@@ -1010,6 +1010,69 @@ class FakeTrendExecutor(FakeMultiReportExecutor):
         return super().execute(plan)
 
 
+class FakeScopedFarmExecutor(FakeMultiReportExecutor):
+    def execute(self, plan):
+        if plan.metric == "farm_list":
+            rows = [
+                {
+                    "farm_id": 42,
+                    "farm_name": "Red Farm",
+                    "farm_city": "Pune",
+                    "farm_pin": "411001",
+                    "shed_count": 2,
+                    "farm_status": True,
+                },
+                {
+                    "farm_id": 43,
+                    "farm_name": "Blue Farm",
+                    "farm_city": "Nashik",
+                    "farm_pin": "422001",
+                    "shed_count": 3,
+                    "farm_status": True,
+                },
+            ]
+            if 42 in plan.params:
+                return [rows[0]]
+            if 43 in plan.params:
+                return [rows[1]]
+            return rows
+        if plan.metric == "flock_list":
+            rows = [
+                {
+                    "flock_id": 77,
+                    "flock_name": "Alpha Batch",
+                    "farm_id": 42,
+                    "farm_name": "Red Farm",
+                    "hatch_date": "2026-01-01",
+                    "flock_size": 100,
+                    "actual_birds": 95,
+                    "flock_status": True,
+                    "breed_name": "Broiler",
+                },
+                {
+                    "flock_id": 78,
+                    "flock_name": "Beta Batch",
+                    "farm_id": 43,
+                    "farm_name": "Blue Farm",
+                    "hatch_date": "2026-02-01",
+                    "flock_size": 200,
+                    "actual_birds": 190,
+                    "flock_status": True,
+                    "breed_name": "Hubbard",
+                },
+            ]
+            if 77 in plan.params:
+                return [rows[0]]
+            if 78 in plan.params:
+                return [rows[1]]
+            if 42 in plan.params:
+                return [rows[0]]
+            if 43 in plan.params:
+                return [rows[1]]
+            return rows
+        return super().execute(plan)
+
+
 class FakeEntityResolver:
     def __init__(self, resolution=None):
         self.resolution = resolution or EntityResolution(
@@ -1850,6 +1913,62 @@ class ChikoozaFarmerAIImprovementTests(SimpleTestCase):
         self.assertEqual(response["resolved_flock_id"], self.beta.id)
         self.assertEqual(executor.plans[0].params, [7, 43, 78])
 
+    def test_that_flock_followup_uses_structured_metadata(self):
+        executor = CapturingExecutor()
+        self.service.executor = executor
+        history = [
+            {
+                "role": "assistant",
+                "content": "Your selected flock is Beta Batch.",
+                "intent_entity_type": "flock",
+                "resolved_farm_id": self.blue_farm.id,
+                "resolved_flock_id": self.beta.id,
+            }
+        ]
+        agent = ChikoozaIntentAgentService(
+            user=self.user,
+            deterministic_service=self.service,
+        )
+
+        response = agent.answer("what are sales for that flock", history=history)
+
+        self.assertEqual(response["intent"], "sales_total")
+        self.assertEqual(response["resolved_farm_id"], self.blue_farm.id)
+        self.assertEqual(response["resolved_flock_id"], self.beta.id)
+        self.assertEqual(executor.plans[0].params, [7, 43, 78])
+
+    def test_second_farm_followup_lists_only_that_farms_flocks(self):
+        deterministic = ChikoozaTextToSQLService(user=self.user)
+        deterministic._farms = lambda: [self.red_farm, self.blue_farm]
+        deterministic._flocks = lambda: [self.alpha, self.beta]
+        deterministic.executor = FakeScopedFarmExecutor()
+        agent = ChikoozaIntentAgentService(
+            user=self.user,
+            deterministic_service=deterministic,
+        )
+        history = [
+            {"role": "user", "content": "all my farms"},
+            {
+                "role": "assistant",
+                "content": "Your farms:\n1. Red Farm\n2. Blue Farm",
+                "intent_entity_type": "farm",
+                "metric": "farm_list",
+            },
+        ]
+
+        response = agent.answer(
+            "show flocks and all the stuff for 2nd one",
+            history=history,
+        )
+
+        self.assertEqual(response["intent"], "multi_farm_report")
+        self.assertEqual(response["intent_entity_type"], "farm")
+        self.assertEqual(response["intent_entity_reference"], "second")
+        self.assertEqual(response["resolved_farm_id"], self.blue_farm.id)
+        self.assertIn("Blue Farm", response["answer"])
+        self.assertIn("Beta Batch", response["answer"])
+        self.assertNotIn("Alpha Batch", response["answer"])
+
     def test_same_farm_followup_uses_structured_history_metadata(self):
         history = [
             {
@@ -1924,6 +2043,60 @@ class ChikoozaFarmerAIImprovementTests(SimpleTestCase):
 
         self.assertEqual(response["metric"], "ambiguous_scope")
         self.assertIn("do you mean a farm or a flock", response["answer"])
+
+    def test_vague_data_request_asks_for_scope(self):
+        agent = ChikoozaIntentAgentService(
+            user=self.user,
+            deterministic_service=self.service,
+        )
+
+        response = agent.answer("show me data", history=[])
+
+        self.assertEqual(response["metric"], "ambiguous_scope")
+        self.assertIn("whole account, a farm, or a flock", response["answer"])
+
+    def test_foreign_numeric_flock_id_is_not_used(self):
+        response = self.service.answer("sales for flock id 999")
+
+        self.assertEqual(response["metric"], "missing_flock")
+        self.assertIn("Available flocks", response["answer"])
+        self.assertNotIn("999", str(response.get("params")))
+        self.assertIsNone(response["query"])
+
+    def test_missing_flock_answer_explains_next_step_naturally(self):
+        self.service._flocks = lambda: []
+
+        response = self.service.answer("profit for that flock")
+
+        self.assertEqual(response["metric"], "missing_flock")
+        self.assertIn("no flocks are saved", response["answer"].lower())
+        self.assertIn("Available flocks: none yet", response["answer"])
+        self.assertIn("add a flock", response["answer"].lower())
+
+    def test_farm_summary_does_not_shorten_previous_greeting(self):
+        deterministic = ChikoozaTextToSQLService(user=self.user)
+        deterministic.executor = FakeMultiReportExecutor()
+        agent = ChikoozaModernAgentService(user=self.user)
+        agent.sql_service = ChikoozaIntentAgentService(
+            user=self.user,
+            deterministic_service=deterministic,
+        )
+        history = [
+            {"role": "user", "content": "hello"},
+            {
+                "role": "assistant",
+                "content": (
+                    "Hello. I can help with your own Chikooza farm records."
+                ),
+                "metric": "conversation",
+            },
+        ]
+
+        response = agent.query("show me my farm summary", history=history)
+
+        self.assertEqual(response["metric"], "farm_record_summary")
+        self.assertIn("Your account summary", response["answer"])
+        self.assertNotIn("Short version", response["answer"])
 
     def test_calculated_answers_explain_their_source(self):
         cases = (

@@ -27,17 +27,6 @@ class ChikoozaSafeQueryExecutor:
     def execute(
         self, intent: ChikoozaIntent, question: str, history: list | None = None
     ) -> dict:
-        if intent.intent == "unsupported":
-            return {
-                "status": "error",
-                "message": (
-                    "I can answer questions about your own farms, flocks, sales, purchases, "
-                    "daily data, mortality, feed, weight, FCR, and profit."
-                ),
-                "route": "TEXT_TO_SQL",
-                "metric": "unsupported",
-            }
-
         if intent.intent == "greeting":
             return {
                 "status": "success",
@@ -65,6 +54,17 @@ class ChikoozaSafeQueryExecutor:
         vague_target_response = self._vague_target_response(intent, question, history)
         if vague_target_response:
             return vague_target_response
+
+        if intent.intent == "unsupported":
+            return {
+                "status": "error",
+                "message": (
+                    "I can answer questions about your own farms, flocks, sales, purchases, "
+                    "daily data, mortality, feed, weight, FCR, and profit."
+                ),
+                "route": "TEXT_TO_SQL",
+                "metric": "unsupported",
+            }
 
         if intent.intent == "farm_progress_insight":
             return self.insight_service.answer(
@@ -274,10 +274,18 @@ class ChikoozaSafeQueryExecutor:
     ) -> dict | None:
         if intent.entity_type in {"farm", "flock"}:
             return None
-        if not re.search(
-            r"\b(?:it|that one|this one|same one|last one)\b",
-            (question or "").lower(),
-        ):
+        query = (question or "").lower()
+        has_pronoun_reference = bool(
+            re.search(r"\b(?:it|that one|this one|same one|last one)\b", query)
+        )
+        has_generic_data_request = bool(
+            re.search(
+                r"\b(?:show|tell|give|open|check|see)\s+(?:me\s+)?"
+                r"(?:the\s+|my\s+)?(?:data|details?|records?|information|info|status)\b",
+                query,
+            )
+        )
+        if not has_pronoun_reference and not has_generic_data_request:
             return None
         latest_label = self.deterministic_service._latest_entity_label_from_history(
             history
@@ -285,12 +293,14 @@ class ChikoozaSafeQueryExecutor:
         if latest_label:
             return None
         answer = (
-            "I need one detail before I answer: do you mean a farm or a flock? "
-            "For example, ask 'sales for Red Farm' or 'profit for Alpha Batch'."
+            "I need one detail before I answer: do you mean a farm or a flock, "
+            "or your whole account? Choose whole account, a farm, or a flock. "
+            "For example, ask 'show my farm summary', "
+            "'sales for Red Farm', or 'profit for Alpha Batch'."
         )
         return {
             "status": "success",
-            "data": {"available_scopes": ["farm", "flock"]},
+            "data": {"available_scopes": ["account", "farm", "flock"]},
             "answer": answer,
             "message": answer,
             "rows": [],
