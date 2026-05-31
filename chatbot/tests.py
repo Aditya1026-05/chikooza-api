@@ -5,7 +5,12 @@ from unittest.mock import patch
 from django.test import RequestFactory, TestCase
 
 from .models import ChatLog
-from .public_assistant import PublicAssistantResponse, PublicSiteAssistant
+from .public_assistant import (
+    PublicAssistantResponse,
+    PublicRagChunk,
+    PublicRagRetriever,
+    PublicSiteAssistant,
+)
 from .views import chat_api
 
 
@@ -76,6 +81,7 @@ class ChatApiValidationTests(TestCase):
                 result=f"site answer for {query}",
                 provider="groq",
                 model="llama-3.1-8b-instant",
+                sources=[{"source": "test-source", "page": 1, "score": 0.9}],
             )
         )
         request = self.factory.post(
@@ -97,6 +103,7 @@ class ChatApiValidationTests(TestCase):
         self.assertEqual(body["response"], "site answer for What is Chikooza?")
         self.assertEqual(body["mode"], "site")
         self.assertEqual(body["provider"], "groq")
+        self.assertEqual(body["sources"][0]["source"], "test-source")
         self.assertEqual(ChatLog.objects.count(), 1)
         get_rag_service.assert_not_called()
 
@@ -119,31 +126,103 @@ class ChatApiValidationTests(TestCase):
 
 
 class PublicSiteAssistantTests(TestCase):
-    def test_auto_prefers_groq_when_api_key_is_configured(self):
-        env = {
-            "CHIKOOZA_PUBLIC_CHAT_PROVIDER": "auto",
-            "GROQ_API_KEY": "test-key",
-            "GROQ_MODEL": "llama-3.1-8b-instant",
-        }
+    def test_public_retriever_rejects_off_topic_without_loading_faiss(self):
+        retriever = PublicRagRetriever()
 
-        with patch.dict("os.environ", env, clear=True):
-            assistant = PublicSiteAssistant()
+        with patch.object(retriever, "_retrieve_with_faiss") as retrieve_with_faiss:
+            chunks = retriever.retrieve("Who is the prime minister?")
 
-        self.assertEqual(assistant._select_provider(), "groq")
+        self.assertEqual(chunks, [])
+        retrieve_with_faiss.assert_not_called()
 
-    def test_public_assistant_fallback_keeps_homepage_chat_usable(self):
-        env = {
-            "CHIKOOZA_PUBLIC_CHAT_PROVIDER": "groq",
-            "GROQ_API_KEY": "test-key",
-        }
+    def test_public_retriever_handles_capability_question_from_product_chunks(self):
+        retriever = PublicRagRetriever()
 
-        with patch.dict("os.environ", env, clear=True):
-            assistant = PublicSiteAssistant()
+        with patch.object(retriever, "_retrieve_with_faiss") as retrieve_with_faiss:
+            chunks = retriever.retrieve("What can you do?")
 
-        with patch.object(
-            assistant, "_answer_with_groq", side_effect=RuntimeError("offline")
-        ):
-            response = assistant.answer("What does this app do?")
+        self.assertGreater(len(chunks), 0)
+        self.assertIn("Chikooza", chunks[0].text)
+        retrieve_with_faiss.assert_not_called()
+
+    def test_public_assistant_uses_retrieved_context_for_groq_prompt(self):
+        retriever = SimpleNamespace(
+            retrieve=lambda query: [
+                PublicRagChunk(
+                    text="Chikooza tracks farms, flocks, daily data, sales, and reports.",
+                    source="Chikooza product overview",
+                    page=None,
+                    score=1.0,
+                )
+            ]
+        )
+        groq_client = SimpleNamespace(has_keys=True)
+        captured = {}
+
+        def fake_chat(messages, **kwargs):
+            captured["messages"] = messages
+            captured["kwargs"] = kwargs
+            return SimpleNamespace(content="Generated from retrieved context.", model="test-model")
+
+        groq_client.chat = fake_chat
+
+        with patch.dict("os.environ", {"GROQ_MODEL": "test-model"}, clear=True):
+            assistant = PublicSiteAssistant(
+                retriever=retriever,
+                groq_client=groq_client,
+            )
+
+        response = assistant.answer("What does Chikooza track?")
+
+        self.assertEqual(response.provider, "groq-rag")
+        self.assertEqual(response.result, "Generated from retrieved context.")
+        self.assertIn("Retrieved public knowledge-base snippets", captured["messages"][1]["content"])
+        self.assertIn("Chikooza tracks farms", captured["messages"][1]["content"])
+        self.assertEqual(response.sources[0]["source"], "Chikooza product overview")
+
+    def test_public_assistant_does_not_call_groq_without_retrieved_context(self):
+        retriever = SimpleNamespace(retrieve=lambda query: [])
+        groq_client = SimpleNamespace(
+            has_keys=True,
+            chat=lambda messages, **kwargs: (_ for _ in ()).throw(
+                AssertionError("Groq should not be called without RAG context")
+            ),
+        )
+
+        with patch.dict("os.environ", {}, clear=True):
+            assistant = PublicSiteAssistant(
+                retriever=retriever,
+                groq_client=groq_client,
+            )
+
+        response = assistant.answer("Who is the prime minister?")
 
         self.assertTrue(response.fallback)
-        self.assertIn("poultry farm management", response.result.lower())
+        self.assertEqual(response.provider, "rag-no-context")
+        self.assertIn("public knowledge base", response.result)
+
+    def test_public_assistant_uses_retrieval_only_when_groq_is_unavailable(self):
+        retriever = SimpleNamespace(
+            retrieve=lambda query: [
+                PublicRagChunk(
+                    text="Broiler farmers should record feed, mortality, and weight daily.",
+                    source="Broiler guide",
+                    page=4,
+                    score=0.9,
+                )
+            ]
+        )
+        groq_client = SimpleNamespace(has_keys=False)
+
+        with patch.dict("os.environ", {}, clear=True):
+            assistant = PublicSiteAssistant(
+                retriever=retriever,
+                groq_client=groq_client,
+            )
+
+        response = assistant.answer("How should I track broiler performance?")
+
+        self.assertTrue(response.fallback)
+        self.assertEqual(response.provider, "rag-retrieval-only")
+        self.assertIn("feed, mortality, and weight", response.result)
+        self.assertEqual(response.sources[0]["source"], "Broiler guide")

@@ -66,6 +66,9 @@ def chat_api(request):
             result = {
                 "result": site_result.result,
                 "source_documents": [],
+                # U: NEW: public site chat is RAG-first, so expose compact source
+                # U: metadata for the UI without returning full PDF chunks.
+                "sources": site_result.sources,
                 "provider": site_result.provider,
                 "model": site_result.model,
                 "fallback": site_result.fallback,
@@ -90,7 +93,12 @@ def chat_api(request):
 
         serializable_context = []
         for doc in source_docs:
-            serializable_context.append({"page_content": doc.page_content})
+            serializable_context.append(
+                {
+                    "page_content": getattr(doc, "page_content", str(doc)),
+                    "metadata": getattr(doc, "metadata", {}),
+                }
+            )
 
         chat_log = ChatLog.objects.create(
             user=request.user if request.user.is_authenticated else None,
@@ -111,6 +119,7 @@ def chat_api(request):
             # U: NEW: record the configured runtime model.
             "model": result.get("model", "unknown"),
             "fallback": result.get("fallback", False),
+            "sources": result.get("sources", []),
         }
 
         return JsonResponse(
@@ -122,6 +131,7 @@ def chat_api(request):
                 "provider": result.get("provider", "unknown"),
                 "model": result.get("model", "unknown"),
                 "fallback": result.get("fallback", False),
+                "sources": result.get("sources", []),
                 # 'context': serializable_context
             }
         )

@@ -273,9 +273,11 @@ tenant-safe SQL views: `ai_purchase_data_view`, `ai_dailydata_data_view`, and
 must filter by the logged-in user before executing a query.
 
 The public `/chat/` site assistant is not allowed to access private farmer data.
-The legacy RAG mode uses general poultry PDF documents and FAISS files under
-`chatbot/data/`, especially `index.faiss` and `index.pkl`, not per-farmer
-records.
+U: NEW: public site chat now uses public RAG first. It retrieves Chikooza product
+notes and general poultry PDF chunks from `chatbot/data/index.faiss` and
+`chatbot/data/index.pkl`, then uses Groq only to write a natural-language answer
+from those retrieved snippets. If Groq is unavailable, it returns a
+retrieval-only answer instead of sending the question directly to an LLM.
 
 Frontend routing mirrors that separation:
 

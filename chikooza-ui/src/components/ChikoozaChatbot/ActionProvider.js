@@ -1,9 +1,25 @@
 // MV-2025-07-05-<4>  STARTS
 import { apiPath } from '../../Constants';
 
+const LOADING_MESSAGE = 'Searching the Chikooza knowledge base...';
+
 const getChatApiUrl = () => {
   const baseUrl = apiPath || '/';
   return `${baseUrl.replace(/\/?$/, '/')}chat/`;
+};
+
+const formatSources = (sources = []) => {
+  const labels = sources
+    .map((source) => {
+      if (!source?.source) {
+        return '';
+      }
+      return source.page ? `${source.source} p.${source.page}` : source.source;
+    })
+    .filter(Boolean);
+
+  const uniqueLabels = [...new Set(labels)].slice(0, 3);
+  return uniqueLabels.length ? `\n\nSources: ${uniqueLabels.join('; ')}` : '';
 };
 
 class ActionProvider {
@@ -18,7 +34,8 @@ class ActionProvider {
       return;
     }
 
-    const loadingMessage = this.createChatBotMessage("Thinking...");
+    // U: NEW: public chat now uses RAG, so show retrieval-specific loading.
+    const loadingMessage = this.createChatBotMessage(LOADING_MESSAGE);
     this.updateChatbotState(loadingMessage);
 
     try {
@@ -35,10 +52,14 @@ class ActionProvider {
 
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        throw new Error(data.error || data.message || "Chatbot request failed.");
+        const safeError = res.status >= 500
+          ? "Chikooza AI is temporarily unavailable. Please try again in a moment."
+          : data.error || data.message || "Chatbot request failed.";
+        throw new Error(safeError);
       }
 
-      const botMessage = this.createChatBotMessage(data.response || data.message || "No response received.");
+      const answer = data.response || data.message || "No response received.";
+      const botMessage = this.createChatBotMessage(`${answer}${formatSources(data.sources)}`);
       this.updateChatbotState(botMessage);
     } catch (error) {
       // U: OLD: every backend error displayed the same generic message.
@@ -53,7 +74,7 @@ class ActionProvider {
   updateChatbotState = (message) => {
     this.setState(prev => ({
       ...prev,
-      messages: [...prev.messages.filter(m => m.message !== "Thinking..."), message]
+      messages: [...prev.messages.filter(m => m.message !== LOADING_MESSAGE), message]
     }));
   };
 }

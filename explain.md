@@ -44,10 +44,12 @@ query includes the authenticated user filter before execution. In simple words:
 when farmer A asks a question, the AI must query only rows where
 `owner_id = farmer_a_user_id`.
 
-RAG is different. The current `chatbot/` RAG feature uses static poultry PDF
-documents from `chatbot/data/processed_documents/` and FAISS files in
-`chatbot/data/`. The important RAG files are `index.faiss` and `index.pkl`.
-That RAG data is general poultry knowledge, not private farmer data. If we later add farmer-specific RAG, it should either build per-user
+RAG is different. The current public `chatbot/` feature uses static poultry PDF
+documents from `chatbot/data/processed_documents/`, Chikooza product notes in
+code, and FAISS files in `chatbot/data/`. The important RAG files are
+`index.faiss` and `index.pkl`. U: NEW: public chat retrieves this public context
+first and only then asks Groq to write the final answer. That RAG data is
+general poultry/product knowledge, not private farmer data. If we later add farmer-specific RAG, it should either build per-user
 indexes/namespaces or retrieve SQL records through authenticated, user-scoped
 queries before embedding/answering.
 

@@ -3,8 +3,8 @@ import { createChatBotMessage } from 'react-chatbot-kit';
 
 const config = {
   // U: OLD: generic greeting did not explain what the public bot can do.
-  // U: NEW: make the unauthenticated assistant purpose clear to visitors.
-  initialMessages: [createChatBotMessage("Hi, I am ChikBOT. Ask me what Chikooza does, how it helps poultry farms, or how to get started.")],
+  // U: NEW: make the unauthenticated RAG assistant purpose clear to visitors.
+  initialMessages: [createChatBotMessage("Hi, I am Chikooza AI. Ask me about Chikooza, poultry farm setup, broiler management, feed, mortality, FCR, or how to get started.")],
   botName: "ChikBOT",
   customComponents: {},
   widgets: [],

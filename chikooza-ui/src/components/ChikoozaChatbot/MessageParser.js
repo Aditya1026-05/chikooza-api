@@ -5,7 +5,7 @@ class MessageParser {
   }
 
   parse(message) {
-    console.log("Parser received:", message); // Add this line
+    // U: NEW: keep public chat clean in production browser consoles.
     this.actionProvider.handleUserMessage(message);
   }
 }
