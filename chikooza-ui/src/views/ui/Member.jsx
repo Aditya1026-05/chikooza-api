@@ -346,10 +346,15 @@ const Member = () => {
     setSelectedFlock(String(flock.flock_public_id));
   };
 
+  const selectedFarmRecord = useMemo(() => {
+    return farms.find((farm) => String(farm.public_id) === selectedFarm);
+  }, [farms, selectedFarm]);
+
   const selectedFlockRecord = useMemo(() => {
     return flocks.find((flock) => String(flock.flock_public_id) === selectedFlock);
   }, [flocks, selectedFlock]);
 
+  const selectedFarmLabel = selectedFarmRecord?.name || "No farm selected";
   const selectedFlockLabel = selectedFlockRecord?.flock_name || "No flock selected";
 
   const farmCount = useMemo(() => {
@@ -434,33 +439,6 @@ const Member = () => {
     href: nextSetupStep.href,
     state: nextSetupStep.state,
   };
-
-  const completionCards = [
-    {
-      title: "Daily data",
-      value: `${recordStatus.dailyCount} saved`,
-      helper: recordStatus.lastDailyDate ? `Latest: ${formatDashboardDate(recordStatus.lastDailyDate)}` : "No daily entry yet",
-      complete: hasDailyData,
-    },
-    {
-      title: "Purchases",
-      value: `${recordStatus.purchaseCount} saved`,
-      helper: hasPurchases ? "Costs are available for reports" : "Add feed or other costs",
-      complete: hasPurchases,
-    },
-    {
-      title: "Sales",
-      value: `${recordStatus.salesCount} saved`,
-      helper: hasSales ? "Sale records are available" : "Add lifting details when ready",
-      complete: hasSales,
-    },
-    {
-      title: "Reports",
-      value: reportsReady ? "Ready" : "Waiting",
-      helper: reportsReady ? "Daily and flock reports can be opened" : "Add daily data to unlock reports",
-      complete: reportsReady,
-    },
-  ];
 
   const chartEmptyState = useMemo(() => {
     if (farmCount === 0) {
@@ -556,45 +534,73 @@ const Member = () => {
         <Link to={continueAction.href} state={continueAction.state}>{continueAction.action}</Link>
       </section>
 
-      <section className="member-planner-grid">
-        <section className="member-workflow-card">
+      <section className="member-context-grid">
+        <article className="member-context-card">
           <div className="member-card-heading">
-            <span>Recommended steps</span>
-            <strong>Next: {nextSetupStep.title}</strong>
+            <span>Selected farm</span>
+            <strong>{selectedFarmLabel}</strong>
           </div>
-          <div className="member-workflow-steps" aria-label="Recommended farmer setup workflow">
-            {setupSteps.map((step, index) => (
-              <article key={step.title} className={step.complete ? "is-complete" : ""}>
-                <div className="member-workflow-index">{step.complete ? "OK" : index + 1}</div>
-                <div>
-                  <h2>{step.title}</h2>
-                  <p>{step.helper}</p>
-                  <Link to={step.href} state={step.state}>{step.action}</Link>
-                </div>
-              </article>
-            ))}
-          </div>
-        </section>
+          {selectedFarmRecord ? (
+            <>
+              <dl>
+                <div><dt>Location</dt><dd>{[selectedFarmRecord.city, selectedFarmRecord.state_name].filter(Boolean).join(", ") || "Not added"}</dd></div>
+                <div><dt>Sheds</dt><dd>{selectedFarmRecord.shed_count ?? "Not added"}</dd></div>
+                <div><dt>Status</dt><dd>{selectedFarmRecord.status ? "Active" : "Inactive"}</dd></div>
+                <div><dt>Flocks</dt><dd>{flockCount}</dd></div>
+              </dl>
+              <Link to="/managefarm">Manage farm</Link>
+            </>
+          ) : (
+            <div className="member-context-empty">
+              <p>Add a farm first so flocks, purchases, sales, reports, and Farmer AI can connect to it.</p>
+              <Link to="/addfarm">Add farm</Link>
+            </div>
+          )}
+        </article>
 
-        {selectedFlock !== "0" && (
-          <section className="member-completion-card">
-            <div className="member-card-heading">
-              <span>Selected flock status</span>
-              <strong>{selectedFlockLabel}</strong>
+        <article className="member-context-card">
+          <div className="member-card-heading">
+            <span>Selected flock</span>
+            <strong>{selectedFlockLabel}</strong>
+          </div>
+          {selectedFlockRecord ? (
+            <>
+              <dl>
+                <div><dt>Breed</dt><dd>{selectedFlockRecord.chick_breed || "Not added"}</dd></div>
+                <div><dt>Hatch date</dt><dd>{formatDashboardDate(selectedFlockRecord.hatch_date)}</dd></div>
+                <div><dt>Initial birds</dt><dd>{selectedFlockRecord.actual_birds ?? "Not added"}</dd></div>
+                <div><dt>Current birds</dt><dd>{recordStatus.currentBirdCount ?? selectedFlockRecord.actual_birds ?? "Not recorded"}</dd></div>
+              </dl>
+              <Link to="/manageflock">Manage flock</Link>
+            </>
+          ) : (
+            <div className="member-context-empty">
+              <p>Add or select a flock to unlock daily data, charts, purchases, sales, and reports.</p>
+              <Link to={farmCount > 0 ? "/addflock" : "/addfarm"}>{farmCount > 0 ? "Add flock" : "Add farm first"}</Link>
             </div>
-            <div className="member-completion-grid">
-              {completionCards.map((item) => (
-                <article key={item.title} className={item.complete ? "is-complete" : ""}>
-                  <span>{item.title}</span>
-                  <strong>{item.value}</strong>
-                  <p>{item.helper}</p>
-                </article>
-              ))}
-            </div>
-            {recordStatus.loading && <p className="member-card-note">Checking saved flock records...</p>}
-            {!recordStatus.loading && recordStatus.error && <p className="member-card-note is-error">{recordStatus.error}</p>}
-          </section>
-        )}
+          )}
+        </article>
+      </section>
+
+      <section className="member-workflow-card">
+        <div className="member-card-heading">
+          <span>Recommended steps</span>
+          <strong>Next: {nextSetupStep.title}</strong>
+        </div>
+        <div className="member-workflow-steps" aria-label="Recommended farmer setup workflow">
+          {setupSteps.map((step, index) => (
+            <article key={step.title} className={step.complete ? "is-complete" : ""}>
+              <div className="member-workflow-index">{step.complete ? "OK" : index + 1}</div>
+              <div>
+                <h2>{step.title}</h2>
+                <p>{step.helper}</p>
+                <Link to={step.href} state={step.state}>{step.action}</Link>
+              </div>
+            </article>
+          ))}
+        </div>
+        {recordStatus.loading && <p className="member-card-note">Checking saved flock records...</p>}
+        {!recordStatus.loading && recordStatus.error && <p className="member-card-note is-error">{recordStatus.error}</p>}
       </section>
 
       <section className="member-dashboard-grid">
