@@ -964,6 +964,7 @@ input[type=number]::-webkit-inner-spin-button,
 }
 
 .member-dashboard-hero,
+.member-workflow-card,
 .member-selector-card,
 .member-chart-card {
   background: #ffffff;
@@ -982,6 +983,7 @@ input[type=number]::-webkit-inner-spin-button,
 
 .member-dashboard-hero span,
 .member-card-heading span,
+.member-workflow-steps article h2,
 .member-mini-stats span,
 .member-empty-state span {
   color: #9f201d;
@@ -1032,6 +1034,81 @@ input[type=number]::-webkit-inner-spin-button,
   font-size: 1.05rem;
   line-height: 1.35;
   margin-top: 0.35rem;
+}
+
+.member-workflow-card {
+  padding: clamp(1rem, 2vw, 1.4rem);
+}
+
+.member-workflow-steps {
+  display: grid;
+  gap: 0.85rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.member-workflow-steps article {
+  background: #fff8f4;
+  border: 1px solid #f0ddd8;
+  border-radius: 0.95rem;
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: auto 1fr;
+  min-height: 154px;
+  padding: 1rem;
+}
+
+.member-workflow-steps article.is-complete {
+  background: #fff;
+  border-color: #e4b9b0;
+}
+
+.member-workflow-index {
+  align-items: center;
+  background: #b32620;
+  border-radius: 999px;
+  color: #ffffff;
+  display: inline-flex;
+  font-size: 0.82rem;
+  font-weight: 900;
+  height: 2rem;
+  justify-content: center;
+  width: 2rem;
+}
+
+.member-workflow-steps article.is-complete .member-workflow-index {
+  background: #166534;
+}
+
+.member-workflow-steps article h2 {
+  font-size: 0.76rem;
+  margin: 0 0 0.35rem;
+}
+
+.member-workflow-steps article p {
+  color: #6d514c;
+  font-size: 0.92rem;
+  line-height: 1.5;
+  margin: 0 0 0.75rem;
+}
+
+.member-workflow-steps article a,
+.member-empty-state a {
+  align-items: center;
+  background: #b32620;
+  border-radius: 999px;
+  color: #ffffff;
+  display: inline-flex;
+  font-size: 0.86rem;
+  font-weight: 850;
+  justify-content: center;
+  padding: 0.58rem 0.9rem;
+  text-decoration: none;
+}
+
+.member-workflow-steps article a:hover,
+.member-empty-state a:hover {
+  background: #8f1f1b;
+  color: #ffffff;
 }
 
 .member-dashboard-grid {
@@ -1116,7 +1193,7 @@ input[type=number]::-webkit-inner-spin-button,
 .member-empty-state p {
   color: #6d514c;
   line-height: 1.65;
-  margin: 0.5rem 0 0;
+  margin: 0.5rem 0 1rem;
   max-width: 440px;
 }
 
@@ -1440,6 +1517,7 @@ input[type=number]::-webkit-inner-spin-button,
   }
 
   .form-stepper,
+  .member-workflow-steps,
   .form-review-card dl div {
     grid-template-columns: 1fr;
   }
@@ -1452,6 +1530,7 @@ input[type=number]::-webkit-inner-spin-button,
   }
 
   .member-dashboard-hero,
+  .member-workflow-card,
   .member-selector-card,
   .member-chart-card {
     border-radius: 0.9rem;

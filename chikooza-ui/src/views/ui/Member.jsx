@@ -7,7 +7,7 @@ import axios from "axios";
 // U: OLD: import Chart from 'react-apexcharts';
 // U: NEW: use the lazy chart wrapper so ApexCharts is split out of this route chunk.
 import Chart from "../../components/ApexChart";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 const chartPalette = ["#b42318", "#2563eb"];
 
@@ -173,9 +173,95 @@ const Member = () => {
     return flocks.find((flock) => String(flock.flock_public_id) === selectedFlock)?.flock_name || "No flock selected";
   }, [flocks, selectedFlock]);
 
+  const farmCount = useMemo(() => {
+    return farms.filter((farm) => String(farm.public_id) !== "0").length;
+  }, [farms]);
+
+  const flockCount = useMemo(() => {
+    return flocks.filter((flock) => String(flock.flock_public_id) !== "0").length;
+  }, [flocks]);
+
   const hasMortalityData = currentCount.length > 0 || mortality.length > 0;
   const hasWeightData = weight.length > 0 || fcr.length > 0;
   const hasChartData = showForm && (hasMortalityData || hasWeightData);
+
+  const setupSteps = useMemo(() => {
+    const hasFarm = farmCount > 0;
+    const hasFlock = flockCount > 0;
+    const hasDailyData = hasChartData;
+
+    return [
+      {
+        title: "Create farm",
+        helper: "Add farm location and shed details first.",
+        complete: hasFarm,
+        href: hasFarm ? "/managefarm" : "/addfarm",
+        action: hasFarm ? "Review farms" : "Add farm",
+      },
+      {
+        title: "Add flock",
+        helper: "Connect a broiler batch to the farm.",
+        complete: hasFlock,
+        href: hasFarm ? "/addflock" : "/addfarm",
+        action: hasFarm ? "Add flock" : "Add farm first",
+      },
+      {
+        title: "Record daily data",
+        helper: "Enter bird count, mortality, weight, feed, and FCR.",
+        complete: hasDailyData,
+        href: hasFlock ? "/flockdailydata" : "/addflock",
+        action: hasFlock ? "Add daily data" : "Add flock first",
+      },
+      {
+        title: "Add purchases",
+        helper: "Track feed, medicine, labour, equipment, and other costs.",
+        complete: false,
+        href: hasFlock ? "/addpurchase" : "/addflock",
+        action: hasFlock ? "Add purchase" : "Add flock first",
+      },
+      {
+        title: "Record sales",
+        helper: "Add partial or final lifting details for profit reports.",
+        complete: false,
+        href: hasFlock ? "/flocksale" : "/addflock",
+        action: hasFlock ? "Add sale" : "Add flock first",
+      },
+      {
+        title: "Review reports and AI",
+        helper: "Use reports and Farmer AI once records are entered.",
+        complete: hasDailyData,
+        href: hasDailyData ? "/chatbot" : "/dailydatasheet",
+        action: hasDailyData ? "Ask Farmer AI" : "Open reports",
+      },
+    ];
+  }, [farmCount, flockCount, hasChartData]);
+
+  const nextSetupStep = setupSteps.find((step) => !step.complete) || setupSteps[setupSteps.length - 1];
+
+  const chartEmptyState = useMemo(() => {
+    if (farmCount === 0) {
+      return {
+        title: "Create your first farm",
+        body: "The dashboard starts showing flock charts after a farm, flock, and daily data are added.",
+        href: "/addfarm",
+        action: "Add farm",
+      };
+    }
+    if (flockCount === 0) {
+      return {
+        title: "Add a flock under this farm",
+        body: "A flock connects daily data, purchases, sales, reports, and Farmer AI answers.",
+        href: "/addflock",
+        action: "Add flock",
+      };
+    }
+    return {
+      title: "No daily chart data yet",
+      body: "Add daily flock data to view mortality, bird count, weight, and FCR charts here.",
+      href: "/flockdailydata",
+      action: "Add daily data",
+    };
+  }, [farmCount, flockCount]);
 
   const mortalityOptions = {
     ...baseChartOptions,
@@ -225,7 +311,7 @@ const Member = () => {
         <div>
           <span>Farmer dashboard</span>
           <h1>Flock performance at a glance.</h1>
-          <p>Select a farm and flock to review bird count, mortality, weight, and FCR trends.</p>
+          <p>Select a farm and flock to review bird count, mortality, weight, and FCR trends. If you are starting fresh, follow the workflow below.</p>
         </div>
         <div className="member-dashboard-summary">
           <div>
@@ -236,6 +322,26 @@ const Member = () => {
             <span>Selected flock</span>
             <strong>{selectedFlockLabel}</strong>
           </div>
+        </div>
+      </section>
+
+      {/* U: NEW: show the recommended farm setup sequence so new farmers know what to enter first. */}
+      <section className="member-workflow-card">
+        <div className="member-card-heading">
+          <span>Recommended setup flow</span>
+          <strong>Next: {nextSetupStep.title}</strong>
+        </div>
+        <div className="member-workflow-steps" aria-label="Recommended farmer setup workflow">
+          {setupSteps.map((step, index) => (
+            <article key={step.title} className={step.complete ? "is-complete" : ""}>
+              <div className="member-workflow-index">{step.complete ? "OK" : index + 1}</div>
+              <div>
+                <h2>{step.title}</h2>
+                <p>{step.helper}</p>
+                <Link to={step.href}>{step.action}</Link>
+              </div>
+            </article>
+          ))}
         </div>
       </section>
 
@@ -270,11 +376,11 @@ const Member = () => {
           <div className="member-mini-stats">
             <div>
               <span>Farms</span>
-              <strong>{farms.filter((farm) => String(farm.public_id) !== "0").length}</strong>
+              <strong>{farmCount}</strong>
             </div>
             <div>
               <span>Flocks</span>
-              <strong>{flocks.filter((flock) => String(flock.flock_public_id) !== "0").length}</strong>
+              <strong>{flockCount}</strong>
             </div>
           </div>
         </aside>
@@ -318,8 +424,9 @@ const Member = () => {
             </Tabs>
           ) : (
             <div className="member-empty-state">
-              <span>No chart data yet</span>
-              <p>Add daily flock data to view mortality, bird count, weight, and FCR charts here.</p>
+              <span>{chartEmptyState.title}</span>
+              <p>{chartEmptyState.body}</p>
+              <Link to={chartEmptyState.href}>{chartEmptyState.action}</Link>
             </div>
           )}
         </section>
