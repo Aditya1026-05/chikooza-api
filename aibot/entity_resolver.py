@@ -53,6 +53,8 @@ class ChikoozaEntityResolver:
             "that one",
         }:
             return f"that {entity_type}"
+        if reference in {"last", "last one"}:
+            return f"last {entity_type}"
         if reference in {"first", "second", "third", "fourth", "fifth"}:
             return f"{reference} {entity_type}"
         if entity_type in {"farm", "flock"}:

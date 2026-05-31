@@ -654,6 +654,8 @@ class ChikoozaMultiReportService:
             "that one",
         }:
             return f"the {entity_type}"
+        if reference in {"last", "last one"}:
+            return f"last {entity_type}"
         if reference == "other":
             return f"other {entity_type}"
         if reference in {"first", "second", "third", "fourth", "fifth"}:

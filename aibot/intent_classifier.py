@@ -141,7 +141,7 @@ JSON shape:
 
 Rules:
 - Use only the owned farms/flocks listed below for entity names.
-- If the farmer says "it", "that", "same one", infer from recent conversation.
+- If the farmer says "it", "that", "same one", or "last one", infer from recent conversation.
 - If the farmer asks "other", "more", "remaining", "anything else", use intent "other_entity".
 - Count questions like "how many flocks" use count_flocks/count_farms.
 - Detail questions like "what data does it have" use flock_details or farm_details based on context.
@@ -221,9 +221,10 @@ Return JSON only.
         entity_type = self._entity_type_from_text(query)
         if not entity_type and (
             self._looks_like_other_query(query)
-            or (self._is_detail_query(query) and self._has_pronoun_reference(query))
-            or (self._is_insight_query(query) and self._has_pronoun_reference(query))
+            or self._has_pronoun_reference(query)
         ):
+            # U: NEW: metric follow-ups such as "sales for that one" and
+            # U: "profit for last one" reuse the recent farm/flock context too.
             entity_type = self._latest_entity_type_from_history(history) or ""
         scope = "other" if self._looks_like_other_query(query) else "current"
         entity_reference = self._entity_reference_from_text(query, scope)
@@ -332,6 +333,8 @@ Return JSON only.
                 "expenses",
                 "spent",
                 "spend",
+                "cost",
+                "costs",
             )
         ):
             return self._intent(
@@ -370,7 +373,7 @@ Return JSON only.
                 entity_reference=entity_reference,
                 source=source,
             )
-        if "bird" in query:
+        if re.search(r"\b(?:birds?|chickens?|chicks?)\b", query):
             return self._intent(
                 "current_birds",
                 entity_type=entity_type,
@@ -631,20 +634,57 @@ Return JSON only.
     def _entity_reference_from_text(self, query: str, scope: str) -> str:
         if scope == "other":
             return "other"
-        for phrase in ("same", "that", "this", "it", "first", "second", "third"):
-            if re.search(rf"\b{phrase}\b", query):
+        reference_patterns = (
+            ("last one", r"\blast\s+one\b"),
+            ("same one", r"\bsame\s+one\b"),
+            ("that one", r"\bthat\s+one\b"),
+            ("this one", r"\bthis\s+one\b"),
+            ("last", r"\blast\s+(?:farm|flock|batch)\b"),
+            ("same", r"\bsame\s+(?:farm|flock|batch)\b"),
+            ("that", r"\bthat\s+(?:farm|flock|batch)\b"),
+            ("this", r"\bthis\s+(?:farm|flock|batch)\b"),
+            ("it", r"\bit\b"),
+            (
+                "first",
+                r"\b(?:first\s+(?:farm|flock|batch)|(?:farm|flock|batch)\s+first)\b",
+            ),
+            (
+                "second",
+                r"\b(?:second\s+(?:farm|flock|batch)|(?:farm|flock|batch)\s+second)\b",
+            ),
+            (
+                "third",
+                r"\b(?:third\s+(?:farm|flock|batch)|(?:farm|flock|batch)\s+third)\b",
+            ),
+            (
+                "fourth",
+                r"\b(?:fourth\s+(?:farm|flock|batch)|(?:farm|flock|batch)\s+fourth)\b",
+            ),
+            (
+                "fifth",
+                r"\b(?:fifth\s+(?:farm|flock|batch)|(?:farm|flock|batch)\s+fifth)\b",
+            ),
+        )
+        for phrase, pattern in reference_patterns:
+            if re.search(pattern, query):
                 return phrase
         return ""
 
     def _has_pronoun_reference(self, query: str) -> bool:
         return bool(
-            re.search(r"\b(?:it|that|this|same one|that one|this one|one)\b", query)
+            re.search(
+                r"\b(?:it|that|this|same one|that one|this one|last one|one)\b",
+                query,
+            )
         )
 
     def _latest_entity_type_from_history(self, history: list | None) -> str | None:
         if not history:
             return None
         for item in reversed(history[-12:]):
+            metadata_type = str(item.get("intent_entity_type", "")).strip().lower()
+            if metadata_type in {"farm", "flock"}:
+                return metadata_type
             content = self._normalize(str(item.get("content", "")))
             if re.search(
                 r"\byour\s+flocks?\b|\bflock count\b|\b(?:flocks?|batches?)\b", content

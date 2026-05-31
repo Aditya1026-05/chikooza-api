@@ -128,6 +128,11 @@ class ChikoozaQueryRouter:
         "flocks",
         "bird",
         "birds",
+        "chick",
+        "chicks",
+        "chicken",
+        "chickens",
+        "alive",
         "mortality",
         "death",
         "deaths",
@@ -555,14 +560,6 @@ class ChikoozaTextToSQLService:
                 "sale_date",
             ),
             (
-                ("purchase", "purchases", "expense", "expenses", "spent", "spend"),
-                "ai_purchase_data_view",
-                "COALESCE(SUM(purchase_amount), 0)",
-                "total_purchases",
-                "money",
-                "purchase_date",
-            ),
-            (
                 ("flock cost", "initial cost", "chick cost"),
                 "ai_purchase_data_view",
                 "COALESCE(SUM(DISTINCT flock_cost), 0)",
@@ -571,7 +568,32 @@ class ChikoozaTextToSQLService:
                 None,
             ),
             (
-                ("mortality", "deaths", "death", "dead birds", "birds died", "died"),
+                (
+                    "purchase",
+                    "purchases",
+                    "expense",
+                    "expenses",
+                    "spent",
+                    "spend",
+                    "cost",
+                    "costs",
+                ),
+                "ai_purchase_data_view",
+                "COALESCE(SUM(purchase_amount), 0)",
+                "total_purchases",
+                "money",
+                "purchase_date",
+            ),
+            (
+                (
+                    "mortality",
+                    "deaths",
+                    "death",
+                    "dead birds",
+                    "birds dead",
+                    "birds died",
+                    "died",
+                ),
                 "ai_dailydata_data_view",
                 "COALESCE(SUM(birds_died), 0)",
                 "mortality",
@@ -587,7 +609,18 @@ class ChikoozaTextToSQLService:
                 "record_date",
             ),
             (
-                ("current birds", "bird count", "birds left", "birds", "bird"),
+                (
+                    "current birds",
+                    "bird count",
+                    "birds left",
+                    "birds alive",
+                    "chickens alive",
+                    "chicks alive",
+                    "chickens",
+                    "chicks",
+                    "birds",
+                    "bird",
+                ),
                 "ai_dailydata_data_view",
                 "COALESCE(SUM(birds_current), 0)",
                 "current_birds",
@@ -614,6 +647,8 @@ class ChikoozaTextToSQLService:
 
         for keywords, view, expression, metric, result_type, date_column in metric_map:
             if any(keyword in query for keyword in keywords):
+                if metric == "feed_consumed" and "feed conversion" in query:
+                    continue
                 if metric == "current_birds":
                     return self._current_birds_plan(
                         farm_id,
@@ -661,6 +696,21 @@ class ChikoozaTextToSQLService:
 
         farm_id = self._object_id(farm_resolution) if farm_resolution else None
         flock_id = self._object_id(flock_resolution) if flock_resolution else None
+        flock_farm_id = self._flock_farm_id(flock_resolution) if flock_resolution else None
+        if (
+            farm_resolution
+            and flock_resolution
+            and flock_farm_id is not None
+            and flock_farm_id != farm_id
+        ):
+            # U: NEW: do not silently run an impossible cross-farm filter when
+            # U: the farmer names a flock under the wrong owned farm.
+            return EntityFilterResolution(
+                missing_response=self._conflicting_entity_response(
+                    farm_resolution,
+                    flock_resolution,
+                )
+            )
         if flock_resolution and farm_id is None:
             farm_id = self._flock_farm_id(flock_resolution)
 
@@ -1211,8 +1261,9 @@ class ChikoozaTextToSQLService:
                 f"Total sales{period}: Rs. {total_sales:,.2f}, total purchases{period}: Rs. {total_purchases:,.2f}, "
                 f"flock cost: Rs. {flock_cost:,.2f}. Net result: Rs. {net:,.2f} ({status})."
             )
-            return self._append_guidance(
+            return self._append_notes(
                 answer,
+                self._calculation_explanation(plan.metric),
                 self._profit_missing_guidance(
                     total_sales,
                     total_purchases,
@@ -1248,14 +1299,16 @@ class ChikoozaTextToSQLService:
             )
         if plan.metric == "current_birds":
             answer = f"Current birds{period}: {value or 0}."
-            return self._append_guidance(
+            return self._append_notes(
                 answer,
+                self._calculation_explanation(plan.metric),
                 self._metric_missing_guidance(plan.metric, value, plan),
             )
         if plan.metric == "mortality":
             answer = f"Total mortality{period}: {value or 0} birds."
-            return self._append_guidance(
+            return self._append_notes(
                 answer,
+                self._calculation_explanation(plan.metric),
                 self._metric_missing_guidance(plan.metric, value, plan),
             )
         if plan.result_type == "money":
@@ -1266,8 +1319,9 @@ class ChikoozaTextToSQLService:
             )
         if plan.result_type == "decimal":
             answer = f"{label.title()}{period}: {float(value or 0):,.2f}."
-            return self._append_guidance(
+            return self._append_notes(
                 answer,
+                self._calculation_explanation(plan.metric),
                 self._metric_missing_guidance(plan.metric, value, plan),
             )
         answer = f"{label.title()}{period}: {value or 0}."
@@ -1278,6 +1332,30 @@ class ChikoozaTextToSQLService:
 
     def _append_guidance(self, answer: str, guidance: str) -> str:
         return f"{answer} {guidance}" if guidance else answer
+
+    def _append_notes(self, answer: str, *notes: str) -> str:
+        return " ".join([answer, *(note for note in notes if note)])
+
+    def _calculation_explanation(self, metric: str) -> str:
+        explanations = {
+            "profit_loss": (
+                "Calculation: net result = recorded sales - recorded purchases - flock cost."
+            ),
+            "current_birds": (
+                "Calculation: this adds the latest saved Daily Data current-bird count "
+                "for each matching flock, so older daily rows are not counted twice."
+            ),
+            "mortality": (
+                "Calculation: this adds the birds recorded as mortality in matching "
+                "Daily Data entries."
+            ),
+            "fcr": (
+                "Calculation: this is the average of the saved daily FCR values. "
+                "Daily FCR is based on cumulative average feed per bird divided by "
+                "weight gain above chick weight."
+            ),
+        }
+        return explanations.get(metric, "")
 
     def _summary_missing_guidance(self, row: dict, plan: SQLPlan) -> str:
         # U: NEW: zero totals are often missing setup/data-entry, not true
@@ -1379,8 +1457,8 @@ class ChikoozaTextToSQLService:
             return "No Flock is saved yet. Add a Flock under a Farm before asking flock-wise questions."
         if metric == "current_birds":
             return (
-                f"No current-bird value is available{period}. Add or update Daily Data "
-                "for the flock with current birds so this number is accurate."
+                f"The current-bird total is zero or no current-bird value is saved{period}. "
+                "Add or update Daily Data for the flock so this number is accurate."
             )
         if metric == "feed_consumed":
             return (
@@ -1394,13 +1472,13 @@ class ChikoozaTextToSQLService:
             )
         if metric == "fcr":
             return (
-                f"No FCR data is recorded{period}. Enter Daily Data with feed "
-                "and weight/FCR values."
+                f"The saved FCR is zero or not available{period}. Enter Daily Data "
+                "with feed and weight values so FCR can be calculated."
             )
         if metric == "mortality":
             return (
-                f"No mortality is recorded{period}. If birds died, enter Daily "
-                "Data mortality for the correct date."
+                f"No mortality is recorded{period}. If that is correct, no action "
+                "is needed. If birds died, enter Daily Data mortality for the correct date."
             )
         return ""
 
@@ -1559,7 +1637,10 @@ class ChikoozaTextToSQLService:
             if raw_reference:
                 return raw_reference
 
-        if not objects and self._has_explicit_entity_reference(query, label):
+        if not objects and (
+            self._has_explicit_entity_reference(query, label)
+            or self._requires_existing_entity(query, label)
+        ):
             return "not_found"
 
         numeric_match = re.search(rf"\b{label}\s*(?:id|#)?\s*(\d+)\b", query)
@@ -1577,6 +1658,9 @@ class ChikoozaTextToSQLService:
             if 1 <= ordinal <= len(objects):
                 return objects[ordinal - 1]
             return "not_found"
+
+        if self._has_last_entity_reference(query, label):
+            return objects[-1] if objects else "not_found"
 
         for obj in objects:
             name = self._object_name(obj)
@@ -1622,13 +1706,14 @@ class ChikoozaTextToSQLService:
         return bool(
             re.search(rf"\b{label}\s*(?:id|#)?\s*\d+\b", query)
             or self._ordinal_for_phrase(query, label)
+            or self._has_last_entity_reference(query, label)
         )
 
     def _has_generic_entity_reference(self, query: str, label: str) -> bool:
         if label == "flock":
             return bool(
                 re.search(
-                    r"\b(?:the|that|this|same|my|our)\s+(?:flock|batch)\b"
+                    r"\b(?:the|that|this|same|last|my|our)\s+(?:flock|batch)\b"
                     r"|\bfor\s+(?:the\s+)?(?:flock|batch)\b"
                     r"|\b(?:flock|batch)\s+(?:data|details|information|info|record|records)\b",
                     query,
@@ -1637,7 +1722,7 @@ class ChikoozaTextToSQLService:
         if label == "farm":
             return bool(
                 re.search(
-                    r"\b(?:the|that|this|same|my|our)\s+farm\b"
+                    r"\b(?:the|that|this|same|last|my|our)\s+farm\b"
                     r"|\bfor\s+(?:the\s+)?farm\b"
                     r"|\bfarm\s+(?:data|details|information|record|records)\b",
                     query,
@@ -1645,10 +1730,20 @@ class ChikoozaTextToSQLService:
             )
         return False
 
+    def _requires_existing_entity(self, query: str, label: str) -> bool:
+        entity_words = "flock|batch" if label == "flock" else "farm"
+        return bool(
+            re.search(
+                rf"\b(?:that|this|same|last)\s+(?:{entity_words})\b"
+                rf"|\bfor\s+(?:the\s+)?(?:{entity_words})\b",
+                query,
+            )
+        )
+
     def _has_detail_pronoun_reference(self, query: str) -> bool:
         return bool(
             re.search(
-                r"\b(?:it|that|this|same one|that one|this one|one)\b",
+                r"\b(?:it|that|this|same one|that one|this one|last one|one)\b",
                 query,
             )
             and re.search(
@@ -1671,13 +1766,23 @@ class ChikoozaTextToSQLService:
         if not history:
             return None
         for item in reversed(history[-12:]):
+            metadata_id = item.get(f"resolved_{label}_id")
+            if metadata_id is not None:
+                metadata_object = self._find_owned_object_by_id(objects, metadata_id)
+                if metadata_object:
+                    return metadata_object
             content = normalize_ai_query(str(item.get("content", "")))
             if not content:
                 continue
+            matches = []
             for obj in objects:
                 name = self._object_name(obj).lower()
                 if name and len(name) >= 3 and name in content:
-                    return obj
+                    matches.append(obj)
+            # U: NEW: an assistant list containing multiple names is not a
+            # U: selected entity. Ask a clarification instead of picking row 1.
+            if len(matches) == 1:
+                return matches[0]
             ordinal = self._ordinal_for_phrase(content, label)
             if ordinal and 1 <= ordinal <= len(objects):
                 return objects[ordinal - 1]
@@ -1701,6 +1806,9 @@ class ChikoozaTextToSQLService:
         if not history:
             return None
         for item in reversed(history[-12:]):
+            metadata_type = str(item.get("intent_entity_type", "")).strip().lower()
+            if metadata_type in {"farm", "flock"}:
+                return metadata_type
             content = normalize_ai_query(str(item.get("content", "")))
             if not content:
                 continue
@@ -1750,6 +1858,10 @@ class ChikoozaTextToSQLService:
                 return value
         return None
 
+    def _has_last_entity_reference(self, query: str, label: str) -> bool:
+        entity_words = "flock|batch" if label == "flock" else "farm"
+        return bool(re.search(rf"\blast\s+(?:{entity_words}|one)\b", query))
+
     def _missing_entity_response(self, label: str, objects: list) -> dict:
         names = [self._object_name(obj) for obj in objects if self._object_name(obj)]
         available = ", ".join(names) if names else "none yet"
@@ -1788,6 +1900,32 @@ class ChikoozaTextToSQLService:
             "params": [],
             "route": TEXT_TO_SQL,
             "metric": f"ambiguous_{label}",
+            "engine": "entity_filter",
+        }
+
+    def _conflicting_entity_response(self, farm, flock) -> dict:
+        selected_farm = self._object_name(farm) or "the selected farm"
+        flock_name = self._object_name(flock) or "the selected flock"
+        flock_farm = getattr(flock, "farm", None)
+        actual_farm = self._object_name(flock_farm) or "another farm"
+        answer = (
+            f"{flock_name} belongs to {actual_farm}, not {selected_farm}. "
+            "Ask again using the correct farm and flock, or ask using only the flock name."
+        )
+        return {
+            "status": "success",
+            "data": {
+                "farm": selected_farm,
+                "flock": flock_name,
+                "flock_farm": actual_farm,
+            },
+            "answer": answer,
+            "message": answer,
+            "rows": [],
+            "query": None,
+            "params": [],
+            "route": TEXT_TO_SQL,
+            "metric": "conflicting_farm_flock",
             "engine": "entity_filter",
         }
 

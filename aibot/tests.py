@@ -28,6 +28,7 @@ from .modern_services import (
     ChikoozaTextToSQLService,
     TenantSafeSQLExecutor,
 )
+from .views import AIChatViewSet
 
 
 class ChikoozaModernAgentSecurityTests(SimpleTestCase):
@@ -1767,3 +1768,218 @@ class ChikoozaIntentArchitectureTests(SimpleTestCase):
         self.assertEqual(response["metric"], "best_flock_report")
         self.assertIn("Alpha Batch", response["answer"])
         self.assertIn("Rs. 3,500.00", response["answer"])
+
+
+class ChikoozaFarmerAIImprovementTests(SimpleTestCase):
+    def setUp(self):
+        self.user = SimpleNamespace(id=7, is_authenticated=True)
+        self.red_farm = SimpleNamespace(id=42, public_id=9001, name="Red Farm")
+        self.blue_farm = SimpleNamespace(id=43, public_id=9002, name="Blue Farm")
+        self.alpha = SimpleNamespace(
+            id=77,
+            public_id=5001,
+            name="Alpha Batch",
+            farm_id=42,
+            farm=self.red_farm,
+        )
+        self.beta = SimpleNamespace(
+            id=78,
+            public_id=5002,
+            name="Beta Batch",
+            farm_id=43,
+            farm=self.blue_farm,
+        )
+        self.service = ChikoozaTextToSQLService(user=self.user)
+        self.service._farms = lambda: [self.red_farm, self.blue_farm]
+        self.service._flocks = lambda: [self.alpha, self.beta]
+
+    def test_rough_english_query_types_map_to_safe_plans(self):
+        cases = (
+            ("how many farms i got", "farm_count"),
+            ("how many batches are there", "flock_count"),
+            ("money from sold birds", "total_sales"),
+            ("what costs did i spend", "total_purchases"),
+            ("chick cost", "flock_cost"),
+            ("net earning", "profit_loss"),
+            ("how many chickens are alive", "current_birds"),
+            ("how many birds dead", "mortality"),
+            ("how much feed used", "feed_consumed"),
+            ("average bird weight", "average_weight"),
+            ("feed conversion", "fcr"),
+        )
+
+        for question, metric in cases:
+            with self.subTest(question=question):
+                plan = self.service.build_plan(question)
+
+                self.assertIsNotNone(plan)
+                self.assertEqual(plan.metric, metric)
+                self.assertIn(self.user.id, plan.params)
+
+    def test_rule_classifier_keeps_this_month_as_time_not_farm_reference(self):
+        classifier = ChikoozaIntentClassifier(
+            user=self.user,
+            groq_client=FakeGroqClient([]),
+        )
+
+        intent = classifier.classify("sales for Red Farm this month")
+
+        self.assertEqual(intent.intent, "sales_total")
+        self.assertEqual(intent.entity_type, "farm")
+        self.assertEqual(intent.entity_reference, "")
+
+    def test_last_one_followup_resolves_last_owned_flock(self):
+        executor = CapturingExecutor()
+        self.service.executor = executor
+        history = [
+            {
+                "role": "assistant",
+                "content": "Your flocks:\n1. Alpha Batch\n2. Beta Batch",
+                "intent_entity_type": "flock",
+            }
+        ]
+        agent = ChikoozaIntentAgentService(
+            user=self.user,
+            deterministic_service=self.service,
+        )
+
+        response = agent.answer("sales for last one", history=history)
+
+        self.assertEqual(response["metric"], "total_sales")
+        self.assertEqual(response["resolved_farm_id"], self.blue_farm.id)
+        self.assertEqual(response["resolved_flock_id"], self.beta.id)
+        self.assertEqual(executor.plans[0].params, [7, 43, 78])
+
+    def test_same_farm_followup_uses_structured_history_metadata(self):
+        history = [
+            {
+                "role": "assistant",
+                "content": "Selected farm details.",
+                "intent_entity_type": "farm",
+                "resolved_farm_id": self.blue_farm.id,
+            }
+        ]
+
+        plan = self.service.build_plan("sales for same farm", history=history)
+
+        self.assertEqual(plan.metric, "total_sales")
+        self.assertEqual(plan.params, [7, self.blue_farm.id])
+
+    def test_multiple_names_in_previous_list_require_clarification(self):
+        history = [
+            {
+                "role": "assistant",
+                "content": "Your flocks:\n1. Alpha Batch\n2. Beta Batch",
+            }
+        ]
+
+        response = self.service.answer("sales for that flock", history=history)
+
+        self.assertEqual(response["metric"], "ambiguous_flock")
+        self.assertIn("Which flock", response["answer"])
+
+    def test_foreign_history_metadata_cannot_select_another_farmers_flock(self):
+        history = [
+            {
+                "role": "assistant",
+                "content": "Private Other Farmer Batch",
+                "intent_entity_type": "flock",
+                "resolved_flock_id": 999,
+            }
+        ]
+
+        response = self.service.answer("sales for same flock", history=history)
+
+        self.assertEqual(response["metric"], "ambiguous_flock")
+        self.assertIn("Alpha Batch", response["answer"])
+        self.assertIn("Beta Batch", response["answer"])
+        self.assertNotIn("Private Other Farmer Batch", response["answer"])
+
+    def test_conflicting_owned_farm_and_flock_ask_for_correction(self):
+        response = self.service.answer("sales for Red Farm Beta Batch")
+
+        self.assertEqual(response["metric"], "conflicting_farm_flock")
+        self.assertIn("Beta Batch belongs to Blue Farm, not Red Farm", response["answer"])
+        self.assertIsNone(response["query"])
+
+    def test_specific_flock_question_with_no_flocks_has_natural_missing_answer(self):
+        self.service._flocks = lambda: []
+
+        response = self.service.answer("sales for that flock")
+
+        self.assertEqual(response["metric"], "missing_flock")
+        self.assertIn("Available flocks: none yet", response["answer"])
+
+    def test_vague_followup_without_history_asks_scope_clarification(self):
+        classifier = FakeIntentClassifier(
+            ChikoozaIntent(intent="sales_total", source="test_intent")
+        )
+        agent = ChikoozaIntentAgentService(
+            user=self.user,
+            deterministic_service=self.service,
+            classifier=classifier,
+        )
+
+        response = agent.answer("sales for that one", history=[])
+
+        self.assertEqual(response["metric"], "ambiguous_scope")
+        self.assertIn("do you mean a farm or a flock", response["answer"])
+
+    def test_calculated_answers_explain_their_source(self):
+        cases = (
+            (
+                SQLPlan("SELECT", [], "profit_loss", "money"),
+                [{"total_sales": 1000, "total_purchases": 250, "flock_cost": 100, "result": 650}],
+                "net result = recorded sales - recorded purchases - flock cost",
+            ),
+            (
+                SQLPlan("SELECT", [], "current_birds", "count"),
+                [{"result": 95}],
+                "latest saved Daily Data current-bird count",
+            ),
+            (
+                SQLPlan("SELECT", [], "mortality", "count"),
+                [{"result": 5}],
+                "adds the birds recorded as mortality",
+            ),
+            (
+                SQLPlan("SELECT", [], "fcr", "decimal"),
+                [{"result": 1.65}],
+                "average of the saved daily FCR values",
+            ),
+        )
+
+        for plan, rows, expected_text in cases:
+            with self.subTest(metric=plan.metric):
+                answer = self.service._format_answer(plan, rows)
+
+                self.assertIn("Calculation:", answer)
+                self.assertIn(expected_text, answer)
+
+    def test_recent_history_keeps_safe_resolution_metadata(self):
+        logs = [
+            SimpleNamespace(
+                query="sales for Beta Batch",
+                response=(
+                    '{"answer": "Total Sales: Rs. 1,000.00.", '
+                    '"resolved_farm_id": 43, "resolved_flock_id": 78, '
+                    '"intent_entity_type": "flock", "metric": "total_sales"}'
+                ),
+            )
+        ]
+
+        class FakeLogs(list):
+            def order_by(self, *_args):
+                return self
+
+        view = AIChatViewSet.__new__(AIChatViewSet)
+        with patch.dict("os.environ", {"AIBOT_HISTORY_TURNS": "not-a-number"}):
+            with patch(
+                "aibot.views.AIChatLog.objects.filter",
+                return_value=FakeLogs(logs),
+            ):
+                history = view._recent_history(self.user)
+
+        self.assertEqual(history[1]["resolved_farm_id"], 43)
+        self.assertEqual(history[1]["resolved_flock_id"], 78)
+        self.assertEqual(history[1]["intent_entity_type"], "flock")

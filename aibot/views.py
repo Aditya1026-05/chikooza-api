@@ -14,6 +14,7 @@ from .log_utils import ChatLogHandler
 from .models import AIChatLog
 import logging
 import json
+import os
 import uuid
 from django.core.serializers.json import DjangoJSONEncoder
 
@@ -117,9 +118,19 @@ class AIChatViewSet(viewsets.ViewSet):
             logger.error(f"Database save failed: {str(e)}")
 
     def _recent_history(self, user):
-        # U: NEW: pass the last few farmer AI turns to the SQL LLM so follow-up
-        # U: questions like "what about that flock?" can reuse conversation context.
-        logs = AIChatLog.objects.filter(user=user).order_by("-created_at")[:6]
+        # U: OLD: history only carried answer text, so a list containing several
+        # U: flocks could be mistaken for one selected flock.
+        # U: NEW: keep a bounded number of turns and include safe resolved ids so
+        # U: follow-ups such as "same farm" and "last one" reuse explicit context.
+        try:
+            history_turns = int(os.getenv("AIBOT_HISTORY_TURNS", "8"))
+        except ValueError:
+            logger.warning("Invalid AIBOT_HISTORY_TURNS value; using 8 turns.")
+            history_turns = 8
+        history_turns = min(max(history_turns, 1), 20)
+        logs = AIChatLog.objects.filter(user=user).order_by("-created_at")[
+            :history_turns
+        ]
         history = []
         for log in reversed(list(logs)):
             history.append({"role": "user", "content": log.query})
@@ -128,7 +139,18 @@ class AIChatViewSet(viewsets.ViewSet):
                 parsed.get("answer") or parsed.get("message") or parsed.get("error")
             )
             if answer:
-                history.append({"role": "assistant", "content": answer})
+                assistant_message = {"role": "assistant", "content": answer}
+                for key in (
+                    "resolved_farm_id",
+                    "resolved_flock_id",
+                    "intent_entity_type",
+                    "intent_entity_reference",
+                    "intent_scope",
+                    "metric",
+                ):
+                    if parsed.get(key) is not None:
+                        assistant_message[key] = parsed[key]
+                history.append(assistant_message)
         return history
 
     def list(self, request):

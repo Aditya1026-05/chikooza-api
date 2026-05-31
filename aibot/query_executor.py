@@ -62,6 +62,10 @@ class ChikoozaSafeQueryExecutor:
         if intent.intent == "capability_help":
             return self.insight_service.capability_answer()
 
+        vague_target_response = self._vague_target_response(intent, question, history)
+        if vague_target_response:
+            return vague_target_response
+
         if intent.intent == "farm_progress_insight":
             return self.insight_service.answer(
                 question,
@@ -75,12 +79,13 @@ class ChikoozaSafeQueryExecutor:
                 entity_resolution = self.entity_resolver.resolve(intent, question, history)
                 if entity_resolution.response:
                     return entity_resolution.response
-            return self.multi_report_service.answer(
+            response = self.multi_report_service.answer(
                 question,
                 history=history,
                 intent=intent,
                 entity_resolution=entity_resolution,
             )
+            return self._attach_resolution(response, entity_resolution)
 
         if intent.intent in {"comparison_report", "trend_report", "best_flock_report"}:
             entity_resolution = None
@@ -88,11 +93,12 @@ class ChikoozaSafeQueryExecutor:
                 entity_resolution = self.entity_resolver.resolve(intent, question, history)
                 if entity_resolution.response:
                     return entity_resolution.response
-            return self.trend_service.answer(
+            response = self.trend_service.answer(
                 question,
                 intent=intent,
                 entity_resolution=entity_resolution,
             )
+            return self._attach_resolution(response, entity_resolution)
 
         entity_resolution = self.entity_resolver.resolve(intent, question, history)
         if entity_resolution.response:
@@ -209,6 +215,8 @@ class ChikoozaSafeQueryExecutor:
             "that one",
         }:
             return f"the {entity_type}"
+        if reference in {"last", "last one"}:
+            return f"last {entity_type}"
         if reference in {"first", "second", "third", "fourth", "fifth"}:
             return f"{reference} {entity_type}"
         return f"{entity_type} {reference}"
@@ -234,3 +242,41 @@ class ChikoozaSafeQueryExecutor:
                 question.lower(),
             )
         )
+
+    def _vague_target_response(
+        self, intent: ChikoozaIntent, question: str, history: list | None
+    ) -> dict | None:
+        if intent.entity_type in {"farm", "flock"}:
+            return None
+        if not re.search(
+            r"\b(?:it|that one|this one|same one|last one)\b",
+            (question or "").lower(),
+        ):
+            return None
+        latest_label = self.deterministic_service._latest_entity_label_from_history(
+            history
+        )
+        if latest_label:
+            return None
+        answer = (
+            "I need one detail before I answer: do you mean a farm or a flock? "
+            "For example, ask 'sales for Red Farm' or 'profit for Alpha Batch'."
+        )
+        return {
+            "status": "success",
+            "data": {"available_scopes": ["farm", "flock"]},
+            "answer": answer,
+            "message": answer,
+            "rows": [],
+            "query": None,
+            "params": [],
+            "route": "TEXT_TO_SQL",
+            "metric": "ambiguous_scope",
+            "engine": "entity_filter",
+        }
+
+    def _attach_resolution(self, response: dict, entity_resolution) -> dict:
+        if entity_resolution:
+            response["resolved_farm_id"] = entity_resolution.farm_id
+            response["resolved_flock_id"] = entity_resolution.flock_id
+        return response
