@@ -52,13 +52,12 @@ class Otp(BaseModel):
 
     otp = models.IntegerField()
     mobile_number = models.CharField(max_length=15, null=True)
-    created_at = models.DateTimeField(auto_now_add=True)
     is_verify = models.BooleanField(default=False)
 
 
 class UsersForgotPassword(BaseModel):
     """
-    Model for store otp.
+    Model for storing customer OTP.
     """
 
     class Meta:

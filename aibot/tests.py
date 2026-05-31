@@ -616,6 +616,87 @@ class ChikoozaModernAgentSecurityTests(SimpleTestCase):
         self.assertIn("95 current birds", answer)
         self.assertIn("120.50 kg feed consumed", answer)
 
+    def test_zero_summary_answer_guides_next_data_entry(self):
+        service = ChikoozaTextToSQLService(user=self.user)
+        plan = service.build_plan("show my farm summary")
+
+        answer = service._format_answer(
+            plan,
+            {
+                "farm_count": 1,
+                "flock_count": 1,
+                "current_birds": 0,
+                "total_sales": 0,
+                "total_purchases": 0,
+                "total_feed_consumed": 0,
+                "total_mortality": 0,
+                "average_fcr": 0,
+            },
+        )
+
+        self.assertIn("Your account summary", answer)
+        self.assertIn("Next data to enter", answer)
+        self.assertIn("Daily Data", answer)
+        self.assertIn("Sales records", answer)
+        self.assertIn("Purchase records", answer)
+
+    def test_zero_sales_answer_explains_missing_sales_records(self):
+        service = ChikoozaTextToSQLService(user=self.user)
+        plan = SQLPlan(
+            sql=(
+                "SELECT COALESCE(SUM(sale_amount), 0) AS result "
+                "FROM ai_sale_data_view WHERE owner_id = %s"
+            ),
+            params=[self.user.id],
+            metric="total_sales",
+            result_type="money",
+        )
+
+        answer = service._format_answer(plan, [{"result": 0}])
+
+        self.assertIn("Total Sales: Rs. 0.00", answer)
+        self.assertIn("No Sales records are saved", answer)
+        self.assertIn("sale/lifting records", answer)
+
+    def test_zero_feed_answer_guides_daily_data_entry(self):
+        service = ChikoozaTextToSQLService(user=self.user)
+        plan = SQLPlan(
+            sql=(
+                "SELECT COALESCE(SUM(feed_consumed_kg), 0) AS result "
+                "FROM ai_dailydata_data_view WHERE owner_id = %s"
+            ),
+            params=[self.user.id],
+            metric="feed_consumed",
+            result_type="quantity",
+        )
+
+        answer = service._format_answer(plan, [{"result": 0}])
+
+        self.assertIn("Total feed consumed: 0.00 kg", answer)
+        self.assertIn("No feed consumption is recorded", answer)
+        self.assertIn("Daily Data", answer)
+
+    def test_zero_profit_answer_explains_missing_financial_records(self):
+        service = ChikoozaTextToSQLService(user=self.user)
+        plan = SQLPlan(
+            sql=(
+                "SELECT 0 AS total_sales, 0 AS total_purchases, "
+                "0 AS flock_cost, 0 AS result"
+            ),
+            params=[],
+            metric="profit_loss",
+            result_type="money",
+        )
+
+        answer = service._format_answer(
+            plan,
+            [{"total_sales": 0, "total_purchases": 0, "flock_cost": 0, "result": 0}],
+        )
+
+        self.assertIn("Net result: Rs. 0.00", answer)
+        self.assertIn("cannot judge profit confidently", answer)
+        self.assertIn("Sales, Purchase, or flock-cost records", answer)
+
     def test_sales_query_supports_this_month_date_filter(self):
         service = ChikoozaTextToSQLService(user=self.user)
 
@@ -895,6 +976,15 @@ class FakeMultiReportExecutor:
                 }
             ]
         return [{"result": 0}]
+
+
+class CapturingExecutor(FakeMultiReportExecutor):
+    def __init__(self):
+        self.plans = []
+
+    def execute(self, plan):
+        self.plans.append(plan)
+        return super().execute(plan)
 
 
 class FakeTrendExecutor(FakeMultiReportExecutor):
@@ -1330,6 +1420,72 @@ class ChikoozaIntentArchitectureTests(SimpleTestCase):
         self.assertEqual(response["metric"], "total_sales")
         self.assertEqual(response["params"], [7, 42, 77])
         self.assertIn("total sales for first flock", response["canonical_question"])
+
+    def test_intent_agent_preserves_date_filter_for_single_metric_queries(self):
+        deterministic = ChikoozaTextToSQLService(user=self.user)
+        executor = CapturingExecutor()
+        deterministic.executor = executor
+        classifier = FakeIntentClassifier(
+            ChikoozaIntent(intent="sales_total", source="test_intent")
+        )
+        agent = ChikoozaIntentAgentService(
+            user=self.user,
+            deterministic_service=deterministic,
+            classifier=classifier,
+        )
+
+        with patch.object(
+            ChikoozaTextToSQLService,
+            "_today",
+            return_value=date(2026, 5, 31),
+        ):
+            response = agent.answer("what are my total sales this month?")
+
+        self.assertEqual(response["canonical_question"], "total sales this month")
+        self.assertEqual(executor.plans[0].date_range.label, "this month")
+        self.assertIn("for this month", response["answer"])
+
+    def test_intent_agent_preserves_target_and_date_filter_together(self):
+        deterministic = ChikoozaTextToSQLService(user=self.user)
+        farm = SimpleNamespace(id=42, public_id=9001, name="Red Farm")
+        flock = SimpleNamespace(
+            id=77,
+            public_id=5001,
+            name="Alpha Batch",
+            farm_id=42,
+            farm=farm,
+        )
+        deterministic._farms = lambda: [farm]
+        deterministic._flocks = lambda: [flock]
+        executor = CapturingExecutor()
+        deterministic.executor = executor
+        classifier = FakeIntentClassifier(
+            ChikoozaIntent(
+                intent="feed_consumed",
+                entity_type="flock",
+                entity_reference="first",
+                source="test_intent",
+            )
+        )
+        agent = ChikoozaIntentAgentService(
+            user=self.user,
+            deterministic_service=deterministic,
+            classifier=classifier,
+        )
+
+        with patch.object(
+            ChikoozaTextToSQLService,
+            "_today",
+            return_value=date(2026, 5, 31),
+        ):
+            response = agent.answer("feed consumed by first flock last week")
+
+        self.assertEqual(
+            response["canonical_question"],
+            "feed consumed for first flock last week",
+        )
+        self.assertEqual(executor.plans[0].date_range.label, "last week")
+        self.assertEqual(executor.plans[0].params[:3], [7, 42, 77])
 
     def test_intent_agent_uses_safe_insight_for_conversational_progress(self):
         deterministic = FakeDeterministicSnapshotService(user=self.user)

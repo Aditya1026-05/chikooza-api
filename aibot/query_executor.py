@@ -110,7 +110,7 @@ class ChikoozaSafeQueryExecutor:
     def _canonical_question(self, intent: ChikoozaIntent, question: str) -> str:
         target = self._target_phrase(intent)
         if intent.intent == "farm_summary":
-            return "show my farm summary"
+            return self._with_time_phrase("show my farm summary", question)
         if intent.intent == "list_farms":
             return f"list farms for {target}" if target else "list all farms i have"
         if intent.intent == "list_flocks":
@@ -124,25 +124,71 @@ class ChikoozaSafeQueryExecutor:
         if intent.intent == "flock_details":
             return f"show data for {target or 'the flock'}"
         if intent.intent == "sales_total":
-            return f"total sales for {target}" if target else "total sales"
+            base = f"total sales for {target}" if target else "total sales"
+            return self._with_time_phrase(base, question)
         if intent.intent == "purchase_total":
-            return f"total purchases for {target}" if target else "total purchases"
+            base = f"total purchases for {target}" if target else "total purchases"
+            return self._with_time_phrase(base, question)
         if intent.intent == "profit_loss":
-            return f"profit or loss for {target}" if target else "profit or loss"
+            base = f"profit or loss for {target}" if target else "profit or loss"
+            return self._with_time_phrase(base, question)
         if intent.intent == "current_birds":
-            return f"current birds for {target}" if target else "current birds"
+            base = f"current birds for {target}" if target else "current birds"
+            return self._with_time_phrase(base, question)
         if intent.intent == "mortality":
-            return f"mortality for {target}" if target else "mortality"
+            base = f"mortality for {target}" if target else "mortality"
+            return self._with_time_phrase(base, question)
         if intent.intent == "feed_consumed":
-            return f"feed consumed for {target}" if target else "feed consumed"
+            base = f"feed consumed for {target}" if target else "feed consumed"
+            return self._with_time_phrase(base, question)
         if intent.intent == "average_weight":
-            return f"average weight for {target}" if target else "average weight"
+            base = f"average weight for {target}" if target else "average weight"
+            return self._with_time_phrase(base, question)
         if intent.intent == "average_fcr":
-            return f"average fcr for {target}" if target else "average fcr"
+            base = f"average fcr for {target}" if target else "average fcr"
+            return self._with_time_phrase(base, question)
         if intent.intent == "other_entity":
             label = intent.entity_type or "flock"
             return f"any other {label} i have"
         return question
+
+    def _with_time_phrase(self, canonical_question: str, original_question: str) -> str:
+        # U: NEW: keep safe canonical wording, but do not drop date filters like
+        # U: "this month" or "between 2026-01-01 and 2026-01-31".
+        time_phrase = self._time_phrase(original_question)
+        if not time_phrase:
+            return canonical_question
+        if time_phrase in canonical_question.lower():
+            return canonical_question
+        return f"{canonical_question} {time_phrase}"
+
+    def _time_phrase(self, question: str) -> str:
+        query = (question or "").lower()
+        date_value = r"\d{4}-\d{1,2}-\d{1,2}|\d{1,2}[/-]\d{1,2}[/-]\d{4}"
+        month_name = (
+            r"jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|"
+            r"jul(?:y)?|aug(?:ust)?|sep(?:t|tember)?|oct(?:ober)?|"
+            r"nov(?:ember)?|dec(?:ember)?"
+        )
+        patterns = (
+            rf"\bbetween\s+(?:{date_value})\s+(?:and|to)\s+(?:{date_value})\b",
+            rf"\bfrom\s+(?:{date_value})\s+(?:to|till|until|through)\s+(?:{date_value})\b",
+            r"\blast\s+\d{1,3}\s+days?\b",
+            r"\bthis\s+week\b",
+            r"\blast\s+week\b",
+            r"\bthis\s+month\b",
+            r"\blast\s+month\b",
+            r"\bthis\s+year\b",
+            r"\blast\s+year\b",
+            r"\btoday\b",
+            r"\byesterday\b",
+            rf"\b(?:in|for|during)\s+(?:{month_name})(?:\s+\d{{4}})?\b",
+        )
+        for pattern in patterns:
+            match = re.search(pattern, query)
+            if match:
+                return match.group(0)
+        return ""
 
     def _target_phrase(self, intent: ChikoozaIntent) -> str:
         entity_type = intent.entity_type

@@ -1207,13 +1207,22 @@ class ChikoozaTextToSQLService:
             net = float(row.get("result") or 0)
             status = "profit" if net > 0 else "loss" if net < 0 else "break-even"
             period = self._period_suffix(plan)
-            return (
+            answer = (
                 f"Total sales{period}: Rs. {total_sales:,.2f}, total purchases{period}: Rs. {total_purchases:,.2f}, "
                 f"flock cost: Rs. {flock_cost:,.2f}. Net result: Rs. {net:,.2f} ({status})."
             )
+            return self._append_guidance(
+                answer,
+                self._profit_missing_guidance(
+                    total_sales,
+                    total_purchases,
+                    flock_cost,
+                    plan,
+                ),
+            )
 
         if plan.metric == "farm_record_summary":
-            return (
+            answer = (
                 "Your account summary: "
                 f"{row.get('farm_count') or 0} farms, {row.get('flock_count') or 0} flocks, "
                 f"{row.get('current_birds') or 0} current birds, "
@@ -1223,21 +1232,183 @@ class ChikoozaTextToSQLService:
                 f"{row.get('total_mortality') or 0} total mortality, and "
                 f"{float(row.get('average_fcr') or 0):,.2f} average FCR."
             )
+            return self._append_guidance(
+                answer,
+                self._summary_missing_guidance(row, plan),
+            )
 
         value = row.get("result", 0)
         label = plan.metric.replace("_", " ")
         period = self._period_suffix(plan)
         if plan.metric == "feed_consumed":
-            return f"Total feed consumed{period}: {float(value or 0):,.2f} kg."
+            answer = f"Total feed consumed{period}: {float(value or 0):,.2f} kg."
+            return self._append_guidance(
+                answer,
+                self._metric_missing_guidance(plan.metric, value, plan),
+            )
         if plan.metric == "current_birds":
-            return f"Current birds{period}: {value or 0}."
+            answer = f"Current birds{period}: {value or 0}."
+            return self._append_guidance(
+                answer,
+                self._metric_missing_guidance(plan.metric, value, plan),
+            )
         if plan.metric == "mortality":
-            return f"Total mortality{period}: {value or 0} birds."
+            answer = f"Total mortality{period}: {value or 0} birds."
+            return self._append_guidance(
+                answer,
+                self._metric_missing_guidance(plan.metric, value, plan),
+            )
         if plan.result_type == "money":
-            return f"{label.title()}{period}: Rs. {float(value or 0):,.2f}."
+            answer = f"{label.title()}{period}: Rs. {float(value or 0):,.2f}."
+            return self._append_guidance(
+                answer,
+                self._metric_missing_guidance(plan.metric, value, plan),
+            )
         if plan.result_type == "decimal":
-            return f"{label.title()}{period}: {float(value or 0):,.2f}."
-        return f"{label.title()}{period}: {value or 0}."
+            answer = f"{label.title()}{period}: {float(value or 0):,.2f}."
+            return self._append_guidance(
+                answer,
+                self._metric_missing_guidance(plan.metric, value, plan),
+            )
+        answer = f"{label.title()}{period}: {value or 0}."
+        return self._append_guidance(
+            answer,
+            self._metric_missing_guidance(plan.metric, value, plan),
+        )
+
+    def _append_guidance(self, answer: str, guidance: str) -> str:
+        return f"{answer} {guidance}" if guidance else answer
+
+    def _summary_missing_guidance(self, row: dict, plan: SQLPlan) -> str:
+        # U: NEW: zero totals are often missing setup/data-entry, not true
+        # U: business performance. Tell the farmer exactly what to enter next.
+        farm_count = self._as_float(row.get("farm_count"))
+        flock_count = self._as_float(row.get("flock_count"))
+        current_birds = self._as_float(row.get("current_birds"))
+        total_sales = self._as_float(row.get("total_sales"))
+        total_purchases = self._as_float(row.get("total_purchases"))
+        feed = self._as_float(row.get("total_feed_consumed"))
+        fcr = self._as_float(row.get("average_fcr"))
+        mortality = self._as_float(row.get("total_mortality"))
+        period = self._period_suffix(plan)
+
+        if farm_count == 0:
+            return (
+                "Next data to enter: add a Farm first, then add a Flock under that farm. "
+                "After that, enter Daily Data, Purchases, and Sales so I can calculate performance."
+            )
+
+        guidance = []
+        if flock_count == 0:
+            guidance.append("add at least one Flock under your Farm")
+        if (
+            flock_count > 0
+            and current_birds == 0
+            and feed == 0
+            and fcr == 0
+            and mortality == 0
+        ):
+            guidance.append(
+                "enter Daily Data with current birds, feed consumed, weight, mortality, and FCR"
+            )
+        if total_sales == 0:
+            guidance.append(f"add Sales records{period}")
+        if total_purchases == 0:
+            guidance.append(
+                f"add Purchase records{period} for feed, medicine, equipment, or flock cost"
+            )
+
+        return f"Next data to enter: {'; '.join(guidance)}." if guidance else ""
+
+    def _profit_missing_guidance(
+        self,
+        total_sales: float,
+        total_purchases: float,
+        flock_cost: float,
+        plan: SQLPlan,
+    ) -> str:
+        period = self._period_suffix(plan)
+        if total_sales == 0 and total_purchases == 0 and flock_cost == 0:
+            return (
+                f"I cannot judge profit confidently yet because no Sales, Purchase, "
+                f"or flock-cost records are saved{period}. Add those records first, then ask again."
+            )
+
+        guidance = []
+        if total_sales == 0:
+            guidance.append(f"Sales records{period}")
+        if total_purchases == 0 and flock_cost == 0:
+            guidance.append(f"Purchase/flock-cost records{period}")
+        if not guidance:
+            return ""
+        return f"If this profit looks incomplete, add missing {', '.join(guidance)}."
+
+    def _metric_missing_guidance(
+        self,
+        metric: str,
+        value,
+        plan: SQLPlan,
+    ) -> str:
+        if self._as_float(value) != 0:
+            return ""
+
+        period = self._period_suffix(plan)
+        if metric == "total_sales":
+            return (
+                f"No Sales records are saved{period}. Add sale/lifting records "
+                "under Sales to calculate revenue."
+            )
+        if metric == "sales_count":
+            return (
+                f"No Sales records are saved{period}. Add Sales entries before "
+                "asking for sale counts."
+            )
+        if metric == "total_purchases":
+            return (
+                f"No Purchase records are saved{period}. Add feed, medicine, "
+                "equipment, or flock-cost purchases under Purchases."
+            )
+        if metric == "purchase_count":
+            return (
+                f"No Purchase records are saved{period}. Add Purchases entries "
+                "before asking for purchase counts."
+            )
+        if metric == "farm_count":
+            return "No Farm is saved yet. Add a Farm first, then add Flocks below it."
+        if metric == "flock_count":
+            return "No Flock is saved yet. Add a Flock under a Farm before asking flock-wise questions."
+        if metric == "current_birds":
+            return (
+                f"No current-bird value is available{period}. Add or update Daily Data "
+                "for the flock with current birds so this number is accurate."
+            )
+        if metric == "feed_consumed":
+            return (
+                f"No feed consumption is recorded{period}. Enter Daily Data with "
+                "feed consumed in kg."
+            )
+        if metric == "average_weight":
+            return (
+                f"No bird-weight data is recorded{period}. Enter Daily Data with "
+                "average bird weight."
+            )
+        if metric == "fcr":
+            return (
+                f"No FCR data is recorded{period}. Enter Daily Data with feed "
+                "and weight/FCR values."
+            )
+        if metric == "mortality":
+            return (
+                f"No mortality is recorded{period}. If birds died, enter Daily "
+                "Data mortality for the correct date."
+            )
+        return ""
+
+    def _as_float(self, value) -> float:
+        try:
+            return float(value or 0)
+        except (TypeError, ValueError):
+            return 0
 
     def _period_suffix(self, plan: SQLPlan) -> str:
         if not plan.date_range:
