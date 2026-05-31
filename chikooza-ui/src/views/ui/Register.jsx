@@ -157,33 +157,14 @@ const Register = () => {
     <main className="marketing-page brand-page">
       {/* U: OLD: registration used a dashboard card with immediate loading reset and fragile OTP timer.
           U: NEW: brand-consistent auth page with a stable OTP modal and verified /users/sendOtp/ + /users/signUp/ flow. */}
-      <section className="auth-shell register-shell">
-        <div className="auth-story-panel">
-          <span className="home-eyebrow">Farmer registration</span>
-          <h1>Start with a clean farmer workspace.</h1>
-          <p>
-            Register once, verify OTP, and keep every farm, flock, daily entry,
-            purchase, sale, report, and AI answer under one account.
-          </p>
-          <div className="brand-check-list">
-            <div>
-              <strong>Verified account</strong>
-              <span>Use OTP before the farmer workspace is created.</span>
-            </div>
-            <div>
-              <strong>Structured records</strong>
-              <span>Add farms first, then flocks, daily work, costs, and sales.</span>
-            </div>
-            <div>
-              <strong>Data ownership</strong>
-              <span>Your farm records stay scoped to your own login.</span>
-            </div>
-          </div>
-        </div>
-
-        <div className="auth-card brand-auth-card register-card">
-          <h2>Register</h2>
-          <p>Enter farmer details. You will verify OTP before the account is created.</p>
+      <section className="auth-shell auth-shell-centered auth-register-centered">
+        <div className="auth-card brand-auth-card auth-form-card register-card">
+          <Link className="auth-back-link" to="/">
+            Back to Chikooza home
+          </Link>
+          <span className="auth-kicker">Register for free</span>
+          <h1>Create farmer account.</h1>
+          <p>Enter farmer details. OTP verification happens before the account is created.</p>
           {error && <Alert color="danger">{error}</Alert>}
           {message && <Alert color="success">{message}</Alert>}
           <form className="auth-form" onSubmit={sendOtp}>

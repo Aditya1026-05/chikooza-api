@@ -5,6 +5,7 @@ import { lazy } from "react";
 const FullLayout = lazy(() => import("../layouts/FullLayout.jsx"));
 const FullLayoutMember = lazy(() => import("../layouts/FullLayoutMember.jsx"));
 const HeaderLayout = lazy(() => import("../layouts/HeaderLayout.jsx"));
+const AuthLayout = lazy(() => import("../layouts/AuthLayout.jsx"));
 
 
 /***** Pages ****/
@@ -57,10 +58,16 @@ const ThemeRoutes = [
     ],
   }, {
     path: "/",
-    element: <FullLayout />,
+    element: <AuthLayout />,
     children: [
+      // U: NEW: auth screens are standalone pages without public header/footer.
       { path: "/login", exact: true, element: <Login /> },
       { path: "/register", exact: true, element: <Register /> },
+    ],
+  }, {
+    path: "/",
+    element: <FullLayout />,
+    children: [
       { path: "/about", exact: true, element: <About /> },
       { path: "/contact", exact: true, element: <Contact /> },
       { path: "/forgetpassword", exact: true, element: <ForgetPassword /> },

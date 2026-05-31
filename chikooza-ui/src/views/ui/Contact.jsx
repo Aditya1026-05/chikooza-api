@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Alert, Button } from "reactstrap";
 import "../../assets/css/marketing.css";
+import ContactFarmImage from "../../assets/images/poultry/contact-free-range.jpg";
 
 const contactMethods = [
   {
@@ -58,7 +59,7 @@ const Contact = () => {
       <section className="brand-hero contact-brand-hero">
         <div className="brand-hero-copy">
           <span className="home-eyebrow">Contact Chikooza</span>
-          <h1>Need help setting up farm records?</h1>
+          <h1>Need help getting the farm workflow right?</h1>
           <p>
             Share what you are trying to do: setup, registration, reports,
             private AI, farm data, or deployment. We will help route the next
@@ -66,17 +67,20 @@ const Contact = () => {
           </p>
         </div>
 
-        <aside className="brand-side-panel contact-methods">
-          {contactMethods.map((method) => (
-            <div key={method.label}>
-              <span>{method.label}</span>
-              {method.href ? (
-                <a href={method.href}>{method.value}</a>
-              ) : (
-                <strong>{method.value}</strong>
-              )}
-            </div>
-          ))}
+        <aside className="contact-visual-card">
+          <img src={ContactFarmImage} alt="Chickens moving on a green farm field" />
+          <div className="contact-methods">
+            {contactMethods.map((method) => (
+              <div key={method.label}>
+                <span>{method.label}</span>
+                {method.href ? (
+                  <a href={method.href}>{method.value}</a>
+                ) : (
+                  <strong>{method.value}</strong>
+                )}
+              </div>
+            ))}
+          </div>
         </aside>
       </section>
 
@@ -85,8 +89,8 @@ const Contact = () => {
           <span>Send a message</span>
           <h2>Tell us what you need.</h2>
           <p>
-            The form is local for now. For real delivery, wire this page to an
-            email/contact API before production.
+            This MVP captures the message locally for now. Before production,
+            wire this page to a contact API or email delivery service.
           </p>
         </div>
 

@@ -1,5 +1,8 @@
 import { Link } from "react-router-dom";
 import "../../assets/css/marketing.css";
+import BroilerHouseImage from "../../assets/images/poultry/broiler-house.png";
+import FarmerBirdImage from "../../assets/images/poultry/farmer-holding-bird.png";
+import FeedingImage from "../../assets/images/poultry/broiler-feeding.png";
 
 const principles = [
   {
@@ -43,21 +46,17 @@ const About = () => {
           </div>
         </div>
 
-        <div className="brand-side-panel" aria-label="Chikooza farm operations coverage">
-          {/* U: OLD: this page displayed a generic stock image that did not match poultry farming.
-              U: NEW: use a product-relevant operations summary instead of misleading imagery. */}
+        <div className="brand-photo-panel" aria-label="Broiler farm record workflow">
+          {/* U: NEW: real poultry images make the About page feel tied to this product domain. */}
+          <img src={BroilerHouseImage} alt="Broiler farm house with flock" />
           <div>
-            <span>Farm records</span>
-            <strong>Country, state, farm, and flock setup</strong>
+            <img src={FarmerBirdImage} alt="Farmer checking a broiler bird" />
+            <img src={FeedingImage} alt="Broiler feeding line" />
           </div>
-          <div>
-            <span>Daily work</span>
-            <strong>Mortality, feed, weight and vaccination entries</strong>
-          </div>
-          <div>
-            <span>Business result</span>
-            <strong>Purchases, sales, PDF reports and Farmer AI</strong>
-          </div>
+          <aside>
+            <span>Product focus</span>
+            <strong>Farm setup, flock records, daily entries, purchases, sales, reports, and Farmer AI.</strong>
+          </aside>
         </div>
       </section>
 
@@ -80,27 +79,6 @@ const About = () => {
               <p>{item.copy}</p>
             </article>
           ))}
-        </div>
-      </section>
-
-      <section className="home-red-band">
-        <div>
-          <span>What farmers can do</span>
-          <h2>Manage the whole flock cycle from one account.</h2>
-        </div>
-        <div className="home-band-list">
-          <div>
-            <strong>01</strong>
-            <p>Register, verify OTP, and create the farmer workspace.</p>
-          </div>
-          <div>
-            <strong>02</strong>
-            <p>Add farms, create flocks, enter daily data, purchases, and sales.</p>
-          </div>
-          <div>
-            <strong>03</strong>
-            <p>Export reports and ask Farmer AI questions from scoped records.</p>
-          </div>
         </div>
       </section>
     </main>

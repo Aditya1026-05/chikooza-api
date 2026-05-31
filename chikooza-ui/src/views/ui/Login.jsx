@@ -82,33 +82,14 @@ const Login = () => {
     <main className="marketing-page brand-page">
       {/* U: OLD: login used a nested dashboard card and inline red icons.
           U: NEW: brand-consistent auth page connected to the verified /users/login/ API. */}
-      <section className="auth-shell">
-        <div className="auth-story-panel">
-          <span className="home-eyebrow">Farmer login</span>
-          <h1>Return to today's flock work.</h1>
-          <p>
-            Open the same workspace where your farms, flocks, purchases, sales,
-            reports, and private Farmer AI stay connected to your account.
-          </p>
-          <div className="brand-check-list">
-            <div>
-              <strong>Daily work</strong>
-              <span>Update mortality, feed, weight, and flock observations.</span>
-            </div>
-            <div>
-              <strong>Farm finance</strong>
-              <span>Review purchase and sale records from one dashboard.</span>
-            </div>
-            <div>
-              <strong>Private AI</strong>
-              <span>Ask questions only from your logged-in farmer data.</span>
-            </div>
-          </div>
-        </div>
-
-        <div className="auth-card brand-auth-card">
-          <h2>Login</h2>
-          <p>Use the username and password created during registration.</p>
+      <section className="auth-shell auth-shell-centered">
+        <div className="auth-card brand-auth-card auth-form-card">
+          <Link className="auth-back-link" to="/">
+            Back to Chikooza home
+          </Link>
+          <span className="auth-kicker">Farmer login</span>
+          <h1>Welcome back.</h1>
+          <p>Use your Chikooza username and password to open the farmer dashboard.</p>
           {error && <Alert color="danger">{error}</Alert>}
           <form className="auth-form" onSubmit={submitLogin}>
             <div className="form-field">
@@ -143,7 +124,6 @@ const Login = () => {
           </form>
           <div className="auth-switch">
             <Link to="/forgetpassword">Forgot password?</Link>
-            <span> | </span>
             <span>New farmer? </span>
             <Link to="/register">Create account</Link>
           </div>
