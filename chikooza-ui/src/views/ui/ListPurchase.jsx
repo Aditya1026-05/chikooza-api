@@ -185,6 +185,7 @@ const ListPurchase = () => {
                                 <div className={contentArea}>
                                     <div className='gridmargin'>
                                         <FormGroup>
+                                            <Label for="farmSelect">Selected Farm</Label>
                                             <div className="input-group">
                                                 <Input onChange={changeFarm} value={selectedFarmId} id="farmSelect" name="farm" type="select">
                                                     <option value="0">Select Farm</option>

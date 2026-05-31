@@ -328,22 +328,22 @@ const Member = () => {
     });
   };
 
-  const changeFlock = (event) => {
-    if (event.target.value === "0") {
+  const selectFlockRecord = (flock) => {
+    if (!flock || String(flock.flock_public_id) === "0") {
       setShowForm(false);
       setSelectedFlock("0");
       return;
     }
 
-    getsetFlockData2(event.target.value);
-    const flock = flocks.find((item) => String(item.flock_public_id) === event.target.value);
-    if (!flock) {
-      setShowForm(false);
-      setSelectedFlock("0");
-      return;
-    }
+    // U: NEW: use one selection path for dropdowns and the visible flock chips.
+    getsetFlockData2(flock.flock_public_id);
     setShowForm(true);
     setSelectedFlock(String(flock.flock_public_id));
+  };
+
+  const changeFlock = (event) => {
+    const flock = flocks.find((item) => String(item.flock_public_id) === event.target.value);
+    selectFlockRecord(flock);
   };
 
   const selectedFarmRecord = useMemo(() => {
@@ -361,9 +361,13 @@ const Member = () => {
     return farms.filter((farm) => String(farm.public_id) !== "0").length;
   }, [farms]);
 
-  const flockCount = useMemo(() => {
-    return flocks.filter((flock) => String(flock.flock_public_id) !== "0").length;
+  const availableFlocks = useMemo(() => {
+    return flocks.filter((flock) => String(flock.flock_public_id) !== "0");
   }, [flocks]);
+
+  const flockCount = useMemo(() => {
+    return availableFlocks.length;
+  }, [availableFlocks]);
 
   const hasMortalityData = currentCount.length > 0 || mortality.length > 0;
   const hasWeightData = weight.length > 0 || fcr.length > 0;
@@ -571,7 +575,19 @@ const Member = () => {
                 <div><dt>Initial birds</dt><dd>{selectedFlockRecord.actual_birds ?? "Not added"}</dd></div>
                 <div><dt>Current birds</dt><dd>{recordStatus.currentBirdCount ?? selectedFlockRecord.actual_birds ?? "Not recorded"}</dd></div>
               </dl>
-              <Link to="/manageflock">Manage flock</Link>
+              <div className="member-flock-list" aria-label="Flocks in selected farm">
+                {availableFlocks.map((flock) => (
+                  <button
+                    key={flock.flock_public_id}
+                    type="button"
+                    className={String(flock.flock_public_id) === selectedFlock ? "is-active" : ""}
+                    onClick={() => selectFlockRecord(flock)}
+                  >
+                    {flock.flock_name}
+                  </button>
+                ))}
+              </div>
+              <Link to="/manageflock" state={{ farmPublicId: selectedFarm, flockPublicId: selectedFlock }}>View / edit flocks</Link>
             </>
           ) : (
             <div className="member-context-empty">

@@ -8,7 +8,6 @@ import axios from 'axios';
 import Modal from 'react-bootstrap/Modal';
 import Spinner from 'react-bootstrap/Spinner';
 import { useNavigate } from "react-router-dom";
-import moment from "moment";
 
 const dailyDataSteps = [
     { title: "Flock", helper: "Mortality and feed" },
@@ -574,16 +573,18 @@ const DaywiseData = () => {
                                         <Row className="mt-0 mb-6 ml-4">
                                             {datCompare(flockDetails.hatch_date, todayDate[3]) ? null :
                                                 <Col sm="6" md="4" lg="4" className="mt-6">
-                                                    <Link to={`/daydata/${farmid}/${flockid}/${todayDate[3]}`} className="linkgroup" style={{ backgroundColor: '#d66f73', color: '#fff' }}>« {todayDate[2]}</Link>
+                                                    <Link to={`/daydata/${farmid}/${flockid}/${todayDate[3]}`} className="linkgroup" style={{ backgroundColor: '#d66f73', color: '#fff' }}>Previous: {todayDate[2]}</Link>
                                                 </Col>
                                             }
                                             <Col sm="6" md="4" lg="4" className="mt-6">
-                                                <span className="linkgroup" style={{ color: '#000' }}>Today: {moment(todayDate[0]).format("DD MMM")}</span>
+                                                {/* U: OLD: this said "Today" even when the farmer opened an older flock day.
+                                                    U: NEW: label it as the selected entry date. */}
+                                                <span className="linkgroup" style={{ color: '#000' }}>Entry date: {todayDate[0]}</span>
                                             </Col>
                                             <Col sm="6" md="4" lg="4" className="mt-6">
                                                 {datCompareSame(lastInsertDate, todayDate[3]) || lastInsertDate === '' || lastInsertDate === null ?
-                                                    <span className="linkgroup" style={{ color: '#000' }}>{moment(todayDate[1]).format("DD MMM")}</span> :
-                                                    <Link to={`/daydata/${farmid}/${flockid}/${todayDate[4]}`} className="linkgroup" style={{ backgroundColor: '#d66f73', color: '#fff' }}>{todayDate[1]} »</Link>
+                                                    <span className="linkgroup" style={{ color: '#000' }}>Next: {todayDate[1]}</span> :
+                                                    <Link to={`/daydata/${farmid}/${flockid}/${todayDate[4]}`} className="linkgroup" style={{ backgroundColor: '#d66f73', color: '#fff' }}>Next: {todayDate[1]}</Link>
                                                 }
                                             </Col>
                                         </Row>
