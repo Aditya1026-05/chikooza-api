@@ -123,11 +123,14 @@ class AIChatViewSet(viewsets.ViewSet):
         # U: NEW: keep a bounded number of turns and include safe resolved ids so
         # U: follow-ups such as "same farm" and "last one" reuse explicit context.
         try:
-            history_turns = int(os.getenv("AIBOT_HISTORY_TURNS", "8"))
+            # U: NEW: keep exactly the last six chat turns by default.
+            # U: One turn becomes one user message plus one assistant message,
+            # U: so Farmer AI receives up to 12 recent messages as context.
+            history_turns = int(os.getenv("AIBOT_HISTORY_TURNS", "6"))
         except ValueError:
-            logger.warning("Invalid AIBOT_HISTORY_TURNS value; using 8 turns.")
-            history_turns = 8
-        history_turns = min(max(history_turns, 1), 20)
+            logger.warning("Invalid AIBOT_HISTORY_TURNS value; using 6 turns.")
+            history_turns = 6
+        history_turns = min(max(history_turns, 1), 6)
         logs = AIChatLog.objects.filter(user=user).order_by("-created_at")[
             :history_turns
         ]

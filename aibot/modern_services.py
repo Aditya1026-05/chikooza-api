@@ -1841,20 +1841,30 @@ class ChikoozaTextToSQLService:
         return None
 
     def _ordinal_for_phrase(self, query: str, label: str) -> int | None:
-        ordinals = {
-            "first": 1,
-            "1st": 1,
-            "second": 2,
-            "2nd": 2,
-            "third": 3,
-            "3rd": 3,
-            "fourth": 4,
-            "4th": 4,
-            "fifth": 5,
-            "5th": 5,
-        }
-        for word, value in ordinals.items():
-            if re.search(rf"\b(?:{word}\s+{label}|{label}\s+{word})\b", query):
+        ordinals = (
+            ("first", "1st", 1),
+            ("second", "2nd", 2),
+            ("third", "3rd", 3),
+            ("fourth", "4th", 4),
+            ("fifth", "5th", 5),
+        )
+        for word, suffix, value in ordinals:
+            # U: OLD: entity resolution only understood "second farm".
+            # U: NEW: once the caller already knows the entity label from
+            # U: conversation context, bare phrases like "details about 2" or
+            # U: "2nd one" resolve against that label's numbered list.
+            if re.search(
+                rf"\b(?:(?:{word}|{suffix})\s+(?:{label}|one)|{label}\s+(?:{word}|{suffix}))\b",
+                query,
+            ):
+                return value
+            if re.search(rf"\b(?:number|no\.?|#)\s*{value}\b", query):
+                return value
+            if re.search(
+                rf"\b(?:details?\s+about|about|data\s+for|show|tell|give|for|of|inside|in|under|from)\s+"
+                rf"(?:the\s+)?(?:number\s+|no\.?\s*)?{value}(?:st|nd|rd|th)?(?:\s+one)?\b",
+                query,
+            ):
                 return value
         return None
 
@@ -1974,7 +1984,9 @@ class ChikoozaTextToSQLService:
 
         if not self._can_query_entity_tables():
             return []
-        return list(Farm.objects.filter(user_id=self.user.id).order_by("id")[:100])
+        # U: NEW: ordinal references must follow the same ordering farmers see
+        # U: in "Your farms" answers, otherwise "farm 2" selects the wrong row.
+        return list(Farm.objects.filter(user_id=self.user.id).order_by("name", "id")[:100])
 
     def _flocks(self):
         from flocks.models import Flock
@@ -1984,7 +1996,9 @@ class ChikoozaTextToSQLService:
         return list(
             Flock.objects.filter(user_id=self.user.id)
             .select_related("farm")
-            .order_by("id")[:100]
+            # U: NEW: keep numbered flock follow-ups aligned with the displayed
+            # U: "Your flocks" list sorted by farm name and flock name.
+            .order_by("farm__name", "name", "id")[:100]
         )
 
     def _can_query_entity_tables(self) -> bool:
@@ -2027,6 +2041,19 @@ class ChikoozaModernAgentService:
     def query(self, query_text: str, history: list | None = None) -> dict:
         if not self.user or not self.user.is_authenticated:
             return {"status": "error", "message": "Authentication required."}
+
+        compact_answer = self._shorten_previous_answer(query_text, history)
+        if compact_answer:
+            return {
+                "status": "success",
+                "data": None,
+                "answer": compact_answer,
+                "message": compact_answer,
+                "rows": [],
+                "query": None,
+                "route": CONVERSATION,
+                "metric": "previous_answer_summary",
+            }
 
         route = self.router.route(query_text, self.user.id)
 
@@ -2077,6 +2104,48 @@ class ChikoozaModernAgentService:
             "sales, purchases, daily data, mortality, feed, weight, FCR, profit/loss, and "
             "farm-wise or flock-wise reports."
         )
+
+    def _shorten_previous_answer(
+        self, query_text: str, history: list | None = None
+    ) -> str | None:
+        query = normalize_ai_query(query_text)
+        if not re.search(
+            r"\b(?:short|shorter|brief|summari[sz]e|summary|too big|big ans|big answer|small answer|in short)\b",
+            query,
+        ):
+            return None
+
+        previous_answer = ""
+        for item in reversed(history or []):
+            if item.get("role") == "assistant":
+                previous_answer = str(item.get("content") or "").strip()
+                if previous_answer:
+                    break
+        if not previous_answer:
+            return "I do not have a previous farm answer to shorten yet."
+
+        compact_lines = []
+        for raw_line in previous_answer.splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith("Here is "):
+                continue
+            line = re.sub(r"\s*Calculation:.*", "", line).strip()
+            if not line:
+                continue
+            if line.startswith("- "):
+                line = line[2:].strip()
+            if line.endswith(":"):
+                continue
+            compact_lines.append(line)
+            if len(compact_lines) >= 6:
+                break
+
+        if not compact_lines:
+            return previous_answer[:700].strip()
+
+        # U: NEW: farmers can ask "give it in short" after a long report and
+        # U: receive a compact version instead of a generic help message.
+        return "Short version:\n" + "\n".join(f"- {line}" for line in compact_lines)
 
     def _build_sql_service(self):
         fallback = ChikoozaTextToSQLService(user=self.user)

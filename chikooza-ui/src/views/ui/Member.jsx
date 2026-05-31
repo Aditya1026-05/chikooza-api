@@ -575,19 +575,10 @@ const Member = () => {
                 <div><dt>Initial birds</dt><dd>{selectedFlockRecord.actual_birds ?? "Not added"}</dd></div>
                 <div><dt>Current birds</dt><dd>{recordStatus.currentBirdCount ?? selectedFlockRecord.actual_birds ?? "Not recorded"}</dd></div>
               </dl>
-              <div className="member-flock-list" aria-label="Flocks in selected farm">
-                {availableFlocks.map((flock) => (
-                  <button
-                    key={flock.flock_public_id}
-                    type="button"
-                    className={String(flock.flock_public_id) === selectedFlock ? "is-active" : ""}
-                    onClick={() => selectFlockRecord(flock)}
-                  >
-                    {flock.flock_name}
-                  </button>
-                ))}
-              </div>
-              <Link to="/manageflock" state={{ farmPublicId: selectedFarm, flockPublicId: selectedFlock }}>View / edit flocks</Link>
+              {/* U: NEW: dashboard should not duplicate the manage-flow list.
+                  U: Send only the farm to Manage Flock so that page lists all
+                  U: flocks under this farm and lets the farmer choose one. */}
+              <Link to="/manageflock" state={{ farmPublicId: selectedFarm }}>Choose / edit flocks</Link>
             </>
           ) : (
             <div className="member-context-empty">

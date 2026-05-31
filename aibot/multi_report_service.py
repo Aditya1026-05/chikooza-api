@@ -55,13 +55,14 @@ class ChikoozaMultiReportService:
             # U: OLD: targeted complete-report prompts still expanded to broad
             # U: farm/flock breakdowns. U: NEW: keep the report scoped to the
             # U: already resolved farm/flock.
+            include_child_flocks = target_entity_type == "farm" and spec["include_flocks"]
             spec = {
                 **spec,
                 "include_account": False,
                 "include_farms": False,
-                "include_flocks": False,
+                "include_flocks": include_child_flocks,
                 "breakdown_farms": False,
-                "breakdown_flocks": False,
+                "breakdown_flocks": include_child_flocks,
             }
         report = {
             "requested_metrics": sorted(spec["metrics"]),
@@ -82,11 +83,7 @@ class ChikoozaMultiReportService:
         }
 
         target_phrase = self._target_phrase(intent)
-        if (
-            (target_phrase or target_entity_type)
-            and not spec["breakdown_farms"]
-            and not spec["breakdown_flocks"]
-        ):
+        if target_phrase or target_entity_type:
             report["target"] = self._target_section(
                 target_phrase,
                 spec,
@@ -94,6 +91,16 @@ class ChikoozaMultiReportService:
                 target_entity_type=target_entity_type,
                 entity_resolution=entity_resolution,
             )
+            if spec["include_flocks"]:
+                # U: NEW: for "show flocks and all stuff for 2nd farm", keep
+                # U: the farm target and list only that farm's flocks.
+                report["flocks"] = self._flock_breakdown(
+                    spec,
+                    history=history,
+                    farm_id=getattr(entity_resolution, "farm_id", None)
+                    if target_entity_type == "farm"
+                    else None,
+                )
         else:
             if spec["include_farms"]:
                 report["farms"] = self._farm_breakdown(spec, history=history)
@@ -310,8 +317,10 @@ class ChikoozaMultiReportService:
             for row in rows
         ]
 
-    def _flock_breakdown(self, spec: dict, history: list | None) -> list[dict]:
-        rows = self._list_rows("flock")[: self.MAX_BREAKDOWN_ITEMS]
+    def _flock_breakdown(
+        self, spec: dict, history: list | None, farm_id: int | None = None
+    ) -> list[dict]:
+        rows = self._list_rows("flock", farm_id=farm_id)[: self.MAX_BREAKDOWN_ITEMS]
         return [
             {
                 "details": self._json_safe(row),
@@ -471,12 +480,21 @@ class ChikoozaMultiReportService:
             )
         return None
 
-    def _list_rows(self, label: str) -> list[dict]:
+    def _list_rows(
+        self,
+        label: str,
+        *,
+        farm_id: int | None = None,
+        flock_id: int | None = None,
+    ) -> list[dict]:
         try:
             if label == "farm":
-                plan = self.deterministic_service._farm_list_plan()
+                plan = self.deterministic_service._farm_list_plan(farm_id=farm_id)
             else:
-                plan = self.deterministic_service._flock_list_plan()
+                plan = self.deterministic_service._flock_list_plan(
+                    farm_id=farm_id,
+                    flock_id=flock_id,
+                )
             return self.deterministic_service.executor.execute(plan)
         except Exception:
             logger.exception("Multi-report list fetch failed")
@@ -711,7 +729,7 @@ class ChikoozaMultiReportService:
     def _wants_all_metrics(self, query: str) -> bool:
         return bool(
             re.search(
-                r"\b(?:all their stuff|all stuff|all data|all the data|all my data|my all data|"
+                r"\b(?:all their stuff|all the stuff|all stuff|all data|all the data|all my data|my all data|"
                 r"all details|all records|all information|everything|full data|complete data|"
                 r"complete records|inside each|inside every|each of the|every farm|every flock|"
                 r"individually|individual|full report|complete report)\b",

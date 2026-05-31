@@ -75,30 +75,41 @@ class ChikoozaIntentClassifier:
 
     def classify(self, question: str, history: list | None = None) -> ChikoozaIntent:
         query = self._normalize(question)
+        context_entity_type = self._contextual_entity_type(query, history)
+        context_reference = self._entity_reference_from_text(query, "current")
         if self._is_complete_data_query(query):
             # U: OLD: broad "show all my data" wording collapsed into one account summary.
             # U: NEW: route it to the safe multi-report path so farmers get account totals
             # U: plus farm/flock-wise details from fixed backend queries.
             return self._intent(
                 "multi_farm_report",
-                entity_type=self._entity_type_from_text(query),
-                entity_reference=self._entity_reference_from_text(query, "current"),
+                entity_type=context_entity_type,
+                entity_reference=context_reference,
                 source="rule_complete_data",
             )
         if self._is_multi_query(query):
             return self._intent(
                 "multi_farm_report",
-                entity_type=self._entity_type_from_text(query),
-                entity_reference=self._entity_reference_from_text(query, "current"),
+                entity_type=context_entity_type,
+                entity_reference=context_reference,
                 source="rule_multi",
             )
 
-        early_entity_type = self._entity_type_from_text(query)
-        early_reference = self._entity_reference_from_text(query, "current")
+        early_entity_type = context_entity_type
+        early_reference = context_reference
         if self._is_count_query(query) and early_entity_type == "farm":
             return self._intent("count_farms", entity_type="farm", source="rule_core")
         if self._is_count_query(query) and early_entity_type == "flock":
             return self._intent("count_flocks", entity_type="flock", source="rule_core")
+        if self._is_best_flock_query(query):
+            # U: NEW: do not let "which flock is best" fall through to the
+            # U: broad "list flocks" shortcut.
+            return self._intent(
+                "best_flock_report",
+                entity_type="flock",
+                entity_reference=early_reference,
+                source="rule_core",
+            )
         if self._is_broad_list_query(query, "farm"):
             return self._intent("list_farms", entity_type="farm", source="rule_core")
         if self._is_broad_list_query(query, "flock"):
@@ -136,7 +147,8 @@ class ChikoozaIntentClassifier:
             timeout=float(os.getenv("AIBOT_INTENT_TIMEOUT", "20")),
         )
         payload = self._parse_json(result.content)
-        return self._validated_intent(payload, source="groq_intent")
+        intent = self._validated_intent(payload, source="groq_intent")
+        return self._repair_contextual_intent(intent, self._normalize(question), history)
 
     def _messages(self, question: str, history: list | None) -> list[dict[str, str]]:
         owned_context = self._owned_context()
@@ -158,6 +170,10 @@ JSON shape:
 Rules:
 - Use only the owned farms/flocks listed below for entity names.
 - If the farmer says "it", "that", "same one", or "last one", infer from recent conversation.
+- If the farmer says "details about 2", "2nd one", or another numbered follow-up
+  after a numbered farm/flock list, infer the matching farm/flock from recent conversation.
+- If the farmer asks for "flocks for 2nd one" after a farm list, the "2nd one" is
+  the farm being filtered, not the flock.
 - If the farmer asks "other", "more", "remaining", "anything else", use intent "other_entity".
 - Count questions like "how many flocks" use count_flocks/count_farms.
 - Detail questions like "what data does it have" use flock_details or farm_details based on context.
@@ -230,14 +246,65 @@ Return JSON only.
             raw=payload,
         )
 
+    def _repair_contextual_intent(
+        self, intent: ChikoozaIntent, query: str, history: list | None
+    ) -> ChikoozaIntent:
+        context_type = self._contextual_entity_type(query, history)
+        context_reference = self._entity_reference_from_text(query, intent.scope)
+        has_followup_reference = (
+            self._has_bare_ordinal_reference(query)
+            or self._has_pronoun_reference(query)
+            or self._looks_like_other_query(query)
+        )
+
+        entity_type = intent.entity_type
+        entity_reference = intent.entity_reference
+        repaired_intent = intent.intent
+
+        # U: NEW: Groq may classify "show flocks for 2nd one" as a flock
+        # U: reference because "flocks" appears in the sentence. If recent
+        # U: context was a farm list, the ordinal belongs to the farm filter.
+        if context_type and (not entity_type or has_followup_reference):
+            entity_type = context_type
+        if context_reference and (not entity_reference or has_followup_reference):
+            entity_reference = context_reference
+
+        if repaired_intent == "unsupported" and entity_type in {"farm", "flock"}:
+            if self._is_detail_query(query):
+                repaired_intent = f"{entity_type}_details"
+            elif self._looks_like_list_query(query) and entity_type == "farm":
+                repaired_intent = (
+                    "list_flocks"
+                    if re.search(r"\b(?:flocks?|batches?)\b", query)
+                    else "list_farms"
+                )
+
+        if (
+            repaired_intent == intent.intent
+            and entity_type == intent.entity_type
+            and entity_reference == intent.entity_reference
+        ):
+            return intent
+
+        return ChikoozaIntent(
+            intent=repaired_intent,
+            entity_type=entity_type,
+            entity_reference=entity_reference,
+            scope=intent.scope,
+            confidence=intent.confidence,
+            source=f"{intent.source}_context_repaired",
+            raw=intent.raw,
+        )
+
     def _rule_classify(
         self, question: str, *, history: list | None = None, source: str
     ) -> ChikoozaIntent:
         query = self._normalize(question)
-        entity_type = self._entity_type_from_text(query)
+        entity_type = self._contextual_entity_type(query, history)
         if not entity_type and (
             self._looks_like_other_query(query)
             or self._has_pronoun_reference(query)
+            or self._has_bare_ordinal_reference(query)
         ):
             # U: NEW: metric follow-ups such as "sales for that one" and
             # U: "profit for last one" reuse the recent farm/flock context too.
@@ -428,11 +495,13 @@ Return JSON only.
             from farm.models import Farm
             from flocks.models import Flock
 
-            farms = Farm.objects.filter(user_id=self.user.id).order_by("id")[:50]
+            # U: NEW: prompt numbering must match the safe executor's displayed
+            # U: farm/flock ordering so "2nd one" means the same row everywhere.
+            farms = Farm.objects.filter(user_id=self.user.id).order_by("name", "id")[:50]
             flocks = (
                 Flock.objects.filter(user_id=self.user.id)
                 .select_related("farm")
-                .order_by("id")[:80]
+                .order_by("farm__name", "name", "id")[:80]
             )
             farm_text = "; ".join(
                 f"{index}. {farm.name}" for index, farm in enumerate(farms, start=1)
@@ -507,6 +576,7 @@ Return JSON only.
             "all details",
             "all information",
             "all their stuff",
+            "all the stuff",
             "all stuff",
             "all things",
             "all my stuff",
@@ -666,9 +736,38 @@ Return JSON only.
             return "farm"
         return ""
 
+    def _contextual_entity_type(self, query: str, history: list | None) -> str:
+        explicit_type = self._entity_type_from_text(query)
+        latest_type = self._latest_entity_type_from_history(history)
+
+        # U: NEW: "show flocks for 2nd one" after a farm list means "second
+        # U: farm", even though the word "flocks" appears in the query.
+        if (
+            latest_type == "farm"
+            and explicit_type == "flock"
+            and self._has_bare_ordinal_reference(query)
+            and re.search(r"\b(?:for|of|inside|in|under|from)\b", query)
+        ):
+            return "farm"
+
+        if explicit_type:
+            return explicit_type
+
+        if latest_type and (
+            self._has_pronoun_reference(query)
+            or self._has_bare_ordinal_reference(query)
+            or self._is_detail_query(query)
+        ):
+            return latest_type
+
+        return ""
+
     def _entity_reference_from_text(self, query: str, scope: str) -> str:
         if scope == "other":
             return "other"
+        bare_ordinal = self._bare_ordinal_reference(query)
+        if bare_ordinal:
+            return bare_ordinal
         reference_patterns = (
             ("last one", r"\blast\s+one\b"),
             ("same one", r"\bsame\s+one\b"),
@@ -681,29 +780,53 @@ Return JSON only.
             ("it", r"\bit\b"),
             (
                 "first",
-                r"\b(?:first\s+(?:farm|flock|batch)|(?:farm|flock|batch)\s+first)\b",
+                r"\b(?:(?:first|1st)\s+(?:farm|flock|batch|one)|(?:farm|flock|batch)\s+(?:first|1st))\b",
             ),
             (
                 "second",
-                r"\b(?:second\s+(?:farm|flock|batch)|(?:farm|flock|batch)\s+second)\b",
+                r"\b(?:(?:second|2nd)\s+(?:farm|flock|batch|one)|(?:farm|flock|batch)\s+(?:second|2nd))\b",
             ),
             (
                 "third",
-                r"\b(?:third\s+(?:farm|flock|batch)|(?:farm|flock|batch)\s+third)\b",
+                r"\b(?:(?:third|3rd)\s+(?:farm|flock|batch|one)|(?:farm|flock|batch)\s+(?:third|3rd))\b",
             ),
             (
                 "fourth",
-                r"\b(?:fourth\s+(?:farm|flock|batch)|(?:farm|flock|batch)\s+fourth)\b",
+                r"\b(?:(?:fourth|4th)\s+(?:farm|flock|batch|one)|(?:farm|flock|batch)\s+(?:fourth|4th))\b",
             ),
             (
                 "fifth",
-                r"\b(?:fifth\s+(?:farm|flock|batch)|(?:farm|flock|batch)\s+fifth)\b",
+                r"\b(?:(?:fifth|5th)\s+(?:farm|flock|batch|one)|(?:farm|flock|batch)\s+(?:fifth|5th))\b",
             ),
         )
         for phrase, pattern in reference_patterns:
             if re.search(pattern, query):
                 return phrase
         return ""
+
+    def _bare_ordinal_reference(self, query: str) -> str:
+        ordinals = (
+            ("first", 1, "1st"),
+            ("second", 2, "2nd"),
+            ("third", 3, "3rd"),
+            ("fourth", 4, "4th"),
+            ("fifth", 5, "5th"),
+        )
+        for word, number, suffix in ordinals:
+            if re.search(rf"\b(?:{word}|{suffix})\s+one\b", query):
+                return word
+            if re.search(rf"\b(?:number|no\.?|#)\s*{number}\b", query):
+                return word
+            if re.search(
+                rf"\b(?:details?\s+about|about|data\s+for|show|tell|give|for|of|inside|in|under|from)\s+"
+                rf"(?:the\s+)?(?:number\s+|no\.?\s*)?{number}(?:st|nd|rd|th)?(?:\s+one)?\b",
+                query,
+            ):
+                return word
+        return ""
+
+    def _has_bare_ordinal_reference(self, query: str) -> bool:
+        return bool(self._bare_ordinal_reference(query))
 
     def _has_pronoun_reference(self, query: str) -> bool:
         return bool(
