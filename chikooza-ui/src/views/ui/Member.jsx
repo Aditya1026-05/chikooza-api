@@ -49,6 +49,12 @@ const Member = () => {
   const [week, setWeek] = useState([]);
   const [weight, setWeight] = useState([]);
   const [fcr, setFcr] = useState([]);
+  const [recordStatus, setRecordStatus] = useState({
+    hasPurchases: false,
+    hasSales: false,
+    loading: false,
+    error: "",
+  });
   const navigate = useNavigate();
 
   const getsetFlockData2 = useCallback((flockId) => {
@@ -77,6 +83,56 @@ const Member = () => {
         handleUnauthorized(err, navigate);
       });
   }, [navigate]);
+
+  const loadRecordStatus = useCallback((flockId) => {
+    if (!flockId || flockId === "0") {
+      setRecordStatus({
+        hasPurchases: false,
+        hasSales: false,
+        loading: false,
+        error: "",
+      });
+      return;
+    }
+
+    setRecordStatus((current) => ({ ...current, loading: true, error: "" }));
+
+    // U: NEW: dashboard workflow should reflect saved data, not hard-code
+    // U: Purchases/Sales as incomplete forever.
+    Promise.allSettled([
+      axios.get(`${apiPath}purchase/?flock_public_id=${flockId}`, getAuthConfig()),
+      axios.get(`${apiPath}sales/?flock_public_id=${flockId}`, getAuthConfig()),
+    ]).then(([purchaseResult, saleResult]) => {
+      if (purchaseResult.status === "rejected") {
+        handleUnauthorized(purchaseResult.reason, navigate);
+      }
+      if (saleResult.status === "rejected") {
+        handleUnauthorized(saleResult.reason, navigate);
+      }
+
+      const purchaseList =
+        purchaseResult.status === "fulfilled"
+          ? purchaseResult.value.data?.results?.purchase_list || []
+          : [];
+      const salesList =
+        saleResult.status === "fulfilled"
+          ? saleResult.value.data?.results?.sales_list || []
+          : [];
+      const failed =
+        purchaseResult.status === "rejected" || saleResult.status === "rejected";
+
+      setRecordStatus({
+        hasPurchases: purchaseList.length > 0,
+        hasSales: salesList.length > 0,
+        loading: false,
+        error: failed ? "Some saved-record checks could not be loaded." : "",
+      });
+    });
+  }, [navigate]);
+
+  useEffect(() => {
+    loadRecordStatus(selectedFlock);
+  }, [loadRecordStatus, selectedFlock]);
 
   useEffect(() => {
     let url = `${apiPath}farm/`;
@@ -189,6 +245,8 @@ const Member = () => {
     const hasFarm = farmCount > 0;
     const hasFlock = flockCount > 0;
     const hasDailyData = hasChartData;
+    const hasPurchases = recordStatus.hasPurchases;
+    const hasSales = recordStatus.hasSales;
 
     return [
       {
@@ -215,26 +273,26 @@ const Member = () => {
       {
         title: "Add purchases",
         helper: "Track feed, medicine, labour, equipment, and other costs.",
-        complete: false,
-        href: hasFlock ? "/addpurchase" : "/addflock",
-        action: hasFlock ? "Add purchase" : "Add flock first",
+        complete: hasPurchases,
+        href: hasPurchases ? "/listpurchase" : hasFlock ? "/addpurchase" : "/addflock",
+        action: hasPurchases ? "Review purchases" : hasFlock ? "Add purchase" : "Add flock first",
       },
       {
         title: "Record sales",
         helper: "Add partial or final lifting details for profit reports.",
-        complete: false,
-        href: hasFlock ? "/flocksale" : "/addflock",
-        action: hasFlock ? "Add sale" : "Add flock first",
+        complete: hasSales,
+        href: hasSales ? "/viewsale" : hasFlock ? "/flocksale" : "/addflock",
+        action: hasSales ? "Review sales" : hasFlock ? "Add sale" : "Add flock first",
       },
       {
         title: "Review reports and AI",
         helper: "Use reports and Farmer AI once records are entered.",
-        complete: hasDailyData,
-        href: hasDailyData ? "/chatbot" : "/dailydatasheet",
-        action: hasDailyData ? "Ask Farmer AI" : "Open reports",
+        complete: hasDailyData && (hasPurchases || hasSales),
+        href: hasDailyData && (hasPurchases || hasSales) ? "/chatbot" : "/dailydatasheet",
+        action: hasDailyData && (hasPurchases || hasSales) ? "Ask Farmer AI" : "Open reports",
       },
     ];
-  }, [farmCount, flockCount, hasChartData]);
+  }, [farmCount, flockCount, hasChartData, recordStatus.hasPurchases, recordStatus.hasSales]);
 
   const nextSetupStep = setupSteps.find((step) => !step.complete) || setupSteps[setupSteps.length - 1];
 
@@ -382,6 +440,21 @@ const Member = () => {
               <span>Flocks</span>
               <strong>{flockCount}</strong>
             </div>
+            <div>
+              <span>Purchases</span>
+              <strong>{recordStatus.hasPurchases ? "Yes" : "No"}</strong>
+            </div>
+            <div>
+              <span>Sales</span>
+              <strong>{recordStatus.hasSales ? "Yes" : "No"}</strong>
+            </div>
+          </div>
+          <div className="member-record-status" role="status">
+            {recordStatus.loading && "Checking saved purchases and sales..."}
+            {!recordStatus.loading && recordStatus.error && recordStatus.error}
+            {!recordStatus.loading && !recordStatus.error && selectedFlock !== "0" && (
+              "Workflow status is based on the selected flock."
+            )}
           </div>
         </aside>
 

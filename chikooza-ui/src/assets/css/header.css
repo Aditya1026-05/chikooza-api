@@ -1215,6 +1215,13 @@ input[type=number]::-webkit-inner-spin-button,
   margin-top: 0.4rem;
 }
 
+.member-record-status {
+  color: #6d514c;
+  font-size: 0.88rem;
+  line-height: 1.5;
+  margin-top: 0.85rem;
+}
+
 .member-dashboard-alert {
   background: #fff1ed;
   border: 1px solid #efd7d1;
