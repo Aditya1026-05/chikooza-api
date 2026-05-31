@@ -10,7 +10,6 @@ from common.constant import (
     COUNTRY_DOES_NOT_EXIST,
     ERROR,
     FARM_DOES_NOT_EXIST,
-    PERMISSION_NOT_ALLOWED,
     STATE_DOES_NOT_EXIST,
 )
 from common.utils import get_detail, success_response, validate_url_value
@@ -24,6 +23,15 @@ from farm.serializers import (
     UpdateFarmSerializer,
 )
 from farm.services import AddFarmService, UpdateFarmService
+
+
+def _farm_queryset_for_request(request):
+    """
+    U: Scope farm records to the authenticated farmer unless an admin explicitly requests data.
+    """
+    if getattr(request.user, "is_superuser", False):
+        return Farm.objects.all()
+    return Farm.objects.filter(user=request.user.users)
 
 
 class FarmView(viewsets.ViewSet):
@@ -62,20 +70,18 @@ class FarmView(viewsets.ViewSet):
     def retrieve(cls, request, pk):
         try:
             validate_url_value(pk, "farmPublicId")
-            farm = Farm.objects.get(public_id=pk)
-            if request.user.users == farm.user or request.user.is_superuser:
-                return get_detail(
-                    "Farm details", FarmGetSerializer(farm).data, status.HTTP_200_OK
-                )
-            return Response(
-                {ERROR: PERMISSION_NOT_ALLOWED}, status.HTTP_400_BAD_REQUEST
+            # U: OLD: Farm.objects.get(public_id=pk) loaded any farmer's farm before checking ownership.
+            # U: NEW: query through the authenticated farmer scope so cross-account access returns not found.
+            farm = _farm_queryset_for_request(request).get(public_id=pk)
+            return get_detail(
+                "Farm details", FarmGetSerializer(farm).data, status.HTTP_200_OK
             )
         except Farm.DoesNotExist:
             return Response({ERROR: FARM_DOES_NOT_EXIST}, status.HTTP_404_NOT_FOUND)
 
     def list(cls, request):
         try:
-            farm = Farm.objects.filter(user=request.user.users)
+            farm = _farm_queryset_for_request(request)
             return get_detail(
                 "Farms List of login user.",
                 FarmListSerializer(farm, many=True).data,
@@ -88,18 +94,19 @@ class FarmView(viewsets.ViewSet):
     def partial_update(cls, request, pk):
         try:
             validate_url_value(pk, "farmPublicId")
-            farm = Farm.objects.get(public_id=pk)
-            if request.user.users == farm.user or request.user.is_superuser:
-                serializer = UpdateFarmSerializer(data=request.data)
-                if serializer.is_valid(raise_exception=True):
-                    serializer_data = serializer.validated_data
-                    UpdateFarmService.execute({"data": serializer_data, "farm": farm})
-                    return success_response(
-                        "Profile update successfully",
-                        "profile",
-                        "Profile update successfully",
-                        200,
-                    )
+            # U: OLD: update loaded by public_id globally and could fall through without a response.
+            # U: NEW: update only farms visible to the authenticated farmer/admin.
+            farm = _farm_queryset_for_request(request).get(public_id=pk)
+            serializer = UpdateFarmSerializer(data=request.data)
+            if serializer.is_valid(raise_exception=True):
+                serializer_data = serializer.validated_data
+                UpdateFarmService.execute({"data": serializer_data, "farm": farm})
+                return success_response(
+                    "Profile update successfully",
+                    "profile",
+                    "Profile update successfully",
+                    200,
+                )
         except Farm.DoesNotExist:
             return Response({ERROR: FARM_DOES_NOT_EXIST}, status.HTTP_404_NOT_FOUND)
 
