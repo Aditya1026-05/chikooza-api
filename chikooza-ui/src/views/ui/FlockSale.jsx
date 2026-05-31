@@ -20,27 +20,98 @@ const getFlockAgeInDays = (hatchDate) => {
     return Number.isFinite(age) ? Math.max(age, 0) : "";
 };
 
+const SALE_DRAFT_KEY = "chikooza-flock-sale-draft";
+
+const saleSteps = [
+    { title: "Flock", helper: "Choose farm and flock" },
+    { title: "Sale", helper: "Select lifting type" },
+    { title: "Details", helper: "Add sale and buyer data" },
+    { title: "Review", helper: "Check and save" },
+];
+
+const emptySaleData = {
+    farm: null,
+    flock: null,
+    selType: null,
+    date: '',
+    sellcount: '',
+    selltwt: '',
+    sellrate: '',
+    sellamount: '',
+    sellavgweight: 0,
+    totalCost: 0,
+    buyername: "",
+    buyeraddress: "",
+    buyerphone: "",
+    buyeremail: "",
+    buyervehicle: "",
+    buyerremarks: "",
+};
+
+const emptySalePopupData = {
+    totalfeed: 0,
+    med: 0,
+    vac: 0,
+    ach: 0,
+    rc: 0,
+    pi: 0,
+    ri: 0,
+    ei: 0,
+    sri: 0,
+    totalicentive: 0,
+    pcr: 0,
+    stg: 0,
+    em: 0,
+    fr: 0,
+    totalpnl: 0,
+    ltds: 0,
+    lamct: 0,
+    ot: 0,
+};
+
+const readSaleDraft = () => {
+    try {
+        const draft = JSON.parse(localStorage.getItem(SALE_DRAFT_KEY) || "{}");
+        return {
+            data: { ...emptySaleData, ...(draft.data || {}) },
+            dataPopUp: { ...emptySalePopupData, ...(draft.dataPopUp || {}) },
+            saleStep: Number(draft.saleStep || 0),
+        };
+    } catch {
+        return { data: emptySaleData, dataPopUp: emptySalePopupData, saleStep: 0 };
+    }
+};
+
+const getSaleTypeLabel = (saleType) => {
+    if (saleType === "partial_lifting") {
+        return "Partial Lifting";
+    }
+    if (saleType === "final_lifting") {
+        return "Final Lifting";
+    }
+    return "Not selected";
+};
+
 const FlockSale = () => {
+    const [initialDraft] = useState(() => readSaleDraft());
     let [show, setShow] = useState(false);
     let [modelShow, setModelShow] = useState(false);
     let [farms, setFarms] = useState([]);
     let [flocks, setFlocks] = useState([]);
     let [flock, setFlock] = useState([]);
     let [feed, setFeed] = useState([]);
-    let [showForm, setShowForm] = useState(false);
-    let [showFlocks, setShowFlocks] = useState(false);
-    let [showFlockSale, setShowFlockSale] = useState(false);
-    let [showButton, setShowButton] = useState(false);
+    let [showForm, setShowForm] = useState(initialDraft.saleStep >= 2);
+    let [showFlocks, setShowFlocks] = useState(Boolean(initialDraft.data.farm));
+    let [showFlockSale, setShowFlockSale] = useState(Boolean(initialDraft.data.flock));
+    let [showButton, setShowButton] = useState(Boolean(initialDraft.data.selType && initialDraft.data.selType !== "0"));
+    const [saleStep, setSaleStep] = useState(initialDraft.saleStep);
     // let [data, setData] = useState({ farm: null, flock: null, selType: null, date: '', sellcount: '', selltwt: '', sellrate: '', sellamount: '', sellavgweight: 0, totalCost: 0 });
 
 //MV-16-6-25- 17-10 added buyeremail
-    let [data, setData] = useState({ farm: null, flock: null, selType: null, date: '', sellcount: '', selltwt: '', sellrate: '', sellamount: '', sellavgweight: 0, totalCost: 0 ,buyeremail: "", });
+    let [data, setData] = useState(initialDraft.data);
 //MV-16-6-25- 17-10 change end
 
-    let [dataPopUp, setDataPopUp] = useState({
-        totalfeed: 0, med: 0, vac: 0, ach: 0, rc: 0, pi: 0, ri: 0, ei: 0, sri: 0, totalicentive: 0, pcr: 0, stg: 0, em: 0, fr: 0, totalpnl: 0,
-        ltds: 0, lamct: 0, ot: 0
-    });
+    let [dataPopUp, setDataPopUp] = useState(initialDraft.dataPopUp);
     let [error, setError] = useState({});
     let [totalChickCount, setTotalChickCount] = useState(0);
     let [submitError, setSubmitError] = useState('');
@@ -55,21 +126,160 @@ const FlockSale = () => {
     function successMsg() {
         setShow(false);
     }
+
+    useEffect(() => {
+        // U: NEW: sale forms contain flock, buyer and cost fields, so keep a
+        // U: local draft instead of losing the farmer's work on navigation.
+        localStorage.setItem(SALE_DRAFT_KEY, JSON.stringify({
+            data,
+            dataPopUp,
+            saleStep,
+        }));
+    }, [data, dataPopUp, saleStep]);
+
+    const validateSaleSelection = () => {
+        if (!data.farm || data.farm === "0") {
+            setSubmitError("Select a farm before recording sale data.");
+            return false;
+        }
+        if (!data.flock || data.flock === "0") {
+            setSubmitError("Select the flock being sold.");
+            return false;
+        }
+        setSubmitError("");
+        return true;
+    };
+
+    const validateSaleType = () => {
+        if (!data.selType || data.selType === "0") {
+            setSubmitError("Select whether this is partial lifting or final lifting.");
+            return false;
+        }
+        setSubmitError("");
+        return true;
+    };
+
+    const validateSaleDetails = () => {
+        // U: OLD: sale validation lived inside save and allowed several bad
+        // U: values to reach the final button. NEW: the same checks guard the
+        // U: wizard step and final submit.
+        let validationError = { status: 0, date: '', sellcount: '', selltwt: '', sellrate: '', sellamount: '', phone: '', email: '' };
+        const liftingCount = Number(data.sellcount);
+        const availableBirds = Number(totalChickCount || 0);
+        const saleDate = data.date || "";
+
+        if (!data.flock) {
+            validationError.sellcount = 'Please select flock first.';
+            validationError.status = 1;
+        }
+        if (!data.selType || data.selType === "0") {
+            validationError.sellcount = 'Please select sale type.';
+            validationError.status = 1;
+        }
+        if (!saleDate) {
+            validationError.date = 'Date is required.';
+            validationError.status = 1;
+        } else if (moment(saleDate).isAfter(moment(), "day")) {
+            validationError.date = 'Sale date cannot be in the future.';
+            validationError.status = 1;
+        } else if (flock.hatch_date && moment(saleDate).isBefore(moment(flock.hatch_date), "day")) {
+            validationError.date = 'Sale date cannot be before hatch date.';
+            validationError.status = 1;
+        }
+        if (data.sellcount === null || data.sellcount === '' || liftingCount <= 0) {
+            validationError.sellcount = 'Lifting count must be greater than 0.';
+            validationError.status = 1;
+        } else if (availableBirds > 0 && liftingCount > availableBirds) {
+            validationError.sellcount = `Lifting count cannot exceed current birds (${availableBirds}).`;
+            validationError.status = 1;
+        }
+        if (data.selltwt === null || data.selltwt === '' || Number(data.selltwt) <= 0) {
+            validationError.selltwt = 'Total weight must be greater than 0.';
+            validationError.status = 1;
+        }
+        if (data.sellrate === null || data.sellrate === '' || Number(data.sellrate) <= 0) {
+            validationError.sellrate = 'Rate must be greater than 0.';
+            validationError.status = 1;
+        }
+        if (data.buyerphone && !/^\d{10}$/.test(data.buyerphone)) {
+            validationError.phone = 'Buyer phone must be 10 digits.';
+            validationError.status = 1;
+        }
+        if (data.buyeremail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.buyeremail)) {
+            validationError.email = 'Enter a valid buyer email.';
+            validationError.status = 1;
+        }
+
+        setError({
+            ...error,
+            date: validationError.date,
+            sellcount: validationError.sellcount,
+            selltwt: validationError.selltwt,
+            sellrate: validationError.sellrate,
+            sellamount: validationError.sellamount,
+            phone: validationError.phone,
+            email: validationError.email,
+        });
+        return validationError.status === 0;
+    };
+
+    const goNextSaleStep = () => {
+        if (saleStep === 0 && !validateSaleSelection()) {
+            return;
+        }
+        if (saleStep === 1 && !validateSaleType()) {
+            return;
+        }
+        if (saleStep === 2 && !validateSaleDetails()) {
+            return;
+        }
+        setShowForm(saleStep + 1 >= 2);
+        setSaleStep((currentStep) => Math.min(currentStep + 1, saleSteps.length - 1));
+    };
+
+    const goPreviousSaleStep = () => {
+        setSaleStep((currentStep) => Math.max(currentStep - 1, 0));
+    };
+
+    const resetSaleForm = ({ keepSelection = false } = {}) => {
+        const selection = keepSelection
+            ? {
+                farm: data.farm,
+                flock: data.flock,
+            }
+            : {};
+        setData({ ...emptySaleData, ...selection });
+        setDataPopUp(emptySalePopupData);
+        setError({});
+        setSubmitError("");
+        setSaleStep(keepSelection ? 1 : 0);
+        setShowForm(false);
+        setShowButton(false);
+        setShowFlockSale(Boolean(keepSelection && data.flock));
+        if (!keepSelection) {
+            setFlock([]);
+            setFlocks([]);
+            setShowFlocks(false);
+        }
+        localStorage.removeItem(SALE_DRAFT_KEY);
+    };
+
     const save = (e) => {
         setLoading(false)
         e.preventDefault();
-        let validationError = { status: 0, date: '', sellcount: '', selltwt: '', sellrate: '', sellamount: '' };
-        const liftingCount = Number(data.sellcount);
-        const availableBirds = Number(totalChickCount || 0);
-        if (!data.flock) { validationError.sellcount = 'Please select flock first.'; validationError.status = 1 }
-        if (!data.selType || data.selType === "0") { validationError.sellcount = 'Please select sale type.'; validationError.status = 1 }
-        if (data.date === null || data.date === '') { validationError.date = 'Date is required.'; validationError.status = 1 } else if (moment(data.date).isAfter(moment(), "day")) { validationError.date = 'Sale date cannot be in the future.'; validationError.status = 1 } else { validationError.date = '' }
-        if (data.sellcount === null || liftingCount <= 0 || data.sellcount === '') { validationError.sellcount = 'Lifting count must be greater than 0.'; validationError.status = 1 } else if (availableBirds > 0 && liftingCount > availableBirds) { validationError.sellcount = `Lifting count cannot exceed current birds (${availableBirds}).`; validationError.status = 1 } else { validationError.sellcount = '' }
-        if (data.selltwt === null || Number(data.selltwt) <= 0 || data.selltwt === '') { validationError.selltwt = 'Total weight must be greater than 0.'; validationError.status = 1 } else { validationError.selltwt = '' }
-        if (data.sellrate === null || Number(data.sellrate) <= 0 || data.sellrate === '') { validationError.sellrate = 'Rate must be greater than 0.'; validationError.status = 1 } else { validationError.sellrate = '' }
-        if (error.phone || error.email) { validationError.status = 1 }
-        setError({ ...error, date: validationError.date, sellcount: validationError.sellcount, selltwt: validationError.selltwt, sellrate: validationError.sellrate, sellamount: validationError.sellamount });
-        if (validationError.status === 0) {
+        if (!validateSaleSelection()) {
+            setSaleStep(0);
+            return;
+        }
+        if (!validateSaleType()) {
+            setSaleStep(1);
+            return;
+        }
+        if (!validateSaleDetails()) {
+            setSaleStep(2);
+            return;
+        }
+        if (validateSaleSelection() && validateSaleType() && validateSaleDetails()) {
             setLoading(true)
             setSubmitError('');
             let saleData = {
@@ -113,10 +323,7 @@ const FlockSale = () => {
                 setShow(true);
                 setLoading(false)
                 setTimeout(successMsg, 3000);
-                setShowFlocks(false);
-                setShowForm(false);
-                setShowButton(false)
-                setShowFlockSale(false)
+                resetSaleForm({ keepSelection: true });
             }).catch((err) => {
                 console.log(err);
                 setSubmitError('Something went wrong. Please try again');
@@ -133,16 +340,9 @@ const FlockSale = () => {
         }
     }
     const closeAll = () => {
-        //setFarms([]);
-        setFlocks([]);
-        setFlock([]);
-        setShowForm(false);
-        setShowFlocks(false);
-        setShowFlockSale(false);
-        setShowButton(false);
-        setData({ farm: null, flock: null, selType: null, date: '', sellcount: '', selltwt: '', sellrate: '', sellamount: '', sellavgweight: 0, totalCost: 0 });
-        setError({});
-        window.location.reload();
+        // U: OLD: window.location.reload() refreshed the whole app and lost
+        // U: context. NEW: reset only this form state.
+        resetSaleForm();
     }
     useEffect(() => {
         let cancelled = false;
@@ -159,11 +359,16 @@ const FlockSale = () => {
                 setFarms(res.data.results);
             }
 
-            if (prefillFarmId !== "0") {
-                // U: NEW: dashboard can send the selected flock here so sale entry
-                // U: starts from the right farm/flock instead of a blank screen.
-                setData((current) => ({ ...current, farm: prefillFarmId, flock: null }));
-                axios.get(`${apiPath}flocks/${prefillFarmId}/`, getAuthConfig()).then((flockRes) => {
+            const draftFarmId = String(initialDraft.data.farm || "0");
+            const draftFlockId = String(initialDraft.data.flock || "0");
+            const targetFarmId = prefillFarmId !== "0" ? prefillFarmId : draftFarmId;
+            const targetFlockId = prefillFlockId !== "0" ? prefillFlockId : draftFlockId;
+
+            if (targetFarmId !== "0") {
+                // U: NEW: dashboard prefill and locally saved drafts both
+                // U: restore the selected farm/flock without forcing a reload.
+                setData((current) => ({ ...current, farm: targetFarmId }));
+                axios.get(`${apiPath}flocks/${targetFarmId}/`, getAuthConfig()).then((flockRes) => {
                     if (cancelled) {
                         return;
                     }
@@ -175,7 +380,7 @@ const FlockSale = () => {
                     }
 
                     const flockList = flockRes.data.results.flock_list;
-                    const selected = flockList.find((item) => String(item.flock_public_id) === prefillFlockId);
+                    const selected = flockList.find((item) => String(item.flock_public_id) === targetFlockId);
                     setFlocks(flockList);
                     if (!selected) {
                         setShowFlockSale(false);
@@ -184,19 +389,24 @@ const FlockSale = () => {
 
                     setData((current) => ({
                         ...current,
-                        farm: selected.farm_public_id || prefillFarmId,
+                        farm: selected.farm_public_id || targetFarmId,
                         flock: selected.flock_public_id,
-                        selType: null,
-                        date: '',
-                        sellcount: '',
-                        selltwt: '',
-                        sellrate: '',
-                        sellamount: '',
+                        ...(prefillFlockId !== "0"
+                            ? {
+                                selType: null,
+                                date: '',
+                                sellcount: '',
+                                selltwt: '',
+                                sellrate: '',
+                                sellamount: '',
+                            }
+                            : {}),
                     }));
                     setFlock(selected);
                     setShowFlockSale(true);
-                    setShowForm(false);
-                    setShowButton(false);
+                    setShowButton(Boolean(prefillFlockId === "0" && initialDraft.data.selType && initialDraft.data.selType !== "0"));
+                    setShowForm(Boolean(prefillFlockId === "0" && initialDraft.saleStep >= 2));
+                    setSaleStep(prefillFlockId !== "0" ? 1 : initialDraft.saleStep);
                     setError({});
 
                     axios.get(`${apiPath}dailyDataLastDate/${selected.flock_public_id}/`, getAuthConfig()).then((dailyRes) => {
@@ -235,8 +445,10 @@ const FlockSale = () => {
             setShowFlocks(false);
             setShowFlockSale(false);
             setShowButton(false);
-            setData({ farm: null, flock: null, selType: null, date: '', sellcount: '', selltwt: '', sellrate: '', sellamount: '', sellavgweight: 0, totalCost: 0 });
+            setData(emptySaleData);
             setError({});
+            setSubmitError("");
+            setSaleStep(0);
         } else {
             let url = `${apiPath}flocks/${e.target.value}/`;
             // U: Replaced shared config mutation with per-request auth headers from getAuthConfig().
@@ -253,8 +465,10 @@ const FlockSale = () => {
                 setShowForm(false);
                 setShowFlockSale(false);
                 setShowButton(false);
-                setData({ farm: e.target.value, flock: null, selType: null, date: '', sellcount: '', selltwt: '', sellrate: '', sellamount: '' });
+                setData({ ...emptySaleData, farm: e.target.value });
                 setError({});
+                setSubmitError("");
+                setSaleStep(0);
             }).catch((err) => {
                 //setFormError('No Flock available.');
                 handleUnauthorized(err, navigate);
@@ -266,8 +480,10 @@ const FlockSale = () => {
             setShowForm(false);
             setShowFlockSale(false);
             setShowButton(false);
-            setData({ flock: null, selType: null, date: '', sellcount: '', selltwt: '', sellrate: '', sellamount: '' });
+            setData({ ...emptySaleData, farm: data.farm });
             setError({});
+            setSubmitError("");
+            setSaleStep(0);
         } else {
             const user = flocks.find(u => String(u.flock_public_id) === e.target.value);
             if (!user) {
@@ -283,12 +499,14 @@ const FlockSale = () => {
                 setTotalChickCount(user.actual_birds);
                 handleUnauthorized(err, navigate);
             });
-            setData({ ...data, farm: user.farm_public_id, flock: user.flock_public_id, date: '', sellcount: '', selltwt: '', sellrate: '', sellamount: '' });
+            setData({ ...emptySaleData, farm: user.farm_public_id, flock: user.flock_public_id });
             setFlock(user);
             setShowFlockSale(true);
             setShowForm(false);
             //setShowButton(false);
             setError({});
+            setSubmitError("");
+            setSaleStep(1);
         }
     }
     let changeFlockSale = (e) => {
@@ -297,6 +515,8 @@ const FlockSale = () => {
             setShowForm(false);
             setData({ ...data, selType: e.target.value, date: '', sellcount: '', selltwt: '', sellrate: '', sellamount: '', sellavgweight: 0, totalCost: 0 });
             setError({});
+            setSubmitError("");
+            setSaleStep(1);
         } else {
             setShowButton(true);
             setShowForm(false);
@@ -304,6 +524,7 @@ const FlockSale = () => {
                 setData({ ...data, selType: e.target.value, date: '', sellcount: '', selltwt: '', sellrate: '', sellamount: '', sellavgweight: 0, totalCost: 0 })
                 : setData({ ...data, selType: e.target.value, date: '', sellcount: totalChickCount, selltwt: '', sellrate: '', sellamount: '', sellavgweight: 0, totalCost: 0 })
             setError({});
+            setSubmitError("");
         }
     }
     let openModel = () => {
@@ -571,7 +792,8 @@ const FlockSale = () => {
                             <Col sm="12" md={{ offset: 2, size: 8 }}>
                                 <div className={contentArea}>
                                     <div className='gridmargin'>
-                                            <Form onSubmit={save}>
+                                        <Form onSubmit={save}>
+                                            {submitError && <Alert color="danger">{submitError}</Alert>}
                                             {!hasFarmPrerequisite && (
                                                 <div className="form-prerequisite-card">
                                                     <span>Farm required</span>
@@ -579,96 +801,104 @@ const FlockSale = () => {
                                                     <Link to="/addfarm">Add farm first</Link>
                                                 </div>
                                             )}
-                                            <FormGroup>
-                                                <Label for="farmselect">Select Farm</Label>
-                                                <div className="input-group">
-                                                    <Input onChange={changeFarm} value={data.farm || "0"} id="farmSelect" name="farm" type="select">
-                                                        <option value="0">Select Farm</option>
-                                                        {
-                                                            farms.map((item) => {
-                                                                return (
+                                            <div className="form-stepper" aria-label="Flock sale steps">
+                                                {saleSteps.map((step, index) => (
+                                                    <button
+                                                        key={step.title}
+                                                        type="button"
+                                                        className={index === saleStep ? "is-active" : index < saleStep ? "is-complete" : ""}
+                                                        onClick={() => {
+                                                            setSaleStep(index);
+                                                            setShowForm(index >= 2);
+                                                        }}
+                                                    >
+                                                        <span>{index + 1}</span>
+                                                        <strong>{step.title}</strong>
+                                                        <small>{step.helper}</small>
+                                                    </button>
+                                                ))}
+                                            </div>
+                                            {saleStep === 0 && (
+                                                <>
+                                                    <FormGroup>
+                                                        <Label for="farmselect">Select Farm</Label>
+                                                        <div className="input-group">
+                                                            <Input onChange={changeFarm} value={data.farm || "0"} id="farmSelect" name="farm" type="select">
+                                                                <option value="0">Select Farm</option>
+                                                                {farms.map((item) => (
                                                                     <option key={item.public_id} value={item.public_id}>{item.name}</option>
-                                                                )
-                                                            })
-                                                        }
-                                                    </Input>
-                                                </div>
-                                            </FormGroup>
-                                            {
-                                                showFlocks &&
-                                                <FormGroup>
-                                                    <Label for="farmselect">Select Flock</Label>
-                                                    <div className="input-group">
-                                                        <Input onChange={changeFlock} value={data.flock || "0"} id="flockSelect" name="flock" type="select">
-                                                            <option value="0">Select Flocks</option>
-                                                            {
-                                                                flocks.map((item) => {
-                                                                    return (
+                                                                ))}
+                                                            </Input>
+                                                        </div>
+                                                    </FormGroup>
+                                                    {showFlocks && (
+                                                        <FormGroup>
+                                                            <Label for="flockSelect">Select Flock</Label>
+                                                            <div className="input-group">
+                                                                <Input onChange={changeFlock} value={data.flock || "0"} id="flockSelect" name="flock" type="select">
+                                                                    <option value="0">Select Flocks</option>
+                                                                    {flocks.map((item) => (
                                                                         <option key={item.flock_public_id} value={item.flock_public_id}>{item.flock_name}</option>
-                                                                    )
-                                                                })
-                                                            }
-                                                        </Input>
-                                                    </div>
-                                                </FormGroup>
-                                            }
-                                            {showFlocks && !hasFlockOptions && (
-                                                <div className="form-prerequisite-card">
-                                                    <span>Flock required</span>
-                                                    <p>This farm does not have a flock yet. Add a flock before recording partial or final lifting sales.</p>
-                                                    <Link to="/addflock">Add flock</Link>
-                                                </div>
+                                                                    ))}
+                                                                </Input>
+                                                            </div>
+                                                        </FormGroup>
+                                                    )}
+                                                    {showFlocks && !hasFlockOptions && (
+                                                        <div className="form-prerequisite-card">
+                                                            <span>Flock required</span>
+                                                            <p>This farm does not have a flock yet. Add a flock before recording partial or final lifting sales.</p>
+                                                            <Link to="/addflock">Add flock</Link>
+                                                        </div>
+                                                    )}
+                                                </>
                                             )}
-                                            {
-                                                showFlockSale &&
-                                                <FormGroup>
-                                                    <Label for="farmselect">Select Sale Type</Label>
-                                                    <div className="input-group">
-                                                        <Input onChange={changeFlockSale} value={data.selType || "0"} id="saleSelect" name="sale" type="select">
-                                                            <option value="0">Select Sale Type</option>
-                                                            <option value="partial_lifting">Partial Lifting</option>
-                                                            <option value="final_lifting">Final Lifting</option>
-                                                        </Input>
-                                                    </div>
-                                                </FormGroup>
-                                            }
-                                            {showFlockSale && Number(totalChickCount || 0) <= 0 && (
-                                                <div className="form-prerequisite-card">
-                                                    <span>Current birds missing</span>
-                                                    <p>The selected flock has no current bird count. Add daily data first so sales cannot exceed available birds.</p>
-                                                    <Link to="/flockdailydata">Add daily data</Link>
-                                                </div>
+                                            {saleStep === 1 && (
+                                                <>
+                                                    {!showFlockSale ? (
+                                                        <div className="form-helper-panel">
+                                                            <strong>Select a flock first</strong>
+                                                            <p>Sales must be attached to a flock so reports can calculate bird count and profit correctly.</p>
+                                                        </div>
+                                                    ) : (
+                                                        <FormGroup>
+                                                            <Label for="saleSelect">Select Sale Type</Label>
+                                                            <div className="input-group">
+                                                                <Input onChange={changeFlockSale} value={data.selType || "0"} id="saleSelect" name="sale" type="select">
+                                                                    <option value="0">Select Sale Type</option>
+                                                                    <option value="partial_lifting">Partial Lifting</option>
+                                                                    <option value="final_lifting">Final Lifting</option>
+                                                                </Input>
+                                                            </div>
+                                                        </FormGroup>
+                                                    )}
+                                                    {showFlockSale && Number(totalChickCount || 0) <= 0 && (
+                                                        <div className="form-prerequisite-card">
+                                                            <span>Current birds missing</span>
+                                                            <p>The selected flock has no current bird count. Add daily data first so sales cannot exceed available birds.</p>
+                                                            <Link to="/flockdailydata">Add daily data</Link>
+                                                        </div>
+                                                    )}
+                                                </>
                                             )}
-                                            {
-                                                showButton &&
-                                                <div className="button-group mt-2">
-                                                    <Button color="danger" onClick={() => {
-                                                        setShowForm(true);
-                                                        setData({ ...data, date: '', selltwt: '', sellrate: '', sellamount: '' });
-                                                        setError({});
-                                                    }} className="btn" type="button">Proceed to next step</Button>
-                                                    {/* <Button color="warning" type="button" className="text-black">Cancel</Button> */}
-                                                </div>
-                                            }
-                                            {
-                                                showForm &&
+                                            {saleStep === 2 && (
                                                 <>
                                                     <Row className="mt-3">
                                                         <Col>
-                                                            <Label for="flockname " className="font-bold">Flock </Label>
-                                                            <Alert color="danger" className="shadow-4">{flock.flock_name}</Alert>
+                                                            <Label for="flockname" className="font-bold">Flock</Label>
+                                                            <Alert color="danger" className="shadow-4">{flock.flock_name || "Selected flock"}</Alert>
                                                         </Col>
                                                         <Col>
-                                                            <Label for="flockname" className="font-bold flex">Current Count</Label>
+                                                            <Label for="currentCount" className="font-bold flex">Current Count</Label>
                                                             <Alert color="danger" className="shadow-4">{totalChickCount}</Alert>
                                                         </Col>
                                                         <Col>
-                                                            <Label for="flockname" className="font-bold">Age</Label>
+                                                            <Label for="flockAge" className="font-bold">Age</Label>
                                                             <Alert color="danger" className="shadow-4">
                                                                 {/* U: OLD: <Moment diff={flock.hatch_date} unit="days">{new Date()}</Moment> */}
-                                                                {flockAgeInDays}</Alert>
+                                                                {flockAgeInDays}
+                                                            </Alert>
                                                         </Col>
-
                                                     </Row>
                                                     <Accordion defaultActiveKey="0" className="mb-3">
                                                         <Accordion.Item eventKey="0">
@@ -676,67 +906,116 @@ const FlockSale = () => {
                                                             <Accordion.Body style={{ backgroundColor: 'white' }}>
                                                                 <Row>
                                                                     <Col sm="6" md="4" lg="4">
-                                                                        <Label for="flockname">Date</Label>
-                                                                        <input onChange={(e) => {
-                                                                            if (e.target.value === null || e.target.value.trim() === '') {
-                                                                                setError({ ...error, date: 'Date is required.' }); setData({ ...data, date: e.target.value });
-                                                                            } else {
-                                                                                setError({ ...error, date: '' }); setData({ ...data, date: e.target.value });
-                                                                            }
-                                                                        }} name="date" placeholder="Sale Date" min={flock.hatch_date || ""} max={currentDate} type="date" className="form-control" aria-label="flockname" aria-describedby="basic-addon1" />
+                                                                        <Label for="saleDate">Date</Label>
+                                                                        <input
+                                                                            onChange={(e) => {
+                                                                                const value = e.target.value;
+                                                                                setData({ ...data, date: value });
+                                                                                if (!value) {
+                                                                                    setError({ ...error, date: 'Date is required.' });
+                                                                                } else if (moment(value).isAfter(moment(), "day")) {
+                                                                                    setError({ ...error, date: 'Sale date cannot be in the future.' });
+                                                                                } else {
+                                                                                    setError({ ...error, date: '' });
+                                                                                }
+                                                                            }}
+                                                                            value={data.date || ""}
+                                                                            name="date"
+                                                                            placeholder="Sale Date"
+                                                                            min={flock.hatch_date || ""}
+                                                                            max={currentDate}
+                                                                            type="date"
+                                                                            className="form-control"
+                                                                            aria-label="sale date"
+                                                                            aria-describedby="basic-addon1"
+                                                                        />
                                                                         <small className="text-danger">{error.date}</small>
                                                                     </Col>
-                                                                    {data.selType === "partial_lifting" ?
+                                                                    {data.selType === "partial_lifting" ? (
                                                                         <Col sm="6" md="4" lg="4">
-                                                                            <Label for="flockname">Lifting Count</Label>
-                                                                            <input onBlur={totalWeight} onChange={(e) => {
-                                                                                if (e.target.value === null || Number(e.target.value) < 0 || e.target.value === '') {
-                                                                                    setError({ ...error, sellcount: 'Lifting Count is required.' }); setData({ ...data, sellcount: e.target.value });
-                                                                                } else {
-                                                                                    setError({ ...error, sellcount: '' }); setData({ ...data, sellcount: e.target.value });
-                                                                                }
-                                                                            }} name="sellcount" placeholder="0" type="number" className="form-control" aria-label="hatchdate" aria-describedby="basic-addon1" />
+                                                                            <Label for="sellcount">Lifting Count</Label>
+                                                                            <input
+                                                                                onBlur={totalWeight}
+                                                                                onChange={(e) => {
+                                                                                    const value = e.target.value;
+                                                                                    const liftingCount = Number(value);
+                                                                                    if (!value || liftingCount <= 0) {
+                                                                                        setError({ ...error, sellcount: 'Lifting count must be greater than 0.' });
+                                                                                    } else if (Number(totalChickCount || 0) > 0 && liftingCount > Number(totalChickCount || 0)) {
+                                                                                        setError({ ...error, sellcount: `Lifting count cannot exceed current birds (${totalChickCount}).` });
+                                                                                    } else {
+                                                                                        setError({ ...error, sellcount: '' });
+                                                                                    }
+                                                                                    setData({ ...data, sellcount: value });
+                                                                                }}
+                                                                                value={data.sellcount || ""}
+                                                                                name="sellcount"
+                                                                                placeholder="0"
+                                                                                type="number"
+                                                                                min="1"
+                                                                                max={totalChickCount || undefined}
+                                                                                className="form-control"
+                                                                                aria-label="lifting count"
+                                                                                aria-describedby="basic-addon1"
+                                                                            />
                                                                             <small className="text-danger">{error.sellcount}</small>
                                                                         </Col>
-                                                                        : data.selType === "final_lifting" &&
+                                                                    ) : data.selType === "final_lifting" && (
                                                                         <Col sm="6" md="4" lg="4">
-                                                                            <Label for="flockname">Lifting Count</Label>
-                                                                            <input disabled defaultValue={totalChickCount} name="sellcount" placeholder="0" type="number" className="form-control" aria-label="hatchdate" aria-describedby="basic-addon1" />
+                                                                            <Label for="sellcount">Lifting Count</Label>
+                                                                            <input disabled value={data.sellcount || totalChickCount || ""} name="sellcount" placeholder="0" type="number" className="form-control" aria-label="lifting count" aria-describedby="basic-addon1" />
+                                                                            <small className="text-danger">{error.sellcount}</small>
                                                                         </Col>
-                                                                    }
+                                                                    )}
                                                                     <Col sm="6" md="4" lg="4">
-                                                                        <Label for="flockname">Total Wt.</Label>
-                                                                        <input onBlur={totalWeight} onChange={(e) => {
-                                                                            if (e.target.value === null || Number(e.target.value) < 0 || e.target.value === '') {
-                                                                                setError({ ...error, selltwt: 'Total weight is required.' }); setData({ ...data, selltwt: e.target.value });
-                                                                            } else {
-                                                                                setError({ ...error, selltwt: '' }); setData({ ...data, selltwt: e.target.value });
-                                                                            }
-                                                                        }} name="selltwt" placeholder="0" type="number" className="form-control" aria-label="flocksize" aria-describedby="basic-addon1" />
+                                                                        <Label for="selltwt">Total Wt.</Label>
+                                                                        <input
+                                                                            onBlur={totalWeight}
+                                                                            onChange={(e) => {
+                                                                                const value = e.target.value;
+                                                                                setData({ ...data, selltwt: value });
+                                                                                Number(value) <= 0 ? setError({ ...error, selltwt: 'Total weight must be greater than 0.' }) : setError({ ...error, selltwt: '' });
+                                                                            }}
+                                                                            value={data.selltwt || ""}
+                                                                            name="selltwt"
+                                                                            placeholder="0"
+                                                                            type="number"
+                                                                            min="0"
+                                                                            className="form-control"
+                                                                            aria-label="total weight"
+                                                                            aria-describedby="basic-addon1"
+                                                                        />
                                                                         <small className="text-danger">{error.selltwt}</small>
                                                                     </Col>
                                                                 </Row>
                                                                 <Row>
                                                                     <Col sm="6" md="4" lg="4">
-                                                                        <Label for="flockname">Avg. Wt(kg)</Label>
-                                                                        <input value={data.sellavgweight} disabled name="sellavgwt" placeholder="0" type="number" className="form-control" aria-label="actualbirds" aria-describedby="basic-addon1" />
-                                                                        <small className="text-danger"></small>
+                                                                        <Label for="sellavgwt">Avg. Wt(kg)</Label>
+                                                                        <input value={data.sellavgweight || 0} disabled name="sellavgwt" placeholder="0" type="number" className="form-control" aria-label="average weight" aria-describedby="basic-addon1" />
                                                                     </Col>
                                                                     <Col sm="6" md="4" lg="4">
-                                                                        <Label for="flockname">Rate/kg</Label>
-                                                                        <input onBlur={totalCost} onChange={(e) => {
-                                                                            if (e.target.value === null || Number(e.target.value) < 0 || e.target.value === '') {
-                                                                                setError({ ...error, sellrate: 'Rate is required.' }); setData({ ...data, sellrate: e.target.value });
-                                                                            } else {
-                                                                                setError({ ...error, sellrate: '' }); setData({ ...data, sellrate: e.target.value });
-                                                                            }
-                                                                        }} name="sellrate" placeholder="0" type="number" className="form-control" aria-label="actualbirds" aria-describedby="basic-addon1" />
+                                                                        <Label for="sellrate">Rate/kg</Label>
+                                                                        <input
+                                                                            onBlur={totalCost}
+                                                                            onChange={(e) => {
+                                                                                const value = e.target.value;
+                                                                                setData({ ...data, sellrate: value });
+                                                                                Number(value) <= 0 ? setError({ ...error, sellrate: 'Rate must be greater than 0.' }) : setError({ ...error, sellrate: '' });
+                                                                            }}
+                                                                            value={data.sellrate || ""}
+                                                                            name="sellrate"
+                                                                            placeholder="0"
+                                                                            type="number"
+                                                                            min="0"
+                                                                            className="form-control"
+                                                                            aria-label="rate per kg"
+                                                                            aria-describedby="basic-addon1"
+                                                                        />
                                                                         <small className="text-danger">{error.sellrate}</small>
                                                                     </Col>
                                                                     <Col sm="6" md="4" lg="4">
-                                                                        <Label for="flockname">Cost</Label>
-                                                                        <input value={data.totalCost} disabled name="sellcost" placeholder="0" type="number" className="form-control" aria-label="actualbirds" aria-describedby="basic-addon1" />
-                                                                        <small className="text-danger">{ }</small>
+                                                                        <Label for="sellcost">Cost</Label>
+                                                                        <input value={data.totalCost || 0} disabled name="sellcost" placeholder="0" type="number" className="form-control" aria-label="sale cost" aria-describedby="basic-addon1" />
                                                                     </Col>
                                                                 </Row>
                                                             </Accordion.Body>
@@ -746,105 +1025,104 @@ const FlockSale = () => {
                                                             <Accordion.Body style={{ backgroundColor: 'white' }}>
                                                                 <Row>
                                                                     <Col sm="6" md="4" lg="4">
-                                                                        <Label for="flockname">Buyer Name</Label>
-                                                                        <input onChange={(e) => { setData({ ...data, [e.target.name]: e.target.value }); }} name="buyername" placeholder="Buyer Name" type="text" className="form-control" aria-label="flockname" aria-describedby="basic-addon1" />
-                                                                        <small className="text-danger">{ }</small>
+                                                                        <Label for="buyername">Buyer Name</Label>
+                                                                        <input onChange={(e) => { setData({ ...data, [e.target.name]: e.target.value }); }} value={data.buyername || ""} name="buyername" placeholder="Buyer Name" type="text" className="form-control" aria-label="buyer name" aria-describedby="basic-addon1" />
                                                                     </Col>
                                                                     <Col sm="6" md="4" lg="4">
-                                                                        <Label for="flockname">Buyer Address</Label>
-                                                                        <input onChange={(e) => { setData({ ...data, [e.target.name]: e.target.value }); }} name="buyeraddress" placeholder="Buyer Address" type="text" className="form-control" aria-label="hatchdate" aria-describedby="basic-addon1" />
-                                                                        <small className="text-danger">{ }</small>
+                                                                        <Label for="buyeraddress">Buyer Address</Label>
+                                                                        <input onChange={(e) => { setData({ ...data, [e.target.name]: e.target.value }); }} value={data.buyeraddress || ""} name="buyeraddress" placeholder="Buyer Address" type="text" className="form-control" aria-label="buyer address" aria-describedby="basic-addon1" />
                                                                     </Col>
                                                                     <Col sm="6" md="4" lg="4">
-                                                                        <Label for="flockname">Buyer Phone</Label>
-                                                                        <input maxLength={10} onChange={(e) => {
-                                                                            if (e.target.value === "" || e.target.value.match(/^[0-9]*$/)) {
-                                                                                setError({ ...error, phone: '' });
-                                                                                setData({ ...data, [e.target.name]: e.target.value });
-                                                                            } else {
-                                                                                setError({ ...error, phone: 'Phone is not right format.' });
-                                                                                setData({ ...data, [e.target.name]: e.target.value });
-                                                                            }
-                                                                        }} name="buyerphone" placeholder="Buyer Phone" type="text" className="form-control" aria-label="flocksize" aria-describedby="basic-addon1" />
+                                                                        <Label for="buyerphone">Buyer Phone</Label>
+                                                                        <input
+                                                                            maxLength={10}
+                                                                            onChange={(e) => {
+                                                                                const value = e.target.value;
+                                                                                if (value === "" || /^\d{0,10}$/.test(value)) {
+                                                                                    setData({ ...data, buyerphone: value });
+                                                                                    setError({ ...error, phone: value && value.length !== 10 ? 'Buyer phone must be 10 digits.' : '' });
+                                                                                }
+                                                                            }}
+                                                                            value={data.buyerphone || ""}
+                                                                            name="buyerphone"
+                                                                            placeholder="Buyer Phone"
+                                                                            type="text"
+                                                                            className="form-control"
+                                                                            aria-label="buyer phone"
+                                                                            aria-describedby="basic-addon1"
+                                                                        />
                                                                         <small className="text-danger">{error.phone}</small>
                                                                     </Col>
                                                                 </Row>
                                                                 <Row>
                                                                     <Col sm="6" md="4" lg="4">
-                                                                    {/* <Label for="flockname">Buyer Email</Label>Add commentMore actions
-                                                                        <input onChange={(e) => {
-                                                                            if (e.target.value == "" || RegExp(/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,15}/g).test(e.target.value.trim())) {
-                                                                                setError({ ...error, email: '' });
-                                                                                setData({ ...data, [e.target.name]: e.target.value });
-                                                                            } else {
-                                                                                setError({ ...error, email: 'Email is not right format.' });
-                                                                                setData({ ...data, [e.target.name]: e.target.value });
-                                                                            }
-                                                                        }} name="buyeremail" placeholder="Buyer Email" type="text" className="form-control" aria-label="actualbirds" aria-describedby="basic-addon1" />
-                                                                        <small className="text-danger">{error.email}</small> */}
-
-{/* MV-16-6-25- 17-10 changed Email logic */}
-                                                                    <Label for="flockname">Buyer Email</Label>
-                                                                    <input
-                                                                        onChange={(e) => {
-                                                                        const value = e.target.value;
-                                                                        const isValidEmail = value === "" || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
-
-                                                                        setData(prev => ({
-                                                                            ...prev,
-                                                                            buyeremail: value
-                                                                        }));
-
-                                                                        if (isValidEmail) {
-                                                                            setError(prev => ({...prev, email: ''}));
-                                                                        } else {
-                                                                            setError(prev => ({...prev, email: 'Email is not right format.'}));
-                                                                        }
-                                                                        }}
-                                                                        name="buyeremail"
-                                                                        value={data.buyeremail}
-                                                                        placeholder="Buyer Email"
-                                                                        type="email"
-                                                                        className="form-control"
-                                                                        aria-label="actualbirds"
-                                                                        aria-describedby="basic-addon1"
-                                                                    />
-                                                                    <small className="text-danger">{error.email}</small>
-{/* MV-16-6-25- 17-10 change end */}
-
-
+                                                                        <Label for="buyeremail">Buyer Email</Label>
+                                                                        <input
+                                                                            onChange={(e) => {
+                                                                                const value = e.target.value;
+                                                                                const isValidEmail = value === "" || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+                                                                                setData({ ...data, buyeremail: value });
+                                                                                setError({ ...error, email: isValidEmail ? '' : 'Enter a valid buyer email.' });
+                                                                            }}
+                                                                            name="buyeremail"
+                                                                            value={data.buyeremail || ""}
+                                                                            placeholder="Buyer Email"
+                                                                            type="email"
+                                                                            className="form-control"
+                                                                            aria-label="buyer email"
+                                                                            aria-describedby="basic-addon1"
+                                                                        />
+                                                                        <small className="text-danger">{error.email}</small>
                                                                     </Col>
                                                                     <Col sm="6" md="4" lg="4">
-                                                                        <Label for="flockname">Vehicle No.</Label>
-                                                                        <input onChange={(e) => { setData({ ...data, [e.target.name]: e.target.value }); }} name="buyervehicle" placeholder="Vehicle No." type="text" className="form-control" aria-label="actualbirds" aria-describedby="basic-addon1" />
-                                                                        <small className="text-danger">{ }</small>
+                                                                        <Label for="buyervehicle">Vehicle No.</Label>
+                                                                        <input onChange={(e) => { setData({ ...data, [e.target.name]: e.target.value }); }} value={data.buyervehicle || ""} name="buyervehicle" placeholder="Vehicle No." type="text" className="form-control" aria-label="vehicle number" aria-describedby="basic-addon1" />
                                                                     </Col>
                                                                     <Col sm="6" md="4" lg="4">
-                                                                        <Label for="flockname">Remarks</Label>
-                                                                        <input onChange={(e) => { setData({ ...data, [e.target.name]: e.target.value }); }} name="buyerremarks" placeholder="" type="text" className="form-control" aria-label="actualbirds" aria-describedby="basic-addon1" />
-                                                                        <small className="text-danger">{ }</small>
+                                                                        <Label for="buyerremarks">Remarks</Label>
+                                                                        <input onChange={(e) => { setData({ ...data, [e.target.name]: e.target.value }); }} value={data.buyerremarks || ""} name="buyerremarks" placeholder="" type="text" className="form-control" aria-label="remarks" aria-describedby="basic-addon1" />
                                                                     </Col>
                                                                 </Row>
                                                             </Accordion.Body>
                                                         </Accordion.Item>
                                                     </Accordion>
-                                                    {flock.integration === true && data.selType === 'final_lifting' &&
+                                                    {flock.integration === true && data.selType === 'final_lifting' && (
                                                         <div className="button-group">
                                                             <Button color="primary" type="button" onClick={openModel}>Add Integration Cost</Button>
-                                                        </div>}
-                                                    <div className="button-group">
-                                                        {submitError && <Alert color="danger">{submitError}</Alert>}
-                                                        {loading ?
-                                                            <Button className="btn" color="danger" type="submit" disabled  >
-                                                                Saving...
-                                                                <span className="spinner-border spinner-border-sm" role="status" aria-hidden="true" />
-                                                            </Button>
-                                                            :
-                                                            <Button className="btn" color="danger" type="submit" >Save</Button>
-                                                        }                                                        <Button color="warning" type="button" className="text-black" onClick={closeAll} >Cancel</Button>
-                                                    </div>
+                                                        </div>
+                                                    )}
                                                 </>
-                                            }
+                                            )}
+                                            {saleStep === 3 && (
+                                                <div className="form-review-card">
+                                                    <span>Review sale entry</span>
+                                                    <dl>
+                                                        <div><dt>Flock</dt><dd>{flock.flock_name || data.flock || "Not selected"}</dd></div>
+                                                        <div><dt>Sale type</dt><dd>{getSaleTypeLabel(data.selType)}</dd></div>
+                                                        <div><dt>Date</dt><dd>{data.date || "Missing"}</dd></div>
+                                                        <div><dt>Lifting count</dt><dd>{data.sellcount || 0}</dd></div>
+                                                        <div><dt>Total weight</dt><dd>{data.selltwt || 0} kg</dd></div>
+                                                        <div><dt>Rate/kg</dt><dd>Rs. {data.sellrate || 0}</dd></div>
+                                                        <div><dt>Total sale</dt><dd>Rs. {data.totalCost || 0}</dd></div>
+                                                        <div><dt>Buyer</dt><dd>{data.buyername || "Not added"}</dd></div>
+                                                    </dl>
+                                                </div>
+                                            )}
+                                            <div className="form-wizard-actions">
+                                                {saleStep > 0 && <Button type="button" color="secondary" outline onClick={goPreviousSaleStep}>Back</Button>}
+                                                {saleStep < saleSteps.length - 1 && <Button type="button" color="danger" onClick={goNextSaleStep}>Next</Button>}
+                                                {saleStep === saleSteps.length - 1 && (
+                                                    loading ? (
+                                                        <Button className="btn" color="danger" type="submit" disabled>
+                                                            Saving...
+                                                            <span className="spinner-border spinner-border-sm" role="status" aria-hidden="true" />
+                                                        </Button>
+                                                    ) : (
+                                                        <Button className="btn" color="danger" type="submit">Save</Button>
+                                                    )
+                                                )}
+                                                <Button color="secondary" outline type="button" onClick={closeAll}>Cancel</Button>
+                                            </div>
                                         </Form>
                                     </div>
                                 </div>

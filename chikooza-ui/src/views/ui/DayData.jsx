@@ -10,6 +10,13 @@ import Spinner from 'react-bootstrap/Spinner';
 import { useNavigate } from "react-router-dom";
 import moment from "moment";
 
+const dailyDataSteps = [
+    { title: "Flock", helper: "Mortality and feed" },
+    { title: "Vaccines", helper: "Vaccination status" },
+    { title: "Checks", helper: "Heating, cooling, sick" },
+    { title: "Timing", helper: "Darkness and feed" },
+    { title: "Review", helper: "Check and save" },
+];
 
 const DaywiseData = () => {
     const navigate = useNavigate();
@@ -47,6 +54,18 @@ const DaywiseData = () => {
     let [lastInsertDate, setLastInsertDate] = useState(null);
     let [darknessError, setDarknessError] = useState('');
     let [feedAvaibilityError, setFeedAvaibilityError] = useState('');
+    const [dailyStep, setDailyStep] = useState(0);
+    const dailyDraftKey = `chikooza-day-data-draft-${flockid}-${date}`;
+
+    useEffect(() => {
+        // U: NEW: daily data is a long multi-section form, so keep a local
+        // U: draft while the farmer moves across steps.
+        localStorage.setItem(dailyDraftKey, JSON.stringify({
+            addData,
+            formValues,
+            dailyStep,
+        }));
+    }, [addData, formValues, dailyStep, dailyDraftKey]);
 
     let handleChange = (i, e) => {
         let newFormValues = [...formValues];
@@ -231,12 +250,10 @@ const DaywiseData = () => {
         }
     }
     function successMsg() {
-        //setAddData({...addData,mortality:null,feed_intake:null,average_bird_weight:null})
         setShow(false);
         setLastInsertDate(date);
-        //setNxtLink(false);
         setLoading(false);
-        window.location.reload();
+        localStorage.removeItem(dailyDraftKey);
     }
     useEffect(() => {
         setFormValues([{ public_id: "", vaccine_public_id: "", status: "" }]);
@@ -484,9 +501,49 @@ const DaywiseData = () => {
         // }
     }
     let closeAll = () => {
+        localStorage.removeItem(dailyDraftKey);
         navigate("/flockdailydata")
 
     }
+    const validateDailyStep = () => {
+        let valid = true;
+        if (dailyStep === 0) {
+            let midData = oldValues.current_bird_count === null ? flockDetails.actual_birds : oldValues.current_bird_count;
+            let feedStock = oldValues.feed_stock === 0 ? oldValues.initial_total_feed : oldValues.feed_stock;
+            if (addData.mortality === null || addData.mortality === '' || Number(addData.mortality) < 0 || Number(addData.mortality) >= Number(midData || 0)) {
+                setMortalityError('Mortality must be 0 or more and less than current bird count.');
+                valid = false;
+            }
+            if (addData.feed_intake === null || addData.feed_intake === '' || Number(addData.feed_intake) <= 0 || Number(addData.feed_intake) > Number(feedStock || 0)) {
+                setFeedintakeError('Feed intake must be greater than 0 and within feed stock.');
+                valid = false;
+            }
+            if (addData.average_bird_weight !== null && addData.average_bird_weight !== '' && Number(addData.average_bird_weight) <= 0) {
+                setAverageBirdError('Average bird weight must be greater than 0.');
+                valid = false;
+            }
+        }
+        if (dailyStep === 3) {
+            if (addData.darkness_time_public_id === 0 || addData.darkness_time_public_id === "0") {
+                setDarknessError('Select darkness time.');
+                valid = false;
+            }
+            if (addData.feed_availability_public_id === 0 || addData.feed_availability_public_id === "0") {
+                setFeedAvaibilityError('Select feed availability time.');
+                valid = false;
+            }
+        }
+        return valid;
+    };
+    const goNextDailyStep = () => {
+        if (!validateDailyStep()) {
+            return;
+        }
+        setDailyStep((currentStep) => Math.min(currentStep + 1, dailyDataSteps.length - 1));
+    };
+    const goPreviousDailyStep = () => {
+        setDailyStep((currentStep) => Math.max(currentStep - 1, 0));
+    };
     // console.log(formValues, "lhgfdfgh");
     return (
         <Row>
@@ -530,6 +587,20 @@ const DaywiseData = () => {
                                                 }
                                             </Col>
                                         </Row>
+                                        <div className="form-stepper" aria-label="Daily data steps">
+                                            {dailyDataSteps.map((step, index) => (
+                                                <button
+                                                    key={step.title}
+                                                    type="button"
+                                                    className={index === dailyStep ? "is-active" : index < dailyStep ? "is-complete" : ""}
+                                                    onClick={() => setDailyStep(index)}
+                                                >
+                                                    <span>{index + 1}</span>
+                                                    <strong>{step.title}</strong>
+                                                    <small>{step.helper}</small>
+                                                </button>
+                                            ))}
+                                        </div>
                                         <Form onSubmit={handleSubmit}>
                                             <Row className="mt-3">
                                                 <Col sm="6" md="4" lg="4">
@@ -545,7 +616,8 @@ const DaywiseData = () => {
                                                     <Alert color="danger" style={{ color: '#000' }}>{flockDetails.flock_bird}</Alert>
                                                 </Col>
                                             </Row>
-                                            <Accordion defaultActiveKey="0" className="mb-3">
+                                            <Accordion activeKey={String(dailyStep)} className="mb-3">
+                                                {dailyStep === 0 && (
                                                 <Accordion.Item eventKey="0">
                                                     <Accordion.Header>Flock Data</Accordion.Header>
                                                     <Accordion.Body style={{ backgroundColor: 'white' }}>
@@ -610,6 +682,8 @@ const DaywiseData = () => {
                                                         </Row>
                                                     </Accordion.Body>
                                                 </Accordion.Item>
+                                                )}
+                                                {dailyStep === 1 && (
                                                 <Accordion.Item eventKey="1">
                                                     <Accordion.Header>Vaccinations</Accordion.Header>
                                                     <Accordion.Body style={{ backgroundColor: 'white' }}>
@@ -652,6 +726,8 @@ const DaywiseData = () => {
                                                         ))}
                                                     </Accordion.Body>
                                                 </Accordion.Item>
+                                                )}
+                                                {dailyStep === 2 && (
                                                 <Accordion.Item eventKey="2">
                                                     <Accordion.Header>More Data</Accordion.Header>
                                                     <Accordion.Body style={{ backgroundColor: 'white' }}>
@@ -671,6 +747,8 @@ const DaywiseData = () => {
                                                         </Row>
                                                     </Accordion.Body>
                                                 </Accordion.Item>
+                                                )}
+                                                {dailyStep === 3 && (
                                                 <Accordion.Item eventKey="3">
                                                     <Accordion.Header>Darkness / Feed Availability</Accordion.Header>
                                                     <Accordion.Body style={{ backgroundColor: 'white' }}>
@@ -706,17 +784,35 @@ const DaywiseData = () => {
                                                         </Row>
                                                     </Accordion.Body>
                                                 </Accordion.Item>
+                                                )}
                                             </Accordion>
-                                            <div className="button-group">
-                                                {loading ?
-                                                    <Button className="btn" color="danger" type="submit"   >
+                                            {dailyStep === 4 && (
+                                                <div className="form-review-card">
+                                                    <span>Review daily data</span>
+                                                    <dl>
+                                                        <div><dt>Mortality</dt><dd>{addData.mortality ?? "Missing"}</dd></div>
+                                                        <div><dt>Feed intake</dt><dd>{addData.feed_intake ?? "Missing"} kg</dd></div>
+                                                        <div><dt>Current birds</dt><dd>{addData.current_bird_count ?? "Missing"}</dd></div>
+                                                        <div><dt>Average weight</dt><dd>{addData.average_bird_weight ?? "Not added"} gm</dd></div>
+                                                        <div><dt>FCR</dt><dd>{addData.fcr || "-"}</dd></div>
+                                                        <div><dt>Vaccination rows</dt><dd>{formValues.filter((item) => item.vaccine_public_id).length}</dd></div>
+                                                        <div><dt>Darkness</dt><dd>{addData.darkness_time_public_id || "Missing"}</dd></div>
+                                                        <div><dt>Feed availability</dt><dd>{addData.feed_availability_public_id || "Missing"}</dd></div>
+                                                    </dl>
+                                                </div>
+                                            )}
+                                            <div className="form-wizard-actions">
+                                                {dailyStep > 0 && <Button type="button" color="secondary" outline onClick={goPreviousDailyStep}>Back</Button>}
+                                                {dailyStep < dailyDataSteps.length - 1 && <Button type="button" color="danger" onClick={goNextDailyStep}>Next</Button>}
+                                                {dailyStep === dailyDataSteps.length - 1 && (loading ?
+                                                    <Button className="btn" color="danger" type="submit">
                                                         Please wait...
                                                         <span className="spinner-border spinner-border-sm" role="status" aria-hidden="true" />
                                                     </Button>
                                                     :
-                                                    <Button className="btn" color="danger" type="submit" >{addData.type}</Button>
-                                                }
-                                                <Button className="btn ml-4" color="warning" type="button" onClick={closeAll} >Cancel</Button>
+                                                    <Button className="btn" color="danger" type="submit">{addData.type}</Button>
+                                                )}
+                                                <Button className="btn" color="secondary" outline type="button" onClick={closeAll}>Cancel</Button>
                                             </div>
                                         </Form>
                                     </div>

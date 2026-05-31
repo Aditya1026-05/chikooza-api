@@ -7,7 +7,55 @@ import axios from 'axios';
 import Modal from 'react-bootstrap/Modal';
 import { Link, useLocation, useNavigate } from "react-router-dom";
 
+const PURCHASE_DRAFT_KEY = "chikooza-add-purchase-draft";
+
+const purchaseSteps = [
+    { title: "Flock", helper: "Choose where this cost belongs" },
+    { title: "Details", helper: "Enter purchase type and amount" },
+    { title: "Review", helper: "Check and save" },
+];
+
+const emptyPurchaseData = {
+    farm_public_id: '0',
+    flock_public_id: '0',
+    type: '',
+    date: '',
+    cost: '',
+    remarks: '',
+    company_name: '',
+    item_name: '',
+    unit: "",
+    size: 50,
+    item_type: 100,
+    quantity: ''
+};
+
+const purchaseTypeLabels = {
+    F: "Feed",
+    M: "Medicine",
+    V: "Vaccination",
+    E: "Equipment",
+    L: "Labour",
+    O: "Other",
+};
+
+const readPurchaseDraft = () => {
+    try {
+        const draft = JSON.parse(localStorage.getItem(PURCHASE_DRAFT_KEY) || "{}");
+        return {
+            data: { ...emptyPurchaseData, ...(draft.data || {}) },
+            showInputArea: draft.showInputArea || "0",
+            purchaseStep: Number(draft.purchaseStep || 0),
+        };
+    } catch {
+        return { data: emptyPurchaseData, showInputArea: "0", purchaseStep: 0 };
+    }
+};
+
+const todayIso = () => new Date().toISOString().split("T")[0];
+
 const AddPurchase = () => {
+    const initialDraft = readPurchaseDraft();
     let [loading, setLoading] = useState(false);
     const [show, setShow] = useState(false);
     let [err, setErr] = useState('');
@@ -17,21 +65,9 @@ const AddPurchase = () => {
     let [showForm, setShowForm] = useState(0);
     // U: OLD: showInputArea used boolean false plus string action codes.
     // U: NEW: keep the select state as one consistent string value.
-    const [showInputArea, setShowInputArea] = useState("0");
-    let [addData, setAddData] = useState({
-        farm_public_id: '0',
-        flock_public_id: '0',
-        type: '',
-        date: null,
-        cost: null,
-        remarks: '',
-        company_name: '',
-        item_name: '',
-        unit: "",
-        size: 50,
-        item_type: 100,
-        quantity: null
-    });
+    const [showInputArea, setShowInputArea] = useState(initialDraft.showInputArea);
+    const [purchaseStep, setPurchaseStep] = useState(initialDraft.purchaseStep);
+    let [addData, setAddData] = useState(initialDraft.data);
     let [remarkserr, setRemarkserr] = useState('');
     let [costerr, setCosterr] = useState('');
     let [dateerr, setDateerr] = useState('');
@@ -49,6 +85,16 @@ const AddPurchase = () => {
     const prefillFlockId = String(location.state?.flockPublicId || "0");
     const hasFarmPrerequisite = farms.some((farm) => String(farm.public_id) !== "0");
     const hasFlockOptions = flocks.some((item) => String(item.flock_public_id) !== "0");
+
+    useEffect(() => {
+        // U: NEW: long purchase forms are draft-saved locally so a farmer can
+        // U: leave the page and continue without retyping values.
+        localStorage.setItem(PURCHASE_DRAFT_KEY, JSON.stringify({
+            data: addData,
+            showInputArea,
+            purchaseStep,
+        }));
+    }, [addData, showInputArea, purchaseStep]);
 
     useEffect(() => {
         let cancelled = false;
@@ -87,6 +133,9 @@ const AddPurchase = () => {
                     setFlocks(flockList);
                     setShowForm(hasPrefillFlock ? 1 : 0);
                     setFlockerr(hasPrefillFlock ? '' : 'Please select a flock');
+                    if (hasPrefillFlock) {
+                        setPurchaseStep((currentStep) => Math.max(currentStep, 1));
+                    }
                 }).catch((err) => {
                     if (!cancelled) {
                         setFlocks([]);
@@ -140,67 +189,135 @@ const AddPurchase = () => {
             setShowForm(1);
         }
     }
-    const save = (e) => {
-        e.preventDefault();
-        setLoading(false);
-        let error = 0;
-        if (addData.flock_public_id === "0" || addData.flock_public_id === 0 || addData.flock_public_id === null) {
-            setFlockerr('Please select a flock before adding a purchase');
-            error = 1;
+    const validateSelectionStep = () => {
+        let valid = true;
+        if (addData.farm_public_id === "0" || addData.farm_public_id === 0 || addData.farm_public_id === null) {
+            setFlockerr('Select a farm and flock before adding a purchase.');
+            valid = false;
+        } else if (addData.flock_public_id === "0" || addData.flock_public_id === 0 || addData.flock_public_id === null) {
+            setFlockerr('Select the flock this purchase belongs to.');
+            valid = false;
         } else {
             setFlockerr('');
         }
+        return valid;
+    };
+
+    const validatePurchaseDetails = () => {
+        // U: OLD: validation was repeated per purchase type with vague "This fields" messages.
+        // U: NEW: one path gives clear field-specific guidance and blocks future dates/bad values.
+        let valid = true;
+        const purchaseDate = addData.date || "";
+        const needsItemFields = ["F", "M", "V", "E"].includes(showInputArea);
+        const needsQuantity = ["M", "V", "E"].includes(showInputArea);
+
         if (showInputArea === "0" || addData.type === '') {
-            setTypeerr('Please select purchase type');
-            error = 1;
+            setTypeerr('Select purchase type.');
+            valid = false;
         } else {
             setTypeerr('');
         }
-
-        if (showInputArea === 'F') {
-            if (addData.cost < 0 || addData.cost === null) { setCosterr('This fields is not valid'); error = 1; } else { setCosterr(''); }
-            if (addData.remarks.trim() === '' ) { setRemarkserr('This fields is required'); error = 1; } else { setRemarkserr(''); }
-            if (addData.date === null || addData.date === '') { setDateerr('This fields is required'); error = 1; } else { setDateerr(''); }
-            if (addData.company_name.trim()==='') { setCompany_nameerr('This fields is required'); error = 1; } else { setCompany_nameerr(''); }
-            if (addData.item_name.trim()==='') { setItem_nameerr('This fields is required'); error = 1; } else { setItem_nameerr(''); }
-            if (addData.unit<1) { setUniterr('This fields is required'); error = 1; } else { setUniterr(''); }
-            // U: OLD: feed size/item type validation was commented out, leaving setters unused.
-            if (Number(addData.size) < 1) { setSizeerr('This fields is required'); error = 1; } else { setSizeerr(''); }
-            if (addData.item_type === '' || addData.item_type === '0' || addData.item_type === null) { setItem_typeerr('This fields is required'); error = 1; } else { setItem_typeerr(''); }
-            if (addData.quantity < 0) { setQuantityerr('This fields is required'); error = 1; } else { setQuantityerr(''); }
-        } else if (showInputArea === 'M') {
-            if (addData.cost < 0 || addData.cost === null) { setCosterr('This fields is not valid'); error = 1; } else { setCosterr(''); }
-            if (addData.remarks.trim() === '' ) { setRemarkserr('This fields is required'); error = 1; } else { setRemarkserr(''); }
-            if (addData.date === null || addData.date === '') { setDateerr('This fields is required'); error = 1; } else { setDateerr(''); }
-            if (addData.company_name.trim()==='') { setCompany_nameerr('This fields is required'); error = 1; } else { setCompany_nameerr(''); }
-            if (addData.item_name.trim()==='') { setItem_nameerr('This fields is required'); error = 1; } else { setItem_nameerr(''); }
-            if (addData.quantity < 0 || addData.date === null) { setQuantityerr('This fields is required'); error = 1; } else { setQuantityerr(''); }
-        } else if (showInputArea === 'V') {
-            if (addData.cost < 0 || addData.cost === null) { setCosterr('This fields is not valid'); error = 1; } else { setCosterr(''); }
-            if (addData.remarks.trim() === '' ) { setRemarkserr('This fields is required'); error = 1; } else { setRemarkserr(''); }
-            if (addData.date === null || addData.date === '') { setDateerr('This fields is required'); error = 1; } else { setDateerr(''); }
-            if (addData.company_name.trim()==='') { setCompany_nameerr('This fields is required'); error = 1; } else { setCompany_nameerr(''); }
-            if (addData.item_name.trim()==='') { setItem_nameerr('This fields is required'); error = 1; } else { setItem_nameerr(''); }
-            if (addData.quantity < 0 || addData.date === null) { setQuantityerr('This fields is required'); error = 1; } else { setQuantityerr(''); }
-        } else if (showInputArea === 'E') {
-            if (addData.cost < 0 || addData.cost === null) { setCosterr('This fields is not valid'); error = 1; } else { setCosterr(''); }
-            if (addData.remarks.trim() === '' ) { setRemarkserr('This fields is required'); error = 1; } else { setRemarkserr(''); }
-            if (addData.date === null || addData.date === '') { setDateerr('This fields is required'); error = 1; } else { setDateerr(''); }
-            if (addData.company_name.trim()==='') { setCompany_nameerr('This fields is required'); error = 1; } else { setCompany_nameerr(''); }
-            if (addData.item_name.trim()==='') { setItem_nameerr('This fields is required'); error = 1; } else { setItem_nameerr(''); }
-            if (addData.quantity < 0 || addData.date === null) { setQuantityerr('This fields is required'); error = 1; } else { setQuantityerr(''); }
-        } else if (showInputArea === 'L') {
-            if (addData.cost < 0 || addData.cost === null) { setCosterr('This fields is not valid'); error = 1; } else { setCosterr(''); }
-            if (addData.remarks.trim() === '' ) { setRemarkserr('This fields is required'); error = 1; } else { setRemarkserr(''); }
-            if (addData.date === null || addData.date === '') { setDateerr('This fields is required'); error = 1; } else { setDateerr(''); }
-        } else if (showInputArea === 'O') {
-            if (addData.cost < 0 || addData.cost === null) { setCosterr('This fields is not valid'); error = 1; } else { setCosterr(''); }
-            if (addData.remarks.trim() === '' ) { setRemarkserr('This fields is required'); error = 1; } else { setRemarkserr(''); }
-            if (addData.date === null || addData.date === '') { setDateerr('This fields is required'); error = 1; } else { setDateerr(''); }
+        if (!purchaseDate) {
+            setDateerr('Purchase date is required.');
+            valid = false;
+        } else if (purchaseDate > todayIso()) {
+            setDateerr('Purchase date cannot be in the future.');
+            valid = false;
+        } else {
+            setDateerr('');
         }
+        if (Number(addData.cost) <= 0 || addData.cost === null || addData.cost === '') {
+            setCosterr('Cost must be greater than 0.');
+            valid = false;
+        } else {
+            setCosterr('');
+        }
+        if ((addData.remarks || '').trim() === '') {
+            setRemarkserr('Remarks are required.');
+            valid = false;
+        } else {
+            setRemarkserr('');
+        }
+        if (needsItemFields && (addData.company_name || '').trim() === '') {
+            setCompany_nameerr('Company name is required.');
+            valid = false;
+        } else {
+            setCompany_nameerr('');
+        }
+        if (needsItemFields && (addData.item_name || '').trim() === '') {
+            setItem_nameerr('Item name is required.');
+            valid = false;
+        } else {
+            setItem_nameerr('');
+        }
+        if (showInputArea === "F" && Number(addData.unit) <= 0) {
+            setUniterr('Number of bags must be greater than 0.');
+            valid = false;
+        } else {
+            setUniterr('');
+        }
+        if (showInputArea === "F" && Number(addData.size) <= 0) {
+            setSizeerr('Select a valid bag size.');
+            valid = false;
+        } else {
+            setSizeerr('');
+        }
+        if (showInputArea === "F" && (addData.item_type === '' || addData.item_type === '0' || addData.item_type === null)) {
+            setItem_typeerr('Select feed type.');
+            valid = false;
+        } else {
+            setItem_typeerr('');
+        }
+        if (needsQuantity && Number(addData.quantity) <= 0) {
+            setQuantityerr('Quantity must be greater than 0.');
+            valid = false;
+        } else {
+            setQuantityerr('');
+        }
+        return valid;
+    };
 
-        //console.log(error, addData.cost, addData.remarks, addData.date, addData.company_name, addData.item_name, addData.unit, addData.item_type, addData.size, addData.quantity);
-        if (error === 0) {
+    const goNextStep = () => {
+        if (purchaseStep === 0 && !validateSelectionStep()) {
+            return;
+        }
+        if (purchaseStep === 1 && !validatePurchaseDetails()) {
+            return;
+        }
+        setPurchaseStep((currentStep) => Math.min(currentStep + 1, purchaseSteps.length - 1));
+    };
+
+    const goPreviousStep = () => {
+        setPurchaseStep((currentStep) => Math.max(currentStep - 1, 0));
+    };
+
+    const resetPurchaseForm = ({ keepSelection = false } = {}) => {
+        const selection = keepSelection
+            ? {
+                farm_public_id: addData.farm_public_id,
+                flock_public_id: addData.flock_public_id,
+            }
+            : {};
+        setAddData({ ...emptyPurchaseData, ...selection });
+        setShowInputArea("0");
+        setPurchaseStep(keepSelection ? 1 : 0);
+        setShowForm(keepSelection && addData.flock_public_id !== "0" ? 1 : 0);
+        setErr('');
+        localStorage.removeItem(PURCHASE_DRAFT_KEY);
+    };
+
+    const save = (e) => {
+        e.preventDefault();
+        setLoading(false);
+        if (!validateSelectionStep()) {
+            setPurchaseStep(0);
+            return;
+        }
+        if (!validatePurchaseDetails()) {
+            setPurchaseStep(1);
+            return;
+        }
+        if (validateSelectionStep() && validatePurchaseDetails()) {
             setLoading(true)
             let url = `${apiPath}purchase/`;
             axios.post(url, addData, getAuthConfig()).then((res) => {
@@ -209,32 +326,13 @@ const AddPurchase = () => {
                 setTimeout((() => {
                     setShow(false);
                 }), 3000);
-                setAddData({
-                    ...addData,
-                    flock_public_id: '0',
-                    type: '',
-                    date: null,
-                    cost: null,
-                    remarks: '',
-                    company_name: '',
-                    item_name: '',
-                    unit: "",
-                    size: 50,
-                    item_type: 100,
-                    quantity: null
-                })
-                setShowForm(0)
-                // U: OLD: selected purchase action stayed active after save/reset.
-                setShowInputArea("0")
-                setErr('');
-                //setShowFlocks(0)
+                resetPurchaseForm({ keepSelection: true });
             }).catch((err) => {
                 setLoading(false);
                 setErr('Something went wrong. Please try again');
                 handleUnauthorized(err, navigate);
             });
         }
-
     }
     const showInputs = (e) => {
         setShowInputArea(e.target.value);
@@ -255,19 +353,19 @@ const AddPurchase = () => {
         }
     }
     let changeFeedCompany = (e) => {
-        e.target.value.trim()==='' ? setCompany_nameerr('This fields is required') : setCompany_nameerr('');
+        e.target.value.trim()==='' ? setCompany_nameerr('Company name is required.') : setCompany_nameerr('');
         setAddData({ ...addData, company_name: e.target.value });
     }
     let changeCost = (e) => {
         setAddData({ ...addData, cost: e.target.value });
-        e.target.value < 0 ? setCosterr('This fields is not valid') : setCosterr('');
+        Number(e.target.value) <= 0 ? setCosterr('Cost must be greater than 0.') : setCosterr('');
     }
     let changeFeedBrand = (e) => {
-        e.target.value.trim()==='' ? setItem_nameerr('This fields is required') : setItem_nameerr('');
+        e.target.value.trim()==='' ? setItem_nameerr('Item name is required.') : setItem_nameerr('');
         setAddData({ ...addData, item_name: e.target.value });
     }
     let changeNumberOfBags = (e) => {
-        e.target.value<1 ? setUniterr('This fields is not valid') : setUniterr('');
+        Number(e.target.value) < 1 ? setUniterr('Number of bags must be greater than 0.') : setUniterr('');
         setAddData({ ...addData, unit: e.target.value });
     }
     let changeBagsSize = (e) => {
@@ -275,38 +373,27 @@ const AddPurchase = () => {
     }
     let changeRemarks = (e) => {
         setAddData({ ...addData, remarks: e.target.value });
-        e.target.value.trim() === '' ? setRemarkserr('This fields is required') : setRemarkserr('');
+        e.target.value.trim() === '' ? setRemarkserr('Remarks are required.') : setRemarkserr('');
     }
     let changeFeedType = (e) => {
         setAddData({ ...addData, item_type: e.target.value });
     }
     let changePurchaseDate = (e) => {
         setAddData({ ...addData, date: e.target.value });
-        e.target.value.trim() === '' ? setDateerr('This fields is required') : setDateerr('');
+        if (e.target.value.trim() === '') {
+            setDateerr('Purchase date is required.');
+        } else if (e.target.value > todayIso()) {
+            setDateerr('Purchase date cannot be in the future.');
+        } else {
+            setDateerr('');
+        }
     }
     let showQuantity = (e) => {
         setAddData({ ...addData, quantity: e.target.value });
-        e.target.value < 0  ? setQuantityerr('This fields is not valid') : setQuantityerr('');
+        Number(e.target.value) <= 0 ? setQuantityerr('Quantity must be greater than 0.') : setQuantityerr('');
     }
     let closeAll = () => {
-        setAddData({
-            ...addData,
-            flock_public_id: '0',
-            type: '',
-            date: null,
-            cost: null,
-            remarks: '',
-            company_name: '',
-            item_name: '',
-            unit: "",
-            size: 50,
-            item_type: 100,
-            quantity: null
-        })
-        setShowForm(0)
-        // U: OLD: selected purchase action stayed active after cancel/reset.
-        setShowInputArea("0")
-        //setShowFlocks(0)
+        resetPurchaseForm();
     }
     return (
         <Row>
@@ -344,47 +431,65 @@ const AddPurchase = () => {
                                             </div>
                                         )}
                                         <Form onSubmit={save}>
-                                            <Label for="farmselect">Select Farm</Label>
-                                            <FormGroup>
-                                                <div className="input-group">
-                                                    <Input onChange={changeFarm} value={addData.farm_public_id || "0"} id="farmSelect" name="farm" type="select">
-                                                        <option value="0" disabled>Select Farm</option>
-                                                        {
-                                                            farms.map((item) => {
-                                                                return (
-                                                                    <option key={item.public_id} value={item.public_id}>{item.name}</option>
-                                                                )
-                                                            })
-                                                        }
-                                                    </Input>
-                                                </div>
-                                            </FormGroup>
-                                            {(showFlocks === 1) ?
-                                                <FormGroup>
-                                                    <Label for="farmselect">Select Flocks</Label>
-                                                    <div className="input-group">
-                                                        <Input onChange={changeFlocks} value={addData.flock_public_id} id="farmSelect" name="flock" type="select">
-                                                            <option value="0">Select Flocks</option>
-                                                            {
-                                                                flocks.map((item) => {
-                                                                    return (
-                                                                        <option key={item.flock_public_id} value={item.flock_public_id}>{item.flock_name}</option>
-                                                                    )
-                                                                })
-                                                            }
-                                                        </Input>
-                                                    </div>
-                                                    <small className="text-danger">{flockerr}</small>
-                                                </FormGroup>
-                                                : null}
-                                            {(showFlocks === 1 && !hasFlockOptions) ?
-                                                <div className="form-prerequisite-card">
-                                                    <span>Flock required</span>
-                                                    <p>This farm does not have a flock yet. Add a flock before entering feed, medicine, equipment, labour, or other purchases.</p>
-                                                    <Link to="/addflock">Add flock</Link>
-                                                </div>
-                                                : null}
-                                            {(showForm === 1) ?
+                                            <div className="form-stepper" aria-label="Purchase entry steps">
+                                                {purchaseSteps.map((step, index) => (
+                                                    <button
+                                                        key={step.title}
+                                                        type="button"
+                                                        className={index === purchaseStep ? "is-active" : index < purchaseStep ? "is-complete" : ""}
+                                                        onClick={() => setPurchaseStep(index)}
+                                                    >
+                                                        <span>{index + 1}</span>
+                                                        <strong>{step.title}</strong>
+                                                        <small>{step.helper}</small>
+                                                    </button>
+                                                ))}
+                                            </div>
+                                            {purchaseStep === 0 && (
+                                                <>
+                                                    <Label for="farmselect">Select Farm</Label>
+                                                    <FormGroup>
+                                                        <div className="input-group">
+                                                            <Input onChange={changeFarm} value={addData.farm_public_id || "0"} id="farmSelect" name="farm" type="select">
+                                                                <option value="0" disabled>Select Farm</option>
+                                                                {
+                                                                    farms.map((item) => {
+                                                                        return (
+                                                                            <option key={item.public_id} value={item.public_id}>{item.name}</option>
+                                                                        )
+                                                                    })
+                                                                }
+                                                            </Input>
+                                                        </div>
+                                                    </FormGroup>
+                                                    {(showFlocks === 1) ?
+                                                        <FormGroup>
+                                                            <Label for="farmselect">Select Flocks</Label>
+                                                            <div className="input-group">
+                                                                <Input onChange={changeFlocks} value={addData.flock_public_id} id="farmSelect" name="flock" type="select">
+                                                                    <option value="0">Select Flocks</option>
+                                                                    {
+                                                                        flocks.map((item) => {
+                                                                            return (
+                                                                                <option key={item.flock_public_id} value={item.flock_public_id}>{item.flock_name}</option>
+                                                                            )
+                                                                        })
+                                                                    }
+                                                                </Input>
+                                                            </div>
+                                                            <small className="text-danger">{flockerr}</small>
+                                                        </FormGroup>
+                                                        : null}
+                                                    {(showFlocks === 1 && !hasFlockOptions) ?
+                                                        <div className="form-prerequisite-card">
+                                                            <span>Flock required</span>
+                                                            <p>This farm does not have a flock yet. Add a flock before entering feed, medicine, equipment, labour, or other purchases.</p>
+                                                            <Link to="/addflock">Add flock</Link>
+                                                        </div>
+                                                        : null}
+                                                </>
+                                            )}
+                                            {(purchaseStep === 1 && showForm === 1) ?
                                                 <>
                                                     <Accordion defaultActiveKey="0" className="mb-3">
                                                         <Accordion.Item eventKey="0">
@@ -393,7 +498,7 @@ const AddPurchase = () => {
                                                                 <Row>
                                                                     <Col>
                                                                         <Label for="purchaseDate" className="font-bold flex">Purchase Date</Label>
-                                                                        <Input onChange={changePurchaseDate} value={addData.date} name="purchaseDate" type="date"></Input>
+                                                                        <Input onChange={changePurchaseDate} value={addData.date || ""} name="purchaseDate" type="date" max={todayIso()}></Input>
                                                                         <small className="text-danger">{dateerr}</small>
                                                                     </Col>
                                                                     <Col>
@@ -643,21 +748,46 @@ const AddPurchase = () => {
                                                             </Accordion.Body>
                                                         </Accordion.Item>
                                                     </Accordion>
-                                                    {showInputArea === "0" ? null :
-                                                        <div className="d-flex">
-                                                            {loading ?
-                                                                <Button className="btn" color="danger" type="submit" disabled  >
-                                                                    Please wait...
-                                                                    <span className="spinner-border spinner-border-sm" role="status" aria-hidden="true" />
-                                                                </Button>
-                                                                :
-                                                                <Button className="btn" color="danger" type="submit">Save</Button>
-                                                            }
-                                                            <Button className="btn ml-4" color="warning" type="button" onClick={closeAll} >Cancel</Button>
-                                                        </div>
-                                                    }
                                                 </>
                                                 : null}
+                                            {purchaseStep === 1 && showForm !== 1 && (
+                                                <div className="form-helper-panel">
+                                                    <strong>Select farm and flock first</strong>
+                                                    <p>Purchase records are saved against one flock. Complete the Flock step before adding purchase details.</p>
+                                                </div>
+                                            )}
+                                            {purchaseStep === 2 && (
+                                                <div className="form-review-card">
+                                                    <span>Review purchase</span>
+                                                    <dl>
+                                                        <div><dt>Type</dt><dd>{addData.type || "Not selected"}</dd></div>
+                                                        <div><dt>Date</dt><dd>{addData.date || "Not added"}</dd></div>
+                                                        <div><dt>Company</dt><dd>{addData.company_name || "Not needed"}</dd></div>
+                                                        <div><dt>Item</dt><dd>{addData.item_name || "Not needed"}</dd></div>
+                                                        <div><dt>Quantity</dt><dd>{addData.quantity || addData.unit || "Not needed"}</dd></div>
+                                                        <div><dt>Cost</dt><dd>{addData.cost ? `Rs. ${addData.cost}` : "Not added"}</dd></div>
+                                                        <div><dt>Remarks</dt><dd>{addData.remarks || "Not added"}</dd></div>
+                                                    </dl>
+                                                </div>
+                                            )}
+                                            <div className="form-wizard-actions">
+                                                {purchaseStep > 0 && (
+                                                    <Button className="btn" color="secondary" type="button" onClick={goPreviousStep}>Back</Button>
+                                                )}
+                                                {purchaseStep < purchaseSteps.length - 1 && (
+                                                    <Button className="btn" color="danger" type="button" onClick={goNextStep}>Next</Button>
+                                                )}
+                                                {purchaseStep === purchaseSteps.length - 1 && (
+                                                    loading ?
+                                                        <Button className="btn" color="danger" type="submit" disabled>
+                                                            Please wait...
+                                                            <span className="spinner-border spinner-border-sm" role="status" aria-hidden="true" />
+                                                        </Button>
+                                                        :
+                                                        <Button className="btn" color="danger" type="submit">Save</Button>
+                                                )}
+                                                <Button className="btn" color="warning" type="button" onClick={closeAll}>Cancel</Button>
+                                            </div>
                                         </Form>
                                     </div>
                                 </div>

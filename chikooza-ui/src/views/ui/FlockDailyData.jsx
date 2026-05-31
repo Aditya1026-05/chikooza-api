@@ -7,7 +7,28 @@ import { Link } from "react-router-dom";
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 
+const DAILY_SELECTOR_DRAFT_KEY = "chikooza-daily-selector-draft";
+
+const dailySelectorSteps = [
+    { title: "Select", helper: "Farm and flock" },
+    { title: "Day", helper: "Choose week and date" },
+];
+
+const readDailySelectorDraft = () => {
+    try {
+        const draft = JSON.parse(localStorage.getItem(DAILY_SELECTOR_DRAFT_KEY) || "{}");
+        return {
+            selectedFarmId: draft.selectedFarmId || "0",
+            selectedFlockId: draft.selectedFlockId || "0",
+            selectorStep: Number(draft.selectorStep || 0),
+        };
+    } catch {
+        return { selectedFarmId: "0", selectedFlockId: "0", selectorStep: 0 };
+    }
+};
+
 const ManageFlock = () => {
+    const [initialDraft] = useState(() => readDailySelectorDraft());
 
     let [farms, setFarms] = useState([]);
     let [flocks, setFlocks] = useState([]);
@@ -16,6 +37,9 @@ const ManageFlock = () => {
     let [showFlock, setShowFlock] = useState(false);
     let [showForm, setShowForm] = useState(false);
     const navigate = useNavigate();
+    const [selectedFarmId, setSelectedFarmId] = useState(initialDraft.selectedFarmId);
+    const [selectedFlockId, setSelectedFlockId] = useState(initialDraft.selectedFlockId);
+    const [selectorStep, setSelectorStep] = useState(initialDraft.selectorStep);
 
 
     useEffect(() => {
@@ -32,6 +56,36 @@ const ManageFlock = () => {
             handleUnauthorized(err, navigate);
         });
     }, [navigate])
+
+    useEffect(() => {
+        localStorage.setItem(DAILY_SELECTOR_DRAFT_KEY, JSON.stringify({
+            selectedFarmId,
+            selectedFlockId,
+            selectorStep,
+        }));
+    }, [selectedFarmId, selectedFlockId, selectorStep]);
+
+    useEffect(() => {
+        if (initialDraft.selectedFarmId === "0") {
+            return;
+        }
+        axios.get(`${apiPath}flocks/${initialDraft.selectedFarmId}/`, getAuthConfig()).then((res) => {
+            setShowFlock(true);
+            if (res.data.results.total_records === 0) {
+                setFlocks([{ flock_public_id: 0, flock_name: 'No flock available' }]);
+            } else {
+                const flockList = res.data.results.flock_list;
+                setFlocks(flockList);
+                const selectedFlock = flockList.find((item) => String(item.flock_public_id) === initialDraft.selectedFlockId);
+                if (selectedFlock) {
+                    setFlock(selectedFlock);
+                    setShowForm(true);
+                }
+            }
+        }).catch((err) => {
+            handleUnauthorized(err, navigate);
+        });
+    }, [initialDraft.selectedFarmId, initialDraft.selectedFlockId, navigate])
     let save = (e) => {
         e.preventDefault();
     }
@@ -41,8 +95,13 @@ const ManageFlock = () => {
             setShowForm(false);
             setFlocks([]);
             setList([]);
+            setSelectedFarmId("0");
+            setSelectedFlockId("0");
+            setSelectorStep(0);
             return;
         }
+        setSelectedFarmId(e.target.value);
+        setSelectedFlockId("0");
         let url = `${apiPath}flocks/${e.target.value}/`;
         // U: OLD: config.headers['Authorization'] was mutated before each request.
         axios.get(url, getAuthConfig()).then((res) => {
@@ -53,6 +112,7 @@ const ManageFlock = () => {
                 setFlocks(res.data.results.flock_list);
             }
             setShowForm(false);
+            setSelectorStep(0);
         }).catch((err) => {
             setFlocks([{ flock_public_id: 0, flock_name: 'No flock available' }]);
             handleUnauthorized(err, navigate);
@@ -63,7 +123,9 @@ const ManageFlock = () => {
         if (e.target.value === "0") {
             setShowForm(false);
             setList([]);
+            setSelectedFlockId("0");
         } else {
+            setSelectedFlockId(e.target.value);
             const selectedFlock = flocks.find((o) => String(o.flock_public_id) === e.target.value);
             if (!selectedFlock) {
                 setShowForm(false);
@@ -83,6 +145,7 @@ const ManageFlock = () => {
             });
             setShowForm(true);
             setFlock(selectedFlock);
+            setSelectorStep(1);
         }
     }
     let [modalShow, setModalShow] = useState(false);
@@ -184,39 +247,61 @@ const ManageFlock = () => {
                                             </div>
                                         )}
                                         <Form onSubmit={save}>
-                                            <FormGroup>
-                                                <Label for="farmselect">Select Farm</Label>
-                                                <div className="input-group">
-                                                    <Input onChange={changeFarm} defaultValue={0} id="farmSelect" name="farm" type="select">
-                                                        <option value="0" disabled>Select Farm</option>
-                                                        {
-                                                            farms.map((item) => {
-                                                                return (
-                                                                    <option key={item.public_id} value={item.public_id}>{item.name}</option>
-                                                                )
-                                                            })
-                                                        }
-                                                    </Input>
-                                                </div>
-                                            </FormGroup>
-                                            {
-                                                showFlock &&
-                                                <FormGroup>
-                                                    <Label for="farmselect">Select Flock</Label>
-                                                    <div className="input-group">
-                                                        <Input onChange={changeFlocks} defaultValue="0" id="farmSelect" name="flock" type="select">
-                                                            <option value="0" disabled>Select Flocks</option>
-                                                            {
-                                                                flocks.map((item) => {
-                                                                    return (
-                                                                        <option key={item.flock_public_id} value={item.flock_public_id}>{item.flock_name}</option>
-                                                                    )
-                                                                })
+                                            <div className="form-stepper" aria-label="Daily data selector steps">
+                                                {dailySelectorSteps.map((step, index) => (
+                                                    <button
+                                                        key={step.title}
+                                                        type="button"
+                                                        className={index === selectorStep ? "is-active" : index < selectorStep ? "is-complete" : ""}
+                                                        onClick={() => {
+                                                            if (index === 0 || showForm) {
+                                                                setSelectorStep(index);
                                                             }
-                                                        </Input>
-                                                    </div>
-                                                </FormGroup>
-                                            }
+                                                        }}
+                                                    >
+                                                        <span>{index + 1}</span>
+                                                        <strong>{step.title}</strong>
+                                                        <small>{step.helper}</small>
+                                                    </button>
+                                                ))}
+                                            </div>
+                                            {selectorStep === 0 && (
+                                                <>
+                                                    <FormGroup>
+                                                        <Label for="farmselect">Select Farm</Label>
+                                                        <div className="input-group">
+                                                            <Input onChange={changeFarm} value={selectedFarmId} id="farmSelect" name="farm" type="select">
+                                                                <option value="0" disabled>Select Farm</option>
+                                                                {
+                                                                    farms.map((item) => {
+                                                                        return (
+                                                                            <option key={item.public_id} value={item.public_id}>{item.name}</option>
+                                                                        )
+                                                                    })
+                                                                }
+                                                            </Input>
+                                                        </div>
+                                                    </FormGroup>
+                                                    {
+                                                        showFlock &&
+                                                        <FormGroup>
+                                                            <Label for="farmselect">Select Flock</Label>
+                                                            <div className="input-group">
+                                                                <Input onChange={changeFlocks} value={selectedFlockId} id="flockSelect" name="flock" type="select">
+                                                                    <option value="0" disabled>Select Flocks</option>
+                                                                    {
+                                                                        flocks.map((item) => {
+                                                                            return (
+                                                                                <option key={item.flock_public_id} value={item.flock_public_id}>{item.flock_name}</option>
+                                                                            )
+                                                                        })
+                                                                    }
+                                                                </Input>
+                                                            </div>
+                                                        </FormGroup>
+                                                    }
+                                                </>
+                                            )}
                                             {showFlock && !hasFlockOptions && (
                                                 <div className="form-prerequisite-card">
                                                     <span>Flock required</span>
@@ -225,7 +310,7 @@ const ManageFlock = () => {
                                                 </div>
                                             )}
                                             {
-                                                showForm &&
+                                                showForm && selectorStep === 1 &&
                                                 <>
                                                     <div className="form-helper-panel">
                                                         <strong>Daily data entry order</strong>
@@ -269,6 +354,16 @@ const ManageFlock = () => {
                                                         <Button className="flockdate" value="12" onClick={handleShow}>
                                                             Week 12
                                                         </Button>
+                                                    </div>
+                                                    <div className="form-wizard-actions">
+                                                        <Button type="button" color="secondary" outline onClick={() => setSelectorStep(0)}>Back</Button>
+                                                        <Button type="button" color="secondary" outline onClick={() => {
+                                                            setSelectedFarmId("0");
+                                                            setSelectedFlockId("0");
+                                                            setSelectorStep(0);
+                                                            setShowForm(false);
+                                                            localStorage.removeItem(DAILY_SELECTOR_DRAFT_KEY);
+                                                        }}>Cancel</Button>
                                                     </div>
                                                 </>
                                             }
