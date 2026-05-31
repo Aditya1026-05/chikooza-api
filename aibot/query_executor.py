@@ -73,6 +73,12 @@ class ChikoozaSafeQueryExecutor:
                 intent=intent,
             )
 
+        if intent.intent == "field_lookup":
+            entity_resolution = self.entity_resolver.resolve(intent, question, history)
+            if entity_resolution.response:
+                return entity_resolution.response
+            return self._field_lookup_response(intent, entity_resolution)
+
         if intent.intent == "multi_farm_report":
             entity_resolution = None
             if self._should_resolve_multi_report_target(intent, question):
@@ -316,3 +322,75 @@ class ChikoozaSafeQueryExecutor:
             response["resolved_farm_id"] = entity_resolution.farm_id
             response["resolved_flock_id"] = entity_resolution.flock_id
         return response
+
+    def _field_lookup_response(self, intent: ChikoozaIntent, entity_resolution) -> dict:
+        field = (intent.raw or {}).get("field")
+        field_label = (intent.raw or {}).get("field_label") or "Value"
+        entity_type = intent.entity_type
+
+        if entity_type == "flock":
+            if entity_resolution.flock_id is None:
+                return self._clarify_field_target("flock", field_label)
+            plan = self.deterministic_service._flock_list_plan(
+                farm_id=entity_resolution.farm_id,
+                flock_id=entity_resolution.flock_id,
+            )
+        elif entity_type == "farm":
+            if entity_resolution.farm_id is None:
+                return self._clarify_field_target("farm", field_label)
+            plan = self.deterministic_service._farm_list_plan(
+                farm_id=entity_resolution.farm_id,
+            )
+        else:
+            return self._clarify_field_target("farm or flock", field_label)
+
+        rows = self.deterministic_service.executor.execute(plan)
+        row = rows[0] if rows else {}
+        name = row.get(f"{entity_type}_name") or f"selected {entity_type}"
+        value = self._field_value(field, row)
+        answer = f"{field_label} for {name}: {value}."
+        return {
+            "status": "success",
+            "data": {"entity": name, "field": field, "value": value},
+            "answer": answer,
+            "message": answer,
+            "rows": rows,
+            "query": plan.sql,
+            "params": plan.params,
+            "route": "TEXT_TO_SQL",
+            "metric": f"{entity_type}_{field}",
+            "engine": "field_lookup",
+            "resolved_farm_id": entity_resolution.farm_id,
+            "resolved_flock_id": entity_resolution.flock_id,
+        }
+
+    def _field_value(self, field: str, row: dict):
+        if field == "location":
+            parts = [
+                str(part)
+                for part in (row.get("farm_city"), row.get("farm_pin"))
+                if part not in (None, "")
+            ]
+            return ", ".join(parts) if parts else "Not added"
+        if field == "farm_status":
+            return "Active" if row.get("farm_status") else "Inactive"
+        value = row.get(field)
+        return value if value not in (None, "") else "Not added"
+
+    def _clarify_field_target(self, entity_type: str, field_label: str) -> dict:
+        answer = (
+            f"Which {entity_type} should I use for {field_label.lower()}? "
+            f"Ask with a name or number, for example '{field_label.lower()} for first flock'."
+        )
+        return {
+            "status": "success",
+            "data": None,
+            "answer": answer,
+            "message": answer,
+            "rows": [],
+            "query": None,
+            "params": [],
+            "route": "TEXT_TO_SQL",
+            "metric": "ambiguous_field_target",
+            "engine": "field_lookup",
+        }

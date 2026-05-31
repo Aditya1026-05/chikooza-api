@@ -1573,7 +1573,7 @@ class ChikoozaIntentArchitectureTests(SimpleTestCase):
         self.assertEqual(response["query"], None)
         self.assertIn("cannot judge", response["answer"].lower())
         self.assertIn("daily data", response["answer"].lower())
-        self.assertIn("show my farm summary", deterministic.questions)
+        self.assertIn("show my account summary", deterministic.questions)
 
     def test_insight_service_can_use_groq_without_exposing_sql_authority(self):
         client = FakeGroqClient(["Your farm has too little daily data to judge yet."])
@@ -2130,6 +2130,101 @@ class ChikoozaFarmerAIImprovementTests(SimpleTestCase):
         self.assertIn("Blue Farm", response["answer"])
         self.assertIn("Alpha Batch", response["answer"])
         self.assertIn("Beta Batch", response["answer"])
+
+    def test_detail_followup_after_full_report_stays_account_scoped(self):
+        deterministic = ChikoozaTextToSQLService(user=self.user)
+        deterministic._farms = lambda: [self.red_farm, self.blue_farm]
+        deterministic._flocks = lambda: [self.alpha, self.beta]
+        deterministic.executor = FakeScopedFarmExecutor()
+        agent = ChikoozaIntentAgentService(
+            user=self.user,
+            deterministic_service=deterministic,
+        )
+        history = [
+            {"role": "user", "content": "show me all my farm data"},
+            {
+                "role": "assistant",
+                "content": "Here is the combined report from your Chikooza records.",
+                "intent": "multi_farm_report",
+                "metric": "multi_farm_report",
+            },
+        ]
+
+        response = agent.answer("now in detail", history=history)
+
+        self.assertEqual(response["intent"], "multi_farm_report")
+        self.assertNotEqual(response["metric"], "ambiguous_farm")
+        self.assertIn("Farm-wise details", response["answer"])
+        self.assertIn("Flock-wise details", response["answer"])
+
+    def test_all_my_farm_data_routes_to_full_report_not_farm_list(self):
+        deterministic = ChikoozaTextToSQLService(user=self.user)
+        deterministic._farms = lambda: [self.red_farm, self.blue_farm]
+        deterministic._flocks = lambda: [self.alpha, self.beta]
+        deterministic.executor = FakeScopedFarmExecutor()
+        agent = ChikoozaIntentAgentService(
+            user=self.user,
+            deterministic_service=deterministic,
+        )
+
+        response = agent.answer("show me all my farm data")
+
+        self.assertEqual(response["intent"], "multi_farm_report")
+        self.assertIn("Account totals", response["answer"])
+        self.assertIn("Farm-wise details", response["answer"])
+        self.assertIn("Flock-wise details", response["answer"])
+
+    def test_species_question_uses_field_lookup_not_broad_flock_list(self):
+        deterministic = ChikoozaTextToSQLService(user=self.user)
+        deterministic._farms = lambda: [self.red_farm, self.blue_farm]
+        deterministic._flocks = lambda: [self.alpha, self.beta]
+        deterministic.executor = FakeScopedFarmExecutor()
+        agent = ChikoozaIntentAgentService(
+            user=self.user,
+            deterministic_service=deterministic,
+        )
+
+        response = agent.answer("okay now what is species in my flock 1")
+
+        self.assertEqual(response["intent"], "field_lookup")
+        self.assertEqual(response["metric"], "flock_breed_name")
+        self.assertEqual(response["resolved_flock_id"], self.alpha.id)
+        self.assertIn("Breed/species for Alpha Batch: Broiler", response["answer"])
+        self.assertNotIn("Your flocks:", response["answer"])
+
+    def test_broad_farm_progress_stays_account_scoped(self):
+        deterministic = FakeDeterministicSnapshotService(user=self.user)
+        agent = ChikoozaIntentAgentService(
+            user=self.user,
+            deterministic_service=deterministic,
+        )
+        history = [
+            {"role": "user", "content": "show me all my farm data"},
+            {
+                "role": "assistant",
+                "content": "Here is the combined report from your Chikooza records.",
+                "intent": "multi_farm_report",
+                "metric": "multi_farm_report",
+            },
+        ]
+
+        response = agent.answer("now how is the farm doing", history=history)
+
+        self.assertEqual(response["intent"], "farm_progress_insight")
+        self.assertEqual(response["metric"], "farm_progress_insight")
+        self.assertNotIn("for the farm", " ".join(deterministic.questions))
+        self.assertNotIn("which farm do you mean", response["answer"].lower())
+        self.assertIn("your farm", response["answer"].lower())
+
+    def test_insight_zero_detector_does_not_flag_nonzero_decimals(self):
+        service = ChikoozaFarmInsightService(
+            self.user,
+            deterministic_service=FakeDeterministicSnapshotService(self.user),
+        )
+
+        self.assertFalse(service._looks_zero("Total feed consumed: 254.00 kg."))
+        self.assertFalse(service._looks_zero("Fcr: 0.96."))
+        self.assertTrue(service._looks_zero("Fcr: 0.00."))
 
     def test_calculated_answers_explain_their_source(self):
         cases = (

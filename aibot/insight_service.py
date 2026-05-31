@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import re
 from datetime import date, datetime
 from decimal import Decimal
 
@@ -19,7 +20,9 @@ class ChikoozaFarmInsightService:
     """
 
     SNAPSHOT_QUESTIONS = (
-        ("summary", "show my farm summary"),
+        # U: NEW: account wording avoids accidental single-farm ambiguity when
+        # U: the farmer has multiple farms.
+        ("summary", "show my account summary"),
         ("farms", "list all farms i have"),
         ("flocks", "list all flocks i have"),
         ("sales", "total sales"),
@@ -124,7 +127,10 @@ class ChikoozaFarmInsightService:
         }
 
         for key, safe_question in self.SNAPSHOT_QUESTIONS:
-            snapshot["account"][key] = self._safe_response(safe_question, history)
+            # U: NEW: account snapshot questions must remain account-scoped.
+            # U: Passing recent chat history here can accidentally turn
+            # U: "show my farm summary" into an ambiguous single-farm follow-up.
+            snapshot["account"][key] = self._safe_response(safe_question, [])
 
         target = self._target_phrase(intent)
         if target:
@@ -249,12 +255,16 @@ Farmer message:
 
     def _looks_zero(self, answer: str) -> bool:
         text = answer.lower()
+        value_match = re.search(r":\s*(?:rs\.\s*)?(-?\d+(?:,\d{3})*(?:\.\d+)?)", text)
+        if value_match:
+            try:
+                return float(value_match.group(1).replace(",", "")) == 0
+            except ValueError:
+                pass
         return any(
             phrase in text
             for phrase in (
-                ": 0",
                 "0.00",
-                "0 kg",
                 "0 birds",
                 "current birds: 0",
                 "average fcr: 0",
@@ -269,7 +279,10 @@ Farmer message:
         if not entity_type:
             return ""
         if reference in {"", "current"}:
-            return f"the {entity_type}"
+            # U: NEW: a broad question like "how is the farm doing" should not
+            # U: invent a specific farm target when the farmer has multiple
+            # U: farms. Keep the insight account-wide unless a target is explicit.
+            return ""
         if reference in {
             "it",
             "that",

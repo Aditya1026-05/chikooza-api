@@ -32,6 +32,7 @@ ALLOWED_INTENTS = {
     "trend_report",
     "best_flock_report",
     "farm_progress_insight",
+    "field_lookup",
     "capability_help",
     "other_entity",
     "greeting",
@@ -82,6 +83,18 @@ class ChikoozaIntentClassifier:
             return self._intent(
                 "multi_farm_report",
                 source="rule_summary_detail_followup",
+            )
+        field_lookup = self._field_lookup(query)
+        if field_lookup:
+            # U: NEW: deterministic metric catalog for direct record fields.
+            # U: This handles questions such as "species in flock 1" without
+            # U: falling back to a broad flock-list answer.
+            return self._intent(
+                "field_lookup",
+                entity_type=field_lookup["entity_type"],
+                entity_reference=self._entity_reference_from_text(query, "current"),
+                source="rule_field_lookup",
+                raw=field_lookup,
             )
         context_entity_type = self._contextual_entity_type(query, history)
         context_reference = self._entity_reference_from_text(query, "current")
@@ -486,6 +499,7 @@ Return JSON only.
         entity_reference: str = "",
         scope: str = "current",
         source: str = "rule",
+        raw: dict | None = None,
     ) -> ChikoozaIntent:
         return ChikoozaIntent(
             intent=intent,
@@ -494,6 +508,7 @@ Return JSON only.
             scope=scope,
             confidence=0.75 if source.startswith("rule") else 0.0,
             source=source,
+            raw=raw or {},
         )
 
     def _owned_context(self) -> str:
@@ -593,6 +608,14 @@ Return JSON only.
         )
         if any(phrase in query for phrase in explicit_phrases):
             return True
+        if re.search(
+            r"\b(?:show|give|tell|display|list)\s+"
+            r"(?:me\s+)?(?:my\s+|our\s+)?(?:all|complete|full)\s+"
+            r"(?:my\s+|our\s+)?(?:farms?|flocks?|batches?)\s+"
+            r"(?:data|records|details|information|stuff|things)\b",
+            query,
+        ):
+            return True
         return bool(
             re.search(
                 r"\b(?:show|give|tell|display|list)\s+"
@@ -601,6 +624,40 @@ Return JSON only.
                 query,
             )
         )
+
+    def _field_lookup(self, query: str) -> dict | None:
+        flock_fields = (
+            (
+                r"\b(?:species|breed|strain|bird type|chick type|chicken type)\b",
+                "breed_name",
+                "Breed/species",
+            ),
+            (r"\b(?:hatch date|hatching date|hatched)\b", "hatch_date", "Hatch date"),
+            (r"\b(?:flock size|batch size|initial birds?)\b", "flock_size", "Flock size"),
+            (r"\b(?:actual birds?|started birds?)\b", "actual_birds", "Actual birds"),
+        )
+        for pattern, field, label in flock_fields:
+            if re.search(pattern, query):
+                return {
+                    "entity_type": "flock",
+                    "field": field,
+                    "field_label": label,
+                }
+
+        farm_fields = (
+            (r"\b(?:location|city|village|address|place)\b", "location", "Location"),
+            (r"\b(?:sheds?|shed count|number of sheds)\b", "shed_count", "Sheds"),
+            (r"\b(?:pin|pincode|postal code)\b", "farm_pin", "Pincode"),
+            (r"\b(?:status|active|inactive)\b", "farm_status", "Status"),
+        )
+        for pattern, field, label in farm_fields:
+            if re.search(pattern, query) and re.search(r"\bfarm\b", query):
+                return {
+                    "entity_type": "farm",
+                    "field": field,
+                    "field_label": label,
+                }
+        return None
 
     def _is_capability_query(self, query: str) -> bool:
         return bool(
@@ -729,9 +786,13 @@ Return JSON only.
             metric = str(item.get("metric", "")).strip().lower()
             intent = str(item.get("intent", "")).strip().lower()
             content = self._normalize(str(item.get("content", "")))
-            if metric == "farm_record_summary" or intent == "farm_summary":
+            if metric in {"farm_record_summary", "multi_farm_report"}:
+                return True
+            if intent in {"farm_summary", "multi_farm_report"}:
                 return True
             if "your account summary" in content:
+                return True
+            if "combined report from your chikooza records" in content:
                 return True
         return False
 

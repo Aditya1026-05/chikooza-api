@@ -739,6 +739,12 @@ class ChikoozaMultiReportService:
                 r"individually|individual|full report|complete report)\b",
                 query,
             )
+            or re.search(
+                r"\b(?:all|complete|full)\s+(?:my\s+|our\s+)?"
+                r"(?:farms?|flocks?|batches?)\s+"
+                r"(?:data|records|details|information|stuff|things)\b",
+                query,
+            )
         )
 
     def _wants_breakdown(self, query: str, label: str) -> bool:
