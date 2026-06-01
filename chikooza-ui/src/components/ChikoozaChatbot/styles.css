@@ -62,6 +62,15 @@
   z-index: -1;
 }
 
+.chatbot-launcher-logo {
+  /* U: NEW: image supplied by the project owner for the Chikbot launcher. */
+  display: block;
+  height: 46px;
+  object-fit: cover;
+  width: 46px;
+  border-radius: 999px;
+}
+
 .chatbot-hen-mark {
   background:
     radial-gradient(circle at 50% 72%, #fff7ed 0 26%, transparent 27%),

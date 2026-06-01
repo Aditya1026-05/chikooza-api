@@ -53,7 +53,7 @@ class ActionProvider {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         const safeError = res.status >= 500
-          ? "Chikooza AI is temporarily unavailable. Please try again in a moment."
+          ? "Chikbot is temporarily unavailable. Please try again in a moment."
           : data.error || data.message || "Chatbot request failed.";
         throw new Error(safeError);
       }

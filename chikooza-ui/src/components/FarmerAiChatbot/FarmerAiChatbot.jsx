@@ -121,7 +121,7 @@ const FarmerAiChatbot = () => {
         <div className="farmer-ai-chat">
           <div className="farmer-ai-chat-header">
             <div>
-              <span>Farmer AI</span>
+              <span>AI Assistant</span>
               <strong>Ask about your farm records</strong>
             </div>
           </div>

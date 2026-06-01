@@ -5,6 +5,7 @@ import Chatbot from 'react-chatbot-kit';
 import ActionProvider from './ActionProvider';
 import MessageParser from './MessageParser';
 import config from './config';
+import ChikbotLogo from '../../assets/images/poultry/chikbot-logo.png';
 import './styles.css'; // Import your chatbot styles
 
 /**
@@ -40,19 +41,16 @@ const ChikoozaChatbot = ({ defaultOpen = false, alwaysVisible = true }) => {
         {showChatbot ? (
           '×'
         ) : (
-          <span className="chatbot-hen-mark" aria-hidden="true">
-            <span className="chatbot-hen-comb" />
-            <span className="chatbot-hen-eye chatbot-hen-eye-left" />
-            <span className="chatbot-hen-eye chatbot-hen-eye-right" />
-            <span className="chatbot-hen-brow chatbot-hen-brow-left" />
-            <span className="chatbot-hen-brow chatbot-hen-brow-right" />
-            <span className="chatbot-hen-beak" />
-          </span>
+          <>
+            {/* U: OLD: launcher used a CSS-drawn hen mark.
+                U: NEW: use the supplied Chikbot image asset for the public chat launcher. */}
+            <img src={ChikbotLogo} alt="" className="chatbot-launcher-logo" aria-hidden="true" />
+          </>
         )}
       </button>
       {!showChatbot && (
         <div className="chatbot-label">
-          <span>Chikooza AI</span>
+          <span>Chikbot</span>
         </div>
       )}
     </div>

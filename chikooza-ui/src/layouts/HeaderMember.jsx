@@ -157,7 +157,7 @@ const Header = () => {
           </Dropdown>
           <NavItem>
             <Link to="/chatbot" className="linkheader linkheader-cta" onClick={closeMenus}>
-              Farmer AI
+              AI Assistant
             </Link>
           </NavItem>
         </Nav>

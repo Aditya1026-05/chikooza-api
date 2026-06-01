@@ -19,7 +19,7 @@ const MemberFooter = () => {
           </Link>
           <p>
             Logged-in farmer workspace for daily flock work, business records,
-            reports, and private Farmer AI.
+            reports, and a private AI assistant.
           </p>
         </div>
 
@@ -38,7 +38,7 @@ const MemberFooter = () => {
           </div>
           <div>
             <strong>Account</strong>
-            <Link to="/chatbot" onClick={scrollToTop}>Farmer AI</Link>
+            <Link to="/chatbot" onClick={scrollToTop}>AI Assistant</Link>
             <Link to="/profile" onClick={scrollToTop}>Profile</Link>
             <Link to="/member/about" onClick={scrollToTop}>About Chikooza</Link>
             <Link to="/member/contact" onClick={scrollToTop}>Contact</Link>
