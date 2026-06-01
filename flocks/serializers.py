@@ -246,6 +246,7 @@ class FlockSummarySerializer(serializers.Serializer):
     daily_data_count = serializers.SerializerMethodField()
     purchase_count = serializers.SerializerMethodField()
     sales_count = serializers.SerializerMethodField()
+    # b hiuybiyinbvc gjgykuyg
 
     class Meta:
         model = Flock
