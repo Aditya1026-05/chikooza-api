@@ -63,6 +63,7 @@ const ThemeRoutes = [
       // U: NEW: auth screens are standalone pages without public header/footer.
       { path: "/login", exact: true, element: <Login /> },
       { path: "/register", exact: true, element: <Register /> },
+      { path: "/forgetpassword", exact: true, element: <ForgetPassword /> },
     ],
   }, {
     path: "/",
@@ -70,7 +71,8 @@ const ThemeRoutes = [
     children: [
       { path: "/about", exact: true, element: <About /> },
       { path: "/contact", exact: true, element: <Contact /> },
-      { path: "/forgetpassword", exact: true, element: <ForgetPassword /> },
+      // U: OLD: forgot password rendered under public header/footer.
+      // U: NEW: it is grouped with login/register inside AuthLayout above.
 // MV-2025-07-05-<8>  STARTS
       // U: OLD: /chatbot was also registered under the public layout, so Farmer AI
       // U: could render with the public header. It now lives only in FullLayoutMember.
