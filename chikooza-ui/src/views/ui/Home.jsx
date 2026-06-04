@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import "../../assets/css/marketing.css";
 import HeroImage from "../../assets/images/poultry/broiler-house.png";
@@ -80,8 +81,39 @@ const imageRail = [
   },
 ];
 
+const heroChartModes = {
+  mortality: {
+    title: "Mortality",
+    primaryLabel: "Current Bird Count",
+    primaryValue: "1,240",
+    secondaryLabel: "Mortality",
+    secondaryValue: "0.8%",
+    primaryPoints: "10,86 48,78 86,70 124,58 162,46 202,36 232,28",
+    secondaryPoints: "10,102 48,98 86,88 124,82 162,72 202,66 232,58",
+  },
+  weight: {
+    title: "Weight / FCR",
+    primaryLabel: "Average Weight",
+    primaryValue: "1.86 kg",
+    secondaryLabel: "FCR",
+    secondaryValue: "1.62",
+    primaryPoints: "10,96 48,84 86,74 124,62 162,50 202,38 232,30",
+    secondaryPoints: "10,48 48,52 86,58 124,62 162,66 202,70 232,74",
+  },
+};
+
 const Home = () => {
   const railItems = [...imageRail, ...imageRail];
+  const [activeHeroChart, setActiveHeroChart] = useState("mortality");
+  const activeChart = heroChartModes[activeHeroChart];
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      setActiveHeroChart((current) => current === "mortality" ? "weight" : "mortality");
+    }, 4200);
+
+    return () => window.clearInterval(intervalId);
+  }, []);
 
   return (
     <main className="marketing-page home-page">
@@ -108,9 +140,54 @@ const Home = () => {
         <div className="home-hero-media" aria-label="Chikooza poultry farm operations">
           <div className="home-image-card">
             <img src={HeroImage} alt="Broiler poultry house with flock and feeding lines" />
-            <div className="home-visual-note home-visual-note-bottom">
-              <span>Current flock</span>
-              <strong>Daily data, costs, sales, and reports stay connected.</strong>
+            <div className="home-dashboard-chart" aria-label="Dashboard chart preview">
+              <div className="home-dashboard-chart-header">
+                <div>
+                  <span>Performance charts</span>
+                  <strong>{activeChart.title}</strong>
+                </div>
+                <div className="home-dashboard-chart-tabs">
+                  {Object.entries(heroChartModes).map(([key, chart]) => (
+                    <button
+                      className={activeHeroChart === key ? "is-active" : ""}
+                      key={key}
+                      onClick={() => setActiveHeroChart(key)}
+                      type="button"
+                    >
+                      {chart.title}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <svg viewBox="0 0 240 120" role="img" aria-label={`${activeChart.title} line chart`}>
+                <line x1="10" y1="30" x2="232" y2="30" />
+                <line x1="10" y1="60" x2="232" y2="60" />
+                <line x1="10" y1="90" x2="232" y2="90" />
+                <polyline className="home-dashboard-chart-primary" points={activeChart.primaryPoints} />
+                <polyline className="home-dashboard-chart-secondary" points={activeChart.secondaryPoints} />
+              </svg>
+              <div className="home-dashboard-chart-legend">
+                <span><i />{activeChart.primaryLabel}: <b>{activeChart.primaryValue}</b></span>
+                <span><i />{activeChart.secondaryLabel}: <b>{activeChart.secondaryValue}</b></span>
+              </div>
+            </div>
+            <div className="home-data-table" aria-hidden="true">
+              <small>Workspace modules</small>
+              <span><b>Farm</b><em>Setup</em></span>
+              <span><b>Flock</b><em>Active</em></span>
+              <span><b>Daily data</b><em>Track</em></span>
+              <span><b>Purchases</b><em>Costs</em></span>
+              <span><b>Sales</b><em>Revenue</em></span>
+              <span><b>Reports</b><em>Export</em></span>
+            </div>
+            <div className="home-visual-note home-visual-note-bottom home-metric-note" aria-label="Record overview metrics">
+              <span>Record overview</span>
+              <div className="home-metric-grid">
+                <div><b>Current birds</b><strong>1,240</strong></div>
+                <div><b>FCR</b><strong>1.62</strong></div>
+                <div><b>Feed used</b><strong>254 kg</strong></div>
+                <div><b>Mortality</b><strong>0.8%</strong></div>
+              </div>
             </div>
           </div>
         </div>
