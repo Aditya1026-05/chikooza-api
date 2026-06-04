@@ -21,6 +21,7 @@ const getFlockAgeInDays = (hatchDate) => {
 };
 
 const SALE_DRAFT_KEY = "chikooza-flock-sale-draft";
+const DAILY_SELECTOR_DRAFT_KEY = "chikooza-daily-selector-draft";
 
 const saleSteps = [
     { title: "Flock", helper: "Choose farm and flock" },
@@ -82,6 +83,14 @@ const readSaleDraft = () => {
     }
 };
 
+const readSelectorDraft = () => {
+    try {
+        return JSON.parse(localStorage.getItem(DAILY_SELECTOR_DRAFT_KEY) || "{}");
+    } catch {
+        return {};
+    }
+};
+
 const getSaleTypeLabel = (saleType) => {
     if (saleType === "partial_lifting") {
         return "Partial Lifting";
@@ -114,6 +123,7 @@ const FlockSale = () => {
 //MV-16-6-25- 17-10 change end
 
     let [dataPopUp, setDataPopUp] = useState(initialDraft.dataPopUp);
+    const [activeSelectorDraft] = useState(() => readSelectorDraft());
     let [error, setError] = useState({});
     let [totalChickCount, setTotalChickCount] = useState(0);
     let [submitError, setSubmitError] = useState('');
@@ -141,6 +151,62 @@ const FlockSale = () => {
         }).finally(() => {
             setSaleReviewLoading(false);
         });
+    };
+
+    const loadCurrentBirdCount = (selectedFlock) => {
+        if (!selectedFlock?.flock_public_id) {
+            setTotalChickCount(0);
+            return;
+        }
+
+        axios.get(`${apiPath}dailyDataLastDate/${selectedFlock.flock_public_id}/`, getAuthConfig()).then((dailyRes) => {
+            setTotalChickCount(dailyRes.data.results.current_bird_count);
+        }).catch((err) => {
+            setTotalChickCount(selectedFlock.actual_birds);
+            handleUnauthorized(err, navigate);
+        });
+    };
+
+    const selectFlockForSale = (selectedFlock, { resetSaleFields = false, nextStep = 0 } = {}) => {
+        if (!selectedFlock || String(selectedFlock.flock_public_id) === "0") {
+            setFlock([]);
+            setShowFlockSale(false);
+            setShowForm(false);
+            setShowButton(false);
+            setData((current) => ({ ...emptySaleData, farm: current.farm || null }));
+            setExistingSales([]);
+            setTotalChickCount(0);
+            setSaleStep(0);
+            return;
+        }
+
+        setData((current) => ({
+            ...(resetSaleFields ? emptySaleData : current),
+            farm: selectedFlock.farm_public_id || current.farm,
+            flock: selectedFlock.flock_public_id,
+            ...(resetSaleFields
+                ? {
+                    selType: null,
+                    date: '',
+                    sellcount: '',
+                    selltwt: '',
+                    sellrate: '',
+                    sellamount: '',
+                }
+                : {}),
+        }));
+        setFlock(selectedFlock);
+        setShowFlockSale(true);
+        setShowForm(resetSaleFields ? false : nextStep >= 2);
+        setShowButton(resetSaleFields ? false : Boolean(data.selType && data.selType !== "0"));
+        if (resetSaleFields) {
+            setDataPopUp(emptySalePopupData);
+        }
+        setError({});
+        setSubmitError("");
+        setSaleStep(nextStep);
+        loadExistingSales(selectedFlock.flock_public_id);
+        loadCurrentBirdCount(selectedFlock);
     };
 
     function successMsg() {
@@ -386,8 +452,24 @@ const FlockSale = () => {
 
             const draftFarmId = String(initialDraft.data.farm || "0");
             const draftFlockId = String(initialDraft.data.flock || "0");
-            const targetFarmId = prefillFarmId !== "0" ? prefillFarmId : draftFarmId;
-            const targetFlockId = prefillFlockId !== "0" ? prefillFlockId : draftFlockId;
+            const selectorFarmId = String(activeSelectorDraft.selectedFarmId || "0");
+            const selectorFlockId = String(activeSelectorDraft.selectedFlockId || "0");
+            const latestFarm = res.data.results[res.data.results.length - 1];
+            const requestedFarmId = prefillFarmId !== "0"
+                ? prefillFarmId
+                : draftFarmId !== "0"
+                    ? draftFarmId
+                    : selectorFarmId !== "0"
+                        ? selectorFarmId
+                        : latestFarm?.public_id;
+            const targetFarm = res.data.results.find((item) => String(item.public_id) === String(requestedFarmId)) || latestFarm;
+            const targetFarmId = targetFarm?.public_id;
+            const targetFlockId = prefillFlockId !== "0"
+                ? prefillFlockId
+                : draftFlockId !== "0"
+                    ? draftFlockId
+                    : selectorFlockId;
+            const shouldResumeSaleDraft = draftFlockId !== "0" && prefillFlockId === "0";
 
             if (targetFarmId !== "0") {
                 // U: NEW: dashboard prefill and locally saved drafts both
@@ -405,7 +487,7 @@ const FlockSale = () => {
                     }
 
                     const flockList = flockRes.data.results.flock_list;
-                    const selected = flockList.find((item) => String(item.flock_public_id) === targetFlockId);
+                    const selected = flockList.find((item) => String(item.flock_public_id) === String(targetFlockId)) || flockList[flockList.length - 1];
                     setFlocks(flockList);
                     if (!selected) {
                         setShowFlockSale(false);
@@ -416,7 +498,7 @@ const FlockSale = () => {
                         ...current,
                         farm: selected.farm_public_id || targetFarmId,
                         flock: selected.flock_public_id,
-                        ...(prefillFlockId !== "0"
+                        ...(!shouldResumeSaleDraft
                             ? {
                                 selType: null,
                                 date: '',
@@ -429,22 +511,13 @@ const FlockSale = () => {
                     }));
                     setFlock(selected);
                     setShowFlockSale(true);
-                    setShowButton(Boolean(prefillFlockId === "0" && initialDraft.data.selType && initialDraft.data.selType !== "0"));
-                    setShowForm(Boolean(prefillFlockId === "0" && initialDraft.saleStep >= 2));
-                    setSaleStep(prefillFlockId !== "0" ? 1 : initialDraft.saleStep);
+                    setShowButton(Boolean(shouldResumeSaleDraft && initialDraft.data.selType && initialDraft.data.selType !== "0"));
+                    setShowForm(Boolean(shouldResumeSaleDraft && initialDraft.saleStep >= 2));
+                    setSaleStep(prefillFlockId !== "0" ? 1 : shouldResumeSaleDraft ? initialDraft.saleStep : 0);
                     setError({});
                     loadExistingSales(selected.flock_public_id);
 
-                    axios.get(`${apiPath}dailyDataLastDate/${selected.flock_public_id}/`, getAuthConfig()).then((dailyRes) => {
-                        if (!cancelled) {
-                            setTotalChickCount(dailyRes.data.results.current_bird_count);
-                        }
-                    }).catch((err) => {
-                        if (!cancelled) {
-                            setTotalChickCount(selected.actual_birds);
-                        }
-                        handleUnauthorized(err, navigate);
-                    });
+                    loadCurrentBirdCount(selected);
                 }).catch((err) => {
                     if (!cancelled) {
                         setFlocks([]);
@@ -462,7 +535,7 @@ const FlockSale = () => {
         return () => {
             cancelled = true;
         };
-    }, [navigate, prefillFarmId, prefillFlockId])
+    }, [activeSelectorDraft.selectedFarmId, activeSelectorDraft.selectedFlockId, navigate, prefillFarmId, prefillFlockId])
     let changeFarm = (e) => {
         if (e.target.value === "0") {
             setFlocks([]);
@@ -481,22 +554,24 @@ const FlockSale = () => {
             // U: Replaced shared config mutation with per-request auth headers from getAuthConfig().
             // config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
             axios.get(url, getAuthConfig()).then((res) => {
-            if (res.data.results.total_records === 0) {
-                setFlocks([{ flock_public_id: 0, flock_name: 'No flock available' }]);
+                if (res.data.results.total_records === 0) {
+                    setFlocks([{ flock_public_id: 0, flock_name: 'No flock available' }]);
+                    setData({ ...emptySaleData, farm: e.target.value });
+                    setFlock([]);
+                    setShowForm(false);
+                    setShowFlockSale(false);
+                    setShowButton(false);
+                    setError({});
+                    setSubmitError("");
+                    setSaleStep(0);
+                    setExistingSales([]);
                 } else {
-                    //setData({...data,farm:e.target.value,flock:null,seltype:null});
-                    setFlocks(res.data.results.flock_list);
+                    const flockList = res.data.results.flock_list;
+                    const selected = flockList[flockList.length - 1];
+                    setFlocks(flockList);
+                    selectFlockForSale(selected, { resetSaleFields: true, nextStep: 0 });
                 }
                 setShowFlocks(true);
-                setFlock([]);
-                setShowForm(false);
-                setShowFlockSale(false);
-                setShowButton(false);
-                setData({ ...emptySaleData, farm: e.target.value });
-                setError({});
-                setSubmitError("");
-                setSaleStep(0);
-                setExistingSales([]);
             }).catch((err) => {
                 //setFormError('No Flock available.');
                 handleUnauthorized(err, navigate);
@@ -521,22 +596,9 @@ const FlockSale = () => {
                 setShowButton(false);
                 return;
             }
-            let url = `${apiPath}dailyDataLastDate/${e.target.value}/`;
-            axios.get(url, getAuthConfig()).then((res) => {
-                setTotalChickCount(res.data.results.current_bird_count);
-            }).catch((err) => {
-                setTotalChickCount(user.actual_birds);
-                handleUnauthorized(err, navigate);
-            });
-            setData({ ...emptySaleData, farm: user.farm_public_id, flock: user.flock_public_id });
-            setFlock(user);
-            setShowFlockSale(true);
             setShowForm(false);
-            //setShowButton(false);
-            setError({});
-            setSubmitError("");
-            setSaleStep(1);
-            loadExistingSales(user.flock_public_id);
+            setShowButton(false);
+            selectFlockForSale(user, { resetSaleFields: true, nextStep: 0 });
         }
     }
     let changeFlockSale = (e) => {
@@ -831,23 +893,27 @@ const FlockSale = () => {
                                                     <Link to="/addfarm">Add farm first</Link>
                                                 </div>
                                             )}
-                                            <div className="form-stepper" aria-label="Flock sale steps">
-                                                {saleSteps.map((step, index) => (
-                                                    <button
-                                                        key={step.title}
-                                                        type="button"
-                                                        className={index === saleStep ? "is-active" : index < saleStep ? "is-complete" : ""}
-                                                        onClick={() => {
-                                                            setSaleStep(index);
-                                                            setShowForm(index >= 2);
-                                                        }}
-                                                    >
-                                                        <span>{index + 1}</span>
-                                                        <strong>{step.title}</strong>
-                                                        <small>{step.helper}</small>
-                                                    </button>
-                                                ))}
-                                            </div>
+                                            {saleStep > 0 && (
+                                                <div className="form-stepper" aria-label="Flock sale steps">
+                                                    {saleSteps.slice(1).map((step, index) => {
+                                                        const actualStep = index + 1;
+                                                        return (
+                                                            <button
+                                                                key={step.title}
+                                                                type="button"
+                                                                className={actualStep === saleStep ? "is-active" : actualStep < saleStep ? "is-complete" : ""}
+                                                                onClick={() => {
+                                                                    setSaleStep(actualStep);
+                                                                    setShowForm(actualStep >= 2);
+                                                                }}
+                                                            >
+                                                                <span>{index + 1}</span>
+                                                                <strong>{step.title}</strong>
+                                                            </button>
+                                                        );
+                                                    })}
+                                                </div>
+                                            )}
                                             {saleStep === 0 && (
                                                 <>
                                                     <FormGroup>
@@ -880,26 +946,6 @@ const FlockSale = () => {
                                                             <p>This farm does not have a flock yet. Add a flock before recording partial or final lifting sales.</p>
                                                             <Link to="/addflock">Add flock</Link>
                                                         </div>
-                                                    )}
-                                                    {showFlockSale && (
-                                                        <>
-                                                            <div className="record-review-toolbar record-review-toolbar--compact">
-                                                                <div>
-                                                                    <span>Existing sales</span>
-                                                                    <strong>{flock.flock_name || "Selected flock"}</strong>
-                                                                    <p>{saleReviewLoading ? "Checking previous sales..." : `${existingSales.length} sale${existingSales.length === 1 ? "" : "s"} saved, Rs. ${saleReviewTotal.toFixed(2)} total revenue. Continue below to add a new sale.`}</p>
-                                                                </div>
-                                                                {existingSales.length > 0 && (
-                                                                    <Button color="danger" outline type="button" onClick={() => navigate("/viewsale", { state: { farmPublicId: data.farm, flockPublicId: data.flock } })}>Review existing</Button>
-                                                                )}
-                                                            </div>
-                                                            {!saleReviewLoading && existingSales.length > 0 && (
-                                                                <div className="record-summary-strip">
-                                                                    <strong>Recent:</strong> {existingSales.slice(0, 3).map((item) => `${getSaleTypeLabel(item.sales_type)} Rs. ${Number(item.cost || 0).toFixed(0)}`).join(", ")}
-                                                                    {existingSales.length > 3 ? `, +${existingSales.length - 3} more` : ""}
-                                                                </div>
-                                                            )}
-                                                        </>
                                                     )}
                                                 </>
                                             )}
