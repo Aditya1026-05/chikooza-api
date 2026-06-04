@@ -1,7 +1,6 @@
 import { Alert, Row, Col, Card, CardTitle, CardBody, Button, Form, FormGroup, Label, Input } from "reactstrap";
 import '../../assets/css/header.css';
 import { contentArea, apiPath, getAuthConfig, handleUnauthorized } from "../../Constants";
-import Accordion from 'react-bootstrap/Accordion'
 import { useState, useEffect } from "react";
 import axios from 'axios';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -71,8 +70,30 @@ const ManageFlock = () => {
     const [flockStep, setFlockStep] = useState(initialDraft.flockStep);
     let [addData, setAddData] = useState(initialDraft.data);
     const farmList = farms.filter((item) => String(item.public_id) !== "0");
-    const flockList = flocks.filter((item) => String(item.flock_public_id) !== "0");
-    const selectedFarmRecord = farmList.find((item) => String(item.public_id) === selectedFarmId);
+
+    function loadFlockForEdit(flockId, nextStep = 0) {
+        if (String(flockId) === "0") {
+            //setFlock_public_iderr('Please select flocks');
+            setShowForm(0);
+            setSelectedFlockId("0");
+        } else {
+            //setFlock_public_iderr('');
+            setSelectedFlockId(String(flockId));
+            let url = `${apiPath}flocksDetail/${flockId}/`;
+            // U: Replaced shared config mutation with per-request auth headers from getAuthConfig().
+            // config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
+            axios.get(url, getAuthConfig()).then((res) => {
+                setShowForm(1);
+                setAddData({ ...emptyManageFlockData, ...res.data.results });
+                setFlockStep(nextStep);
+                setErr('');
+            }).catch((err) => {
+                //setFlocks(err.data.results);
+                handleUnauthorized(err, navigate);
+            });
+        }
+    }
+
     useEffect(() => {
         let url = `${apiPath}farm/`;
         // U: Replaced shared config mutation with per-request auth headers from getAuthConfig().
@@ -81,14 +102,36 @@ const ManageFlock = () => {
             if (res.data.results.length === 0) {
                 setFarms([{ public_id: 0, name: 'No farm available' }]);
             } else {
-                setFarms(res.data.results);
+                const farmResults = res.data.results;
+                const requestedFarmId = routeFarmId !== "0" ? routeFarmId : initialDraft.selectedFarmId;
+                const activeFarm = farmResults.find((item) => String(item.public_id) === String(requestedFarmId)) || farmResults[farmResults.length - 1];
+                const activeFarmId = String(activeFarm.public_id);
+                setFarms(farmResults);
+                setSelectedFarmId(activeFarmId);
+                axios.get(`${apiPath}flocks/${activeFarmId}/`, getAuthConfig()).then((flockRes) => {
+                    setShowFlocks(1);
+                    if (flockRes.data.results.total_records === 0) {
+                        setFlocks([{ flock_public_id: 0, flock_name: 'No flock available' }]);
+                        setSelectedFlockId("0");
+                        setShowForm(0);
+                        setFlockStep(0);
+                    } else {
+                        const flockResults = flockRes.data.results.flock_list || [];
+                        const requestedFlockId = routeFlockId !== "0" ? routeFlockId : initialDraft.selectedFlockId;
+                        const activeFlock = flockResults.find((item) => String(item.flock_public_id) === String(requestedFlockId)) || flockResults[flockResults.length - 1];
+                        setFlocks(flockResults);
+                        loadFlockForEdit(activeFlock.flock_public_id, initialDraft.flockStep > 0 ? initialDraft.flockStep : 0);
+                    }
+                }).catch((err) => {
+                    handleUnauthorized(err, navigate);
+                });
             }
         }).catch((err) => {
             console.log(err)
             setFarms([{ public_id: 0, name: 'No farm available' }]);
             handleUnauthorized(err, navigate);
         });
-    }, [navigate])
+    }, [initialDraft.selectedFarmId, initialDraft.selectedFlockId, initialDraft.flockStep, navigate, routeFarmId, routeFlockId])
     useEffect(() => {
         let url = `${apiPath}breeds/`;
         axios.get(url, getAuthConfig()).then((res) => {
@@ -122,25 +165,6 @@ const ManageFlock = () => {
         }));
     }, [addData, selectedFarmId, selectedFlockId, flockStep, showForm]);
 
-    useEffect(() => {
-        if (startingFarmId === "0") {
-            return;
-        }
-        // U: NEW: support navigation from add-flock review cards directly
-        // U: into the same farm/flock review context.
-        let url = `${apiPath}flocks/${startingFarmId}/`;
-        axios.get(url, getAuthConfig()).then((res) => {
-            setShowFlocks(1);
-            if (res.data.results.total_records === 0) {
-                setFlocks([{ flock_public_id: 0, flock_name: 'No flock available' }]);
-            } else {
-                setFlocks(res.data.results.flock_list);
-            }
-        }).catch((err) => {
-            handleUnauthorized(err, navigate);
-        });
-    }, [startingFarmId, navigate]);
-
     let [hatch_dateerr, setHatch_dateerr] = useState(null);
     let [flock_sizeerr, setFlock_sizeerr] = useState(null);
     let [flock_nameerr, setFlock_nameerr] = useState(null);
@@ -171,7 +195,8 @@ const ManageFlock = () => {
         else { setHatch_dateerr(''); }
         if ((addData.flock_name || '').trim() === '') { setFlock_nameerr('Flock name is required'); valid = false; } else { setFlock_nameerr(''); }
         if (!flockSize || flockSize <= 0) { setFlock_sizeerr('Flock size must be greater than 0'); valid = false; } else { setFlock_sizeerr(''); }
-        if (!actualBirds || actualBirds <= 0) { setActual_birdserr('Actual birds must be greater than 0'); valid = false; }
+        if (addData.actual_birds === '' || addData.actual_birds === null) { setActual_birdserr('Actual birds is required'); valid = false; }
+        else if (actualBirds < 0) { setActual_birdserr('Actual birds cannot be negative'); valid = false; }
         else if (flockSize > 0 && actualBirds > flockSize) { setActual_birdserr('Actual birds cannot exceed flock size'); valid = false; }
         else { setActual_birdserr(''); }
         if (String(addData.chick_breed_public_id || "0") === "0") { setBreed_public_iderr('Please select breed'); valid = false; } else { setBreed_public_iderr(''); }
@@ -199,16 +224,106 @@ const ManageFlock = () => {
         return valid;
     };
 
+    const validateMainStep = () => {
+        let valid = true;
+        const hatchDate = addData.hatch_date || "";
+        const flockSize = Number(addData.flock_size);
+        const actualBirds = Number(addData.actual_birds);
+
+        if (!hatchDate) { setHatch_dateerr('Hatch date is required'); valid = false; }
+        else if (moment(hatchDate).isAfter(moment(), "day")) { setHatch_dateerr('Hatch date cannot be in the future'); valid = false; }
+        else { setHatch_dateerr(''); }
+        if ((addData.flock_name || '').trim() === '') { setFlock_nameerr('Flock name is required'); valid = false; } else { setFlock_nameerr(''); }
+        if (!flockSize || flockSize <= 0) { setFlock_sizeerr('Flock size must be greater than 0'); valid = false; } else { setFlock_sizeerr(''); }
+        if (addData.actual_birds === '' || addData.actual_birds === null) { setActual_birdserr('Actual birds is required'); valid = false; }
+        else if (actualBirds < 0) { setActual_birdserr('Actual birds cannot be negative'); valid = false; }
+        else if (flockSize > 0 && actualBirds > flockSize) { setActual_birdserr('Actual birds cannot exceed flock size'); valid = false; }
+        else { setActual_birdserr(''); }
+        return valid;
+    };
+
+    const validateBreedStep = () => {
+        let valid = true;
+        const normalizedIntegration = addData.integration === true ? 1 : addData.integration === false ? 2 : Number(addData.integration);
+
+        if (String(addData.chick_breed_public_id || "0") === "0") { setBreed_public_iderr('Please select breed'); valid = false; } else { setBreed_public_iderr(''); }
+        if ((addData.hatchery_name || '').trim() === '') { setHatchery_nameerr('Hatchery name is required'); valid = false; } else { setHatchery_nameerr(''); }
+        if (normalizedIntegration === 0 || addData.integration === null) {
+            setIntegrationerr('Please select integration');
+            valid = false;
+        } else if (normalizedIntegration === 1 && String(addData.integrator_public_id || "0") === "0") {
+            setIntegrationerr('');
+            setIntegrator_public_iderr('Please select integration company');
+            valid = false;
+        } else if (normalizedIntegration === 2 && Number(addData.chick_cost) <= 0) {
+            setIntegrationerr('');
+            setChick_costerr('Chicks cost must be greater than 0');
+            valid = false;
+        } else {
+            setIntegrationerr('');
+            setIntegrator_public_iderr('');
+            setChick_costerr('');
+        }
+        return valid;
+    };
+
+    const validateSystemsStep = () => {
+        let valid = true;
+        const normalizedEcShed = addData.ec_shed === true ? 1 : addData.ec_shed === false ? 2 : Number(addData.ec_shed);
+
+        if (Number(addData.chick_weight) <= 0) { setChick_weighterr('Day one weight must be greater than 0'); valid = false; } else { setChick_weighterr(''); }
+        if (normalizedEcShed === 0 || addData.ec_shed === null) { setEc_shederr('Please select EC shed'); valid = false; } else { setEc_shederr(''); }
+        if (String(addData.feed_sys || "0") === "0") { setFeed_syserr('Please select feed system'); valid = false; } else { setFeed_syserr(''); }
+        if (String(addData.drinking_sys || "0") === "0") { setDrinking_syserr('Please select drinking system'); valid = false; } else { setDrinking_syserr(''); }
+        return valid;
+    };
+
+    const validateStepBeforeMove = (step) => {
+        if (step === 0) {
+            if (!showForm) {
+                setErr('Select a farm and flock first.');
+                return false;
+            }
+            setErr('');
+            return true;
+        }
+        if (step === 1) {
+            return validateMainStep();
+        }
+        if (step === 2) {
+            return validateBreedStep();
+        }
+        if (step === 3) {
+            return validateSystemsStep();
+        }
+        return true;
+    };
+
     const goNextFlockStep = () => {
         if (flockStep === 0 && !showForm) {
             setErr('Select a farm and flock first.');
             return;
         }
-        if (flockStep >= 1 && !validateManageFlock()) {
+        if (!validateStepBeforeMove(flockStep)) {
             return;
         }
         setErr('');
         setFlockStep((currentStep) => Math.min(currentStep + 1, manageFlockSteps.length - 1));
+    };
+
+    const goToManageFlockStep = (targetStep) => {
+        if (targetStep <= flockStep) {
+            setFlockStep(targetStep);
+            return;
+        }
+
+        for (let step = flockStep; step < targetStep; step += 1) {
+            if (!validateStepBeforeMove(step)) {
+                return;
+            }
+        }
+        setErr('');
+        setFlockStep(targetStep);
     };
 
     const goPreviousFlockStep = () => {
@@ -231,7 +346,10 @@ const ManageFlock = () => {
         if ((addData.hatch_date || '').trim() === '') { setHatch_dateerr('Hatch date is required'); error = 1; } else { setHatch_dateerr(''); }
         if ((addData.flock_name || '').trim() === '') { setFlock_nameerr('Flock name is required'); error = 1; } else { setFlock_nameerr(''); }
         if (addData.flock_size <= 0 || addData.flock_size === null) { setFlock_sizeerr('Flock size is required'); error = 1; } else { setFlock_sizeerr(''); }
-        if (addData.actual_birds <= 0 || addData.actual_birds === null) { setActual_birdserr('Flock Actual birds count is required'); error = 1; } else { setActual_birdserr(''); }
+        if (addData.actual_birds === '' || addData.actual_birds === null) { setActual_birdserr('Actual birds is required'); error = 1; }
+        else if (Number(addData.actual_birds) < 0) { setActual_birdserr('Actual birds cannot be negative'); error = 1; }
+        else if (Number(addData.flock_size) > 0 && Number(addData.actual_birds) > Number(addData.flock_size)) { setActual_birdserr('Actual birds cannot exceed flock size'); error = 1; }
+        else { setActual_birdserr(''); }
         if (String(addData.chick_breed_public_id) === "0" || addData.chick_breed_public_id === null) { setBreed_public_iderr('Please select Breed'); error = 1; } else { setBreed_public_iderr(''); }
         if ((addData.hatchery_name || '').trim() === '') { setHatchery_nameerr('Hatchery name is required'); error = 1; } else { setHatchery_nameerr(''); }
         if (addData.chick_weight <= 0 || addData.chick_weight === null) { setChick_weighterr('Day one weight is required'); error = 1; } else { setChick_weighterr(''); }
@@ -329,8 +447,13 @@ const ManageFlock = () => {
                 setFlockStep(0);
                 if (res.data.results.total_records === 0) {
                     setFlocks([{ flock_public_id: 0, flock_name: 'No flock available' }]);
+                    setSelectedFlockId("0");
+                    setShowForm(0);
                 } else {
-                    setFlocks(res.data.results.flock_list);
+                    const flockResults = res.data.results.flock_list || [];
+                    const latestFlock = flockResults[flockResults.length - 1];
+                    setFlocks(flockResults);
+                    loadFlockForEdit(latestFlock.flock_public_id, 0);
                 }
             }).catch((err) => {
                 //setFlocks(err.data.results);
@@ -338,35 +461,8 @@ const ManageFlock = () => {
             });
         }
     }
-    const loadFlockForEdit = (flockId) => {
-        if (String(flockId) === "0") {
-            //setFlock_public_iderr('Please select flocks');
-            setShowForm(0);
-            setSelectedFlockId("0");
-        } else {
-            //setFlock_public_iderr('');
-            setSelectedFlockId(String(flockId));
-            let url = `${apiPath}flocksDetail/${flockId}/`;
-            // U: Replaced shared config mutation with per-request auth headers from getAuthConfig().
-            // config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
-            axios.get(url, getAuthConfig()).then((res) => {
-                setShowForm(1);
-                setAddData({ ...emptyManageFlockData, ...res.data.results });
-                setFlockStep(1);
-                setErr('');
-            }).catch((err) => {
-                //setFlocks(err.data.results);
-                handleUnauthorized(err, navigate);
-            });
-        }
-    };
-    useEffect(() => {
-        if (startingFlockId !== "0") {
-            loadFlockForEdit(startingFlockId);
-        }
-    }, []);
     let changeFlocks = (e) => {
-        loadFlockForEdit(e.target.value);
+        loadFlockForEdit(e.target.value, 0);
     }
     let changeBreed = (e) => {
         setAddData({ ...addData, chick_breed_public_id: e.target.value });
@@ -393,8 +489,10 @@ const ManageFlock = () => {
 
     let changeActualbirds = (e) => {
         setAddData({ ...addData, actual_birds: e.target.value });
-        if (Number(e.target.value) <= 0) {
-            setActual_birdserr('Actual birds must be greater than 0');
+        if (e.target.value === "") {
+            setActual_birdserr('Actual birds is required');
+        } else if (Number(e.target.value) < 0) {
+            setActual_birdserr('Actual birds cannot be negative');
         } else if (Number(addData.flock_size) > 0 && Number(e.target.value) > Number(addData.flock_size)) {
             setActual_birdserr('Actual birds cannot exceed flock size');
         } else {
@@ -454,23 +552,12 @@ const ManageFlock = () => {
     }
     function successMsg() {
         setShow(false);
-        resetManageFlockForm();
-    }
-    const resetManageFlockForm = () => {
-        setAddData(emptyManageFlockData);
-        setSelectedFarmId("0");
-        setSelectedFlockId("0");
-        setShowFlocks(0);
-        setShowForm(0);
-        setFlocks([]);
         setFlockStep(0);
-        setErr('');
         localStorage.removeItem(MANAGE_FLOCK_DRAFT_KEY);
     }
     let closeAll = () => {
-        // U: OLD: this called window.location.reload() and cleared loaded farms.
-        // U: NEW: reset only this form state.
-        resetManageFlockForm();
+        localStorage.removeItem(MANAGE_FLOCK_DRAFT_KEY);
+        navigate('/member');
     }
     var hatchdate = moment();
     var currentDate = hatchdate.format('YYYY-MM-DD');
@@ -501,24 +588,24 @@ const ManageFlock = () => {
                                     <div className='gridmargin'>
                                         {(err !== '') && <Alert color="danger">{err}</Alert>}
                                         <Form onSubmit={save}>
-                                            <div className="form-stepper" aria-label="Manage flock steps">
-                                                {manageFlockSteps.map((step, index) => (
-                                                    <button
-                                                        key={step.title}
-                                                        type="button"
-                                                        className={index === flockStep ? "is-active" : index < flockStep ? "is-complete" : ""}
-                                                        onClick={() => {
-                                                            if (index === 0 || showForm === 1) {
-                                                                setFlockStep(index);
-                                                            }
-                                                        }}
-                                                    >
-                                                        <span>{index + 1}</span>
-                                                        <strong>{step.title}</strong>
-                                                        <small>{step.helper}</small>
-                                                    </button>
-                                                ))}
-                                            </div>
+                                            {flockStep > 0 && (
+                                                <div className="form-stepper form-stepper--four" aria-label="Manage flock steps">
+                                                    {manageFlockSteps.slice(1).map((step, index) => {
+                                                        const actualStep = index + 1;
+                                                        return (
+                                                            <button
+                                                                key={step.title}
+                                                                type="button"
+                                                                className={actualStep === flockStep ? "is-active" : actualStep < flockStep ? "is-complete" : ""}
+                                                                onClick={() => goToManageFlockStep(actualStep)}
+                                                            >
+                                                                <span>{index + 1}</span>
+                                                                <strong>{step.title}</strong>
+                                                            </button>
+                                                        );
+                                                    })}
+                                                </div>
+                                            )}
                                             {flockStep === 0 && (
                                                 <>
                                                     <FormGroup>
@@ -537,81 +624,30 @@ const ManageFlock = () => {
                                                         </div>
                                                     </FormGroup>
                                                     {(showFlocks === 1) ?
-                                                        <>
-                                                            <FormGroup>
-                                                                <Label for="farmselect">Select Flocks</Label>
-                                                                <div className="input-group">
-                                                                    <Input onChange={changeFlocks} id="flockSelect" value={selectedFlockId} name="flock" type="select">
-                                                                        <option value="0">Select Flocks</option>
-                                                                        {
-                                                                            flocks.map((item) => {
-                                                                                return (
-                                                                                    <option key={item.flock_public_id} value={item.flock_public_id}>{item.flock_name}</option>
-                                                                                )
-                                                                            })
-                                                                        }
-                                                                    </Input>
-                                                                </div>
-                                                            </FormGroup>
-                                                            <div className="record-review-toolbar">
-                                                                <div>
-                                                                    <span>Saved flocks</span>
-                                                                    <strong>{selectedFarmRecord?.name || "Selected farm"}</strong>
-                                                                    <p>{flockList.length} flock{flockList.length === 1 ? "" : "s"} saved under this farm. Select one to review or edit its setup.</p>
-                                                                </div>
-                                                                <Button color="danger" type="button" onClick={() => navigate("/addflock")}>Add another flock</Button>
+                                                        <FormGroup>
+                                                            <Label for="farmselect">Select Flock</Label>
+                                                            <div className="input-group">
+                                                                <Input onChange={changeFlocks} id="flockSelect" value={selectedFlockId} name="flock" type="select">
+                                                                    <option value="0">Select Flock</option>
+                                                                    {
+                                                                        flocks.map((item) => {
+                                                                            return (
+                                                                                <option key={item.flock_public_id} value={item.flock_public_id}>{item.flock_name}</option>
+                                                                            )
+                                                                        })
+                                                                    }
+                                                                </Input>
                                                             </div>
-                                                            {flockList.length > 0 ? (
-                                                                <div className="record-review-grid" aria-label="Saved flocks">
-                                                                    {flockList.map((item) => (
-                                                                        <article
-                                                                            key={item.flock_public_id}
-                                                                            className={`record-card-clickable ${String(item.flock_public_id) === selectedFlockId ? "is-selected" : ""}`}
-                                                                            role="button"
-                                                                            tabIndex="0"
-                                                                            onClick={() => loadFlockForEdit(item.flock_public_id)}
-                                                                            onKeyDown={(event) => {
-                                                                                if (event.key === "Enter" || event.key === " ") {
-                                                                                    event.preventDefault();
-                                                                                    loadFlockForEdit(item.flock_public_id);
-                                                                                }
-                                                                            }}
-                                                                        >
-                                                                            <div>
-                                                                                <span>Flock</span>
-                                                                                <strong>{item.flock_name}</strong>
-                                                                                <p>{item.farm_name ? `Farm: ${item.farm_name}` : "Farm selected"}</p>
-                                                                            </div>
-                                                                            <dl>
-                                                                                <div><dt>Breed</dt><dd>{item.chick_breed || "Not added"}</dd></div>
-                                                                                <div><dt>Hatch date</dt><dd>{item.hatch_date || "Not added"}</dd></div>
-                                                                                <div><dt>Birds</dt><dd>{item.actual_birds ?? "Not added"} / {item.flock_size ?? "Not added"}</dd></div>
-                                                                            </dl>
-                                                                            <Button color="danger" outline type="button" onClick={(event) => {
-                                                                                event.stopPropagation();
-                                                                                loadFlockForEdit(item.flock_public_id);
-                                                                            }}>Review / edit</Button>
-                                                                        </article>
-                                                                    ))}
-                                                                </div>
-                                                            ) : (
-                                                                <div className="record-review-empty">
-                                                                    <strong>No flocks saved under this farm yet.</strong>
-                                                                    <p>Add a flock so daily data, purchases, sales, reports, and Farmer AI can connect to this farm.</p>
-                                                                    <Button color="danger" type="button" onClick={() => navigate("/addflock")}>Add first flock</Button>
-                                                                </div>
-                                                            )}
-                                                        </>
+                                                        </FormGroup>
                                                         : null}
                                                 </>
                                             )}
                                             {(showForm === 1) ?
                                                 <>
-                                                    <Accordion activeKey={String(flockStep - 1)} className="mb-3">
+                                                    <div className="mb-3">
                                                         {flockStep === 1 && (
-                                                        <Accordion.Item eventKey="0">
-                                                            <Accordion.Header>Flock Data - Main</Accordion.Header>
-                                                            <Accordion.Body style={{ backgroundColor: 'white' }}>
+                                                        <div>
+                                                            <div>
                                                                 <FormGroup>
                                                                     <Label for="flockname">Flock Name</Label>
                                                                     <div className="input-group">
@@ -640,13 +676,12 @@ const ManageFlock = () => {
                                                                     </div>
                                                                     <small className="text-danger">{actual_birdserr}</small>
                                                                 </FormGroup>
-                                                            </Accordion.Body>
-                                                        </Accordion.Item>
+                                                            </div>
+                                                        </div>
                                                         )}
                                                         {flockStep === 2 && (
-                                                        <Accordion.Item eventKey="1">
-                                                            <Accordion.Header>Breed Data</Accordion.Header>
-                                                            <Accordion.Body style={{ backgroundColor: 'white' }}>
+                                                        <div>
+                                                            <div>
                                                                 <FormGroup>
                                                                     <Label for="farmselect">Chick Breed</Label>
                                                                     <div className="input-group">
@@ -735,13 +770,12 @@ const ManageFlock = () => {
                                                                             <small className="text-danger">{chick_costerr}</small>
                                                                         </FormGroup>
                                                                 }
-                                                            </Accordion.Body>
-                                                        </Accordion.Item>
+                                                            </div>
+                                                        </div>
                                                         )}
                                                         {flockStep === 3 && (
-                                                        <Accordion.Item eventKey="2">
-                                                            <Accordion.Header>More Flock Data</Accordion.Header>
-                                                            <Accordion.Body style={{ backgroundColor: 'white' }}>
+                                                        <div>
+                                                            <div>
                                                                 <FormGroup>
                                                                     <Label for="flockname">Day1 Wt(gms)</Label>
                                                                     <div className="input-group">
@@ -789,10 +823,10 @@ const ManageFlock = () => {
                                                                     </div>
                                                                     <small className="text-danger">{drinking_syserr}</small>
                                                                 </FormGroup>
-                                                            </Accordion.Body>
-                                                        </Accordion.Item>
+                                                            </div>
+                                                        </div>
                                                         )}
-                                                    </Accordion>
+                                                    </div>
                                                     {flockStep === 4 && (
                                                         <div className="form-review-card">
                                                             <span>Review flock update</span>
@@ -808,18 +842,19 @@ const ManageFlock = () => {
                                                             </dl>
                                                         </div>
                                                     )}
-                                                    <div className="form-wizard-actions">
-                                                        {flockStep > 0 && <Button type="button" color="secondary" outline onClick={goPreviousFlockStep}>Back</Button>}
-                                                        {flockStep < manageFlockSteps.length - 1 && <Button type="button" color="danger" onClick={goNextFlockStep}>Next</Button>}
+                                                    <div className="form-wizard-actions manage-flock-actions">
+                                                        {flockStep > 0 && <Button className="manage-flock-back-action" type="button" color="secondary" outline onClick={goPreviousFlockStep}>Back</Button>}
+                                                        {flockStep < manageFlockSteps.length - 1 && <Button className="manage-flock-next-action" type="button" color="danger" onClick={goNextFlockStep}>Next</Button>}
                                                         {flockStep === manageFlockSteps.length - 1 && (loading ?
-                                                            <Button className="btn" color="danger" type="submit" disabled>
+                                                            <Button className="btn manage-flock-save-action" color="danger" type="submit" disabled>
                                                                 Please wait...
                                                                 <span className="spinner-border spinner-border-sm" role="status" aria-hidden="true" />
                                                             </Button>
                                                             :
-                                                            <Button className="btn" color="danger" type="submit">Save</Button>
+                                                            <Button className="btn manage-flock-save-action" color="danger" type="submit">Save</Button>
                                                         )}
-                                                        <Button className="btn" color="secondary" outline type="button" onClick={closeAll}>Cancel</Button>
+                                                        <Button className="btn manage-flock-cancel-action" color="secondary" outline type="button" onClick={closeAll}>Cancel</Button>
+                                                        <Button className="btn manage-flock-add-action" color="danger" outline type="button" onClick={() => navigate("/addflock")}>Add another flock</Button>
                                                     </div>
                                                 </>
                                                 : null
