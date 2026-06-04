@@ -144,17 +144,6 @@ const findContinueDraft = (selectedFarm, selectedFlock) => {
   return null;
 };
 
-const formatDashboardDate = (value) => {
-  if (!value) {
-    return "Not recorded";
-  }
-  return new Intl.DateTimeFormat("en-IN", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  }).format(new Date(value));
-};
-
 const Member = () => {
   const [graphError, setGraphError] = useState("");
   const [showFlock, setShowFlock] = useState(false);
@@ -171,6 +160,8 @@ const Member = () => {
   const [weight, setWeight] = useState([]);
   const [fcr, setFcr] = useState([]);
   const [recordStatus, setRecordStatus] = useState(emptyRecordStatus);
+  const [totalFlockCount, setTotalFlockCount] = useState(0);
+  const [showWorkflow, setShowWorkflow] = useState(false);
   const navigate = useNavigate();
 
   const getsetFlockData2 = useCallback((flockId) => {
@@ -255,6 +246,30 @@ const Member = () => {
     });
   }, [navigate]);
 
+  const loadTotalFlockCount = useCallback((farmList) => {
+    const validFarms = farmList.filter((farm) => String(farm.public_id) !== "0");
+    if (validFarms.length === 0) {
+      setTotalFlockCount(0);
+      return;
+    }
+
+    // U: NEW: dashboard header needs the farmer's total flock count across
+    // U: all farms, while the chart selector still loads only the active farm.
+    Promise.allSettled(
+      validFarms.map((farm) => axios.get(`${apiPath}flocks/${farm.public_id}/`, getAuthConfig()))
+    ).then((results) => {
+      const total = results.reduce((count, result) => {
+        if (result.status === "rejected") {
+          handleUnauthorized(result.reason, navigate);
+          return count;
+        }
+        const records = result.value.data?.results;
+        return count + Number(records?.total_records || records?.flock_list?.length || 0);
+      }, 0);
+      setTotalFlockCount(total);
+    });
+  }, [navigate]);
+
   useEffect(() => {
     loadRecordStatus(selectedFlock);
   }, [loadRecordStatus, selectedFlock]);
@@ -266,8 +281,10 @@ const Member = () => {
       if (res.data.results.length === 0) {
         setFarms([{ public_id: 0, name: "No farm available" }]);
         setSelectedFarm("0");
+        setTotalFlockCount(0);
       } else {
         setFarms(res.data.results);
+        loadTotalFlockCount(res.data.results);
         const latestFarm = res.data.results[res.data.results.length - 1];
         setSelectedFarm(String(latestFarm.public_id));
         url = `${apiPath}flocks/${latestFarm.public_id}/`;
@@ -292,9 +309,10 @@ const Member = () => {
     }).catch((err) => {
       setFarms([{ public_id: 0, name: "No farm available" }]);
       setSelectedFarm("0");
+      setTotalFlockCount(0);
       handleUnauthorized(err, navigate);
     });
-  }, [getsetFlockData2, navigate]);
+  }, [getsetFlockData2, loadTotalFlockCount, navigate]);
 
   const changeFarm = (event) => {
     // U: OLD: e.target.value === 0 compared a string to a number.
@@ -387,28 +405,24 @@ const Member = () => {
     return [
       {
         title: "Create farm",
-        helper: "Add farm location and shed details first.",
         complete: hasFarm,
         href: hasFarm ? "/managefarm" : "/addfarm",
         action: hasFarm ? "Review farms" : "Add farm",
       },
       {
         title: "Add flock",
-        helper: "Connect a broiler batch to the farm.",
         complete: hasFlock,
         href: hasFarm ? "/addflock" : "/addfarm",
         action: hasFarm ? "Add flock" : "Add farm first",
       },
       {
         title: "Record daily data",
-        helper: "Enter bird count, mortality, weight, feed, and FCR.",
         complete: hasDailyData,
         href: hasFlock ? "/flockdailydata" : "/addflock",
         action: hasFlock ? "Add daily data" : "Add flock first",
       },
       {
         title: "Add purchases",
-        helper: "Track feed, medicine, labour, equipment, and other costs.",
         complete: hasPurchases,
         href: hasPurchases ? "/listpurchase" : hasFlock ? "/addpurchase" : "/addflock",
         state: selectedRecordState,
@@ -416,7 +430,6 @@ const Member = () => {
       },
       {
         title: "Record sales",
-        helper: "Add partial or final lifting details for profit reports.",
         complete: hasSales,
         href: hasSales ? "/viewsale" : hasFlock ? "/flocksale" : "/addflock",
         state: selectedRecordState,
@@ -424,7 +437,6 @@ const Member = () => {
       },
       {
         title: "Review reports",
-        helper: "Open daily and flock reports once daily records exist.",
         complete: reportsReady,
         href: reportsReady ? "/dailydatasheet" : "/flockdailydata",
         action: reportsReady ? "Open reports" : "Add daily data first",
@@ -437,12 +449,12 @@ const Member = () => {
     return findContinueDraft(selectedFarm, selectedFlock);
   }, [selectedFarm, selectedFlock]);
   const continueAction = continueDraft || {
-    title: `Next recommended step: ${nextSetupStep.title}`,
-    helper: nextSetupStep.helper,
+    title: nextSetupStep.title,
     action: nextSetupStep.action,
     href: nextSetupStep.href,
     state: nextSetupStep.state,
   };
+  const continueActionLabel = continueDraft ? "Continue where you left off" : "Recommended next action";
 
   const chartEmptyState = useMemo(() => {
     if (farmCount === 0) {
@@ -525,195 +537,130 @@ const Member = () => {
         <div>
           <span>Farmer dashboard</span>
           <h1>Flock performance at a glance.</h1>
-          <p>Select a farm and flock to review bird count, mortality, weight, and FCR trends. If you are starting fresh, follow the workflow below.</p>
+        </div>
+        <div className="member-dashboard-summary" aria-label="Dashboard record summary">
+          <article>
+            <span>Farms</span>
+            <strong>{farmCount}</strong>
+          </article>
+          <article>
+            <span>Flocks</span>
+            <strong>{totalFlockCount}</strong>
+          </article>
+          <article>
+            <span>Active farm</span>
+            <strong>{selectedFarmLabel}</strong>
+          </article>
+          <article>
+            <span>Active flock</span>
+            <strong>{selectedFlockLabel}</strong>
+          </article>
         </div>
       </section>
 
       <section className="member-continue-card">
         <div>
-          <span>{continueDraft ? "Continue where you left off" : "Recommended next action"}</span>
-          <strong>{continueAction.title}</strong>
-          <p>{continueAction.helper}</p>
+          <strong>{continueActionLabel}: {continueAction.title}</strong>
         </div>
-        <Link to={continueAction.href} state={continueAction.state}>{continueAction.action}</Link>
+        <div className="member-continue-actions">
+          <button type="button" onClick={() => setShowWorkflow((current) => !current)}>
+            {showWorkflow ? "Hide workflow" : "View workflow"}
+          </button>
+          <Link to={continueAction.href} state={continueAction.state}>{continueAction.action}</Link>
+        </div>
       </section>
 
-      <section className="member-context-grid">
-        <article className="member-context-card">
+      {showWorkflow && (
+        <section className="member-workflow-card member-workflow-panel">
           <div className="member-card-heading">
-            <span>Selected farm</span>
-            <strong>{selectedFarmLabel}</strong>
+            <span>Recommended steps</span>
+            <strong>Next: {nextSetupStep.title}</strong>
           </div>
-          {selectedFarmRecord ? (
-            <>
-              <dl>
-                <div><dt>Location</dt><dd>{[selectedFarmRecord.city, selectedFarmRecord.state_name].filter(Boolean).join(", ") || "Not added"}</dd></div>
-                <div><dt>Sheds</dt><dd>{selectedFarmRecord.shed_count ?? "Not added"}</dd></div>
-                <div><dt>Status</dt><dd>{selectedFarmRecord.status ? "Active" : "Inactive"}</dd></div>
-                <div><dt>Flocks</dt><dd>{flockCount}</dd></div>
-              </dl>
-              <Link to="/managefarm">Manage farm</Link>
-            </>
-          ) : (
-            <div className="member-context-empty">
-              <p>Add a farm first so flocks, purchases, sales, reports, and Farmer AI can connect to it.</p>
-              <Link to="/addfarm">Add farm</Link>
-            </div>
-          )}
-        </article>
-
-        <article className="member-context-card">
-          <div className="member-card-heading">
-            <span>Selected flock</span>
-            <strong>{selectedFlockLabel}</strong>
+          <div className="member-workflow-steps" aria-label="Recommended farmer setup workflow">
+            {setupSteps.map((step, index) => (
+              <article key={step.title} className={step.complete ? "is-complete" : ""}>
+                <div className="member-workflow-index">{step.complete ? "OK" : index + 1}</div>
+                <div>
+                  <h2>{step.title}</h2>
+                  <Link to={step.href} state={step.state}>{step.action}</Link>
+                </div>
+              </article>
+            ))}
           </div>
-          {selectedFlockRecord ? (
-            <>
-              <dl>
-                <div><dt>Breed</dt><dd>{selectedFlockRecord.chick_breed || "Not added"}</dd></div>
-                <div><dt>Hatch date</dt><dd>{formatDashboardDate(selectedFlockRecord.hatch_date)}</dd></div>
-                <div><dt>Initial birds</dt><dd>{selectedFlockRecord.actual_birds ?? "Not added"}</dd></div>
-                <div><dt>Current birds</dt><dd>{recordStatus.currentBirdCount ?? selectedFlockRecord.actual_birds ?? "Not recorded"}</dd></div>
-              </dl>
-              {/* U: NEW: dashboard should not duplicate the manage-flow list.
-                  U: Send only the farm to Manage Flock so that page lists all
-                  U: flocks under this farm and lets the farmer choose one. */}
-              <Link to="/manageflock" state={{ farmPublicId: selectedFarm }}>Choose / edit flocks</Link>
-            </>
-          ) : (
-            <div className="member-context-empty">
-              <p>Add or select a flock to unlock daily data, charts, purchases, sales, and reports.</p>
-              <Link to={farmCount > 0 ? "/addflock" : "/addfarm"}>{farmCount > 0 ? "Add flock" : "Add farm first"}</Link>
-            </div>
-          )}
-        </article>
-      </section>
+          {recordStatus.loading && <p className="member-card-note">Checking saved flock records...</p>}
+          {!recordStatus.loading && recordStatus.error && <p className="member-card-note is-error">{recordStatus.error}</p>}
+        </section>
+      )}
 
-      <section className="member-workflow-card">
-        <div className="member-card-heading">
-          <span>Recommended steps</span>
-          <strong>Next: {nextSetupStep.title}</strong>
-        </div>
-        <div className="member-workflow-steps" aria-label="Recommended farmer setup workflow">
-          {setupSteps.map((step, index) => (
-            <article key={step.title} className={step.complete ? "is-complete" : ""}>
-              <div className="member-workflow-index">{step.complete ? "OK" : index + 1}</div>
-              <div>
-                <h2>{step.title}</h2>
-                <p>{step.helper}</p>
-                <Link to={step.href} state={step.state}>{step.action}</Link>
-              </div>
-            </article>
-          ))}
-        </div>
-        {recordStatus.loading && <p className="member-card-note">Checking saved flock records...</p>}
-        {!recordStatus.loading && recordStatus.error && <p className="member-card-note is-error">{recordStatus.error}</p>}
-      </section>
-
-      <section className="member-dashboard-grid">
-        <aside className="member-selector-card">
-          <div className="member-card-heading">
-            <span>Choose records</span>
-            <strong>Farm and flock</strong>
-          </div>
-          <FormGroup>
-            <Label for="farmSelect">Select Farm</Label>
-            <Input value={selectedFarm} onChange={changeFarm} id="farmSelect" name="farm" type="select">
-              <option value="0" disabled>Select Farm</option>
-              {farms.map((item) => (
-                <option key={item.public_id} value={item.public_id}>{item.name}</option>
-              ))}
-            </Input>
-          </FormGroup>
-
-          {showFlock && (
-            <FormGroup>
-              <Label for="flockSelect">Select Flock</Label>
-              <Input value={selectedFlock} onChange={changeFlock} id="flockSelect" name="flock" type="select">
-                <option value="0" disabled>Select Flock</option>
-                {flocks.map((item) => (
-                  <option key={item.flock_public_id} value={item.flock_public_id}>{item.flock_name}</option>
-                ))}
-              </Input>
-            </FormGroup>
-          )}
-
-          <div className="member-mini-stats">
-            <div>
-              <span>Farms</span>
-              <strong>{farmCount}</strong>
-            </div>
-            <div>
-              <span>Flocks</span>
-              <strong>{flockCount}</strong>
-            </div>
-            <div>
-              <span>Daily entries</span>
-              <strong>{recordStatus.dailyCount}</strong>
-            </div>
-            <div>
-              <span>Purchases</span>
-              <strong>{recordStatus.purchaseCount}</strong>
-            </div>
-            <div>
-              <span>Sales</span>
-              <strong>{recordStatus.salesCount}</strong>
-            </div>
-          </div>
-          <div className="member-record-status" role="status">
-            {recordStatus.loading && "Checking saved daily data, purchases, and sales..."}
-            {!recordStatus.loading && recordStatus.error && recordStatus.error}
-            {!recordStatus.loading && !recordStatus.error && selectedFlock !== "0" && (
-              `Latest daily entry: ${formatDashboardDate(recordStatus.lastDailyDate)}.`
-            )}
-          </div>
-        </aside>
-
-        <section className="member-chart-card">
+      <section className="member-chart-card member-chart-card-wide">
+        <div className="member-chart-top">
           <div className="member-card-heading">
             <span>Performance charts</span>
             <strong>{selectedFlockLabel}</strong>
           </div>
+          <div className="member-chart-controls">
+            <FormGroup>
+              <Label for="farmSelect">Select Farm</Label>
+              <Input value={selectedFarm} onChange={changeFarm} id="farmSelect" name="farm" type="select">
+                <option value="0" disabled>Select Farm</option>
+                {farms.map((item) => (
+                  <option key={item.public_id} value={item.public_id}>{item.name}</option>
+                ))}
+              </Input>
+            </FormGroup>
 
-          {graphError && (
-            <div className="member-dashboard-alert">{graphError}</div>
-          )}
+            {showFlock && (
+              <FormGroup>
+                <Label for="flockSelect">Select Flock</Label>
+                <Input value={selectedFlock} onChange={changeFlock} id="flockSelect" name="flock" type="select">
+                  <option value="0" disabled>Select Flock</option>
+                  {flocks.map((item) => (
+                    <option key={item.flock_public_id} value={item.flock_public_id}>{item.flock_name}</option>
+                  ))}
+                </Input>
+              </FormGroup>
+            )}
+          </div>
+        </div>
 
-          {hasChartData ? (
-            <Tabs defaultActiveKey="mortality" id="member-performance-tabs" className="member-tabs">
-              <Tab eventKey="mortality" title="Mortality">
-                <Chart
-                  type="line"
-                  className="chart-width"
-                  height={430}
-                  series={[
-                    { name: "Current Bird Count", data: currentCount },
-                    { name: "Mortality", data: mortality },
-                  ]}
-                  options={mortalityOptions}
-                />
-              </Tab>
-              <Tab eventKey="weight" title="Weight / FCR">
-                <Chart
-                  type="line"
-                  className="chart-width"
-                  height={430}
-                  series={[
-                    { name: "Average Weight (grams)", data: weight },
-                    { name: "FCR", data: fcr },
-                  ]}
-                  options={weightOptions}
-                />
-              </Tab>
-            </Tabs>
-          ) : (
-            <div className="member-empty-state">
-              <span>{chartEmptyState.title}</span>
-              <p>{chartEmptyState.body}</p>
-              <Link to={chartEmptyState.href}>{chartEmptyState.action}</Link>
-            </div>
-          )}
-        </section>
+        {graphError && (
+          <div className="member-dashboard-alert">{graphError}</div>
+        )}
+
+        {hasChartData ? (
+          <Tabs defaultActiveKey="mortality" id="member-performance-tabs" className="member-tabs">
+            <Tab eventKey="mortality" title="Mortality">
+              <Chart
+                type="line"
+                className="chart-width"
+                height={430}
+                series={[
+                  { name: "Current Bird Count", data: currentCount },
+                  { name: "Mortality", data: mortality },
+                ]}
+                options={mortalityOptions}
+              />
+            </Tab>
+            <Tab eventKey="weight" title="Weight / FCR">
+              <Chart
+                type="line"
+                className="chart-width"
+                height={430}
+                series={[
+                  { name: "Average Weight (grams)", data: weight },
+                  { name: "FCR", data: fcr },
+                ]}
+                options={weightOptions}
+              />
+            </Tab>
+          </Tabs>
+        ) : (
+          <div className="member-empty-state">
+            <span>{chartEmptyState.title}</span>
+            <p>{chartEmptyState.body}</p>
+            <Link to={chartEmptyState.href}>{chartEmptyState.action}</Link>
+          </div>
+        )}
       </section>
     </main>
   );
