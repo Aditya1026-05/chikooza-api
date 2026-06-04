@@ -7,7 +7,18 @@ import axios from 'axios';
 // import '../ui/custom.css'
 import { useLocation, useNavigate } from "react-router-dom";
 
+const DAILY_SELECTOR_DRAFT_KEY = "chikooza-daily-selector-draft";
+
+const readSelectorDraft = () => {
+    try {
+        return JSON.parse(localStorage.getItem(DAILY_SELECTOR_DRAFT_KEY) || "{}");
+    } catch {
+        return {};
+    }
+};
+
 const ViewSale = () => {
+    const [activeSelectorDraft] = useState(() => readSelectorDraft());
     const [showFlock, setShowFlock] = useState(false);
     const [showForm, setShowForm] = useState(false);
     let [flocks, setFlocks] = useState([]);
@@ -25,6 +36,72 @@ const ViewSale = () => {
     const location = useLocation();
     const prefillFarmId = String(location.state?.farmPublicId || "0");
     const prefillFlockId = String(location.state?.flockPublicId || "0");
+
+    function getSalesList(flockPublicId) {
+        let url = `${apiPath}sales/?flock_public_id=${flockPublicId}`
+        axios.get(url, getAuthConfig())
+            .then(res => {
+                setSaleList(res.data.results.sales_list || [])
+            }
+            ).catch(err => {
+                console.log(err)
+                setSaleList([]);
+                handleUnauthorized(err, navigate);
+            })
+    }
+
+    function selectFlockForSales(selectedFlock) {
+        if (!selectedFlock || String(selectedFlock.flock_public_id) === "0") {
+            setShowForm(false);
+            setSaleList([]);
+            setSelectedFlockId("0");
+            setSelectedFlockName("");
+            return;
+        }
+
+        setSelectedFarmId(String(selectedFlock.farm_public_id || selectedFarmId));
+        setSelectedFlockId(String(selectedFlock.flock_public_id));
+        setSelectedFlockName(selectedFlock.flock_name || "Selected flock");
+        setShowForm(true);
+        getSalesList(selectedFlock.flock_public_id);
+    }
+
+    function loadFlocksForFarm(farmId, preferredFlockId = "0") {
+        if (!farmId || String(farmId) === "0") {
+            setShowFlock(false);
+            setShowForm(false);
+            setFlocks([]);
+            setSaleList([]);
+            setSelectedFlockId("0");
+            setSelectedFlockName("");
+            return;
+        }
+
+        setSelectedFarmId(String(farmId));
+        axios.get(`${apiPath}flocks/${farmId}/`, getAuthConfig()).then((flockRes) => {
+            setShowFlock(true);
+            if (flockRes.data.results.total_records === 0) {
+                setFlocks([{ flock_public_id: 0, flock_name: 'No flock available' }]);
+                setShowForm(false);
+                setSaleList([]);
+                setSelectedFlockId("0");
+                setSelectedFlockName("");
+                return;
+            }
+
+            const flockList = flockRes.data.results.flock_list || [];
+            const selected = flockList.find((item) => String(item.flock_public_id) === String(preferredFlockId)) || flockList[flockList.length - 1];
+            setFlocks(flockList);
+            selectFlockForSales(selected);
+        }).catch((err) => {
+            setFlocks([]);
+            setShowFlock(false);
+            setShowForm(false);
+            setSaleList([]);
+            handleUnauthorized(err, navigate);
+        });
+    }
+
     useEffect(() => {
         let url = `${apiPath}farm/`;
         // U: Replaced shared config mutation with per-request auth headers from getAuthConfig().
@@ -33,42 +110,23 @@ const ViewSale = () => {
             if (res.data.results.length === 0) {
                 setFarms([{ public_id: 0, name: 'No farm available' }]);
             } else {
-                setFarms(res.data.results);
-            }
-
-            if (prefillFarmId !== "0") {
-                // U: NEW: preserve the selected farm/flock when opening sales
-                // U: management from the sale-entry review block.
-                setSelectedFarmId(prefillFarmId);
-                axios.get(`${apiPath}flocks/${prefillFarmId}/`, getAuthConfig()).then((flockRes) => {
-                    setShowFlock(true);
-                    if (flockRes.data.results.total_records === 0) {
-                        setFlocks([{ flock_public_id: 0, flock_name: 'No flock available' }]);
-                        return;
-                    }
-                    const flockList = flockRes.data.results.flock_list || [];
-                    setFlocks(flockList);
-                    const selected = flockList.find((item) => String(item.flock_public_id) === prefillFlockId);
-                    if (selected) {
-                        setSelectedFlockId(prefillFlockId);
-                        setSelectedFlockName(selected.flock_name || "Selected flock");
-                        axios.get(`${apiPath}sales/?flock_public_id=${prefillFlockId}`, getAuthConfig()).then((saleRes) => {
-                            setSaleList(saleRes.data.results.sales_list || []);
-                            setShowForm(true);
-                        }).catch((err) => {
-                            setSaleList([]);
-                            handleUnauthorized(err, navigate);
-                        });
-                    }
-                }).catch((err) => {
-                    handleUnauthorized(err, navigate);
-                });
+                const farmList = res.data.results;
+                setFarms(farmList);
+                const selectorFarmId = String(activeSelectorDraft.selectedFarmId || "0");
+                const selectorFlockId = String(activeSelectorDraft.selectedFlockId || "0");
+                const latestFarm = farmList[farmList.length - 1];
+                const requestedFarmId = prefillFarmId !== "0" ? prefillFarmId : selectorFarmId !== "0" ? selectorFarmId : latestFarm?.public_id;
+                const selectedFarm = farmList.find((item) => String(item.public_id) === String(requestedFarmId)) || latestFarm;
+                const targetFlockId = prefillFlockId !== "0" ? prefillFlockId : selectorFlockId;
+                if (selectedFarm) {
+                    loadFlocksForFarm(selectedFarm.public_id, targetFlockId);
+                }
             }
         }).catch((err) => {
             setFarms([{ public_id: 0, name: 'No farm available' }]);
             handleUnauthorized(err, navigate);
         });
-    }, [navigate, prefillFarmId, prefillFlockId])
+    }, [activeSelectorDraft.selectedFarmId, activeSelectorDraft.selectedFlockId, navigate, prefillFarmId, prefillFlockId])
     let changeFarm = (e) => {
         setSelectedFarmId(e.target.value);
         setSelectedFlockId("0");
@@ -79,34 +137,8 @@ const ViewSale = () => {
             setShowFlock(false)
             setFlocks([]);
         } else {
-            let url = `${apiPath}flocks/${e.target.value}/`;
-            // U: Replaced shared config mutation with per-request auth headers from getAuthConfig().
-            // config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
-            axios.get(url, getAuthConfig()).then((res) => {
-                if (res.data.results.total_records === 0) {
-                    setFlocks([{ flock_public_id: 0, flock_name: 'No flock available' }]);
-                } else {
-                    //setData({...data,farm:e.target.value,flock:null,seltype:null});
-                    setFlocks(res.data.results.flock_list);
-                }
-                setShowFlock(true)
-            }).catch((err) => {
-                //setFormError('No Flock available.');
-                handleUnauthorized(err, navigate);
-            });
+            loadFlocksForFarm(e.target.value);
         }
-    }
-    const getSalesList = (flockPublicId) => {
-        let url = `${apiPath}sales/?flock_public_id=${flockPublicId}`
-        axios.get(url, getAuthConfig())
-            .then(res => {
-                setSaleList(res.data.results.sales_list)
-                // console.log(res.data.results.sales_list)
-            }
-            ).catch(err => {
-                console.log(err)
-                handleUnauthorized(err, navigate);
-            })
     }
     let changeFlock = (e) => {
         const flockPublicId = e.target.value;
@@ -124,11 +156,7 @@ const ViewSale = () => {
                 setSelectedFlockName("");
                 return;
             }
-            setSelectedFlockId(flockPublicId);
-            setSelectedFlockName(user.flock_name || "Selected flock");
-            setShowForm(true)
-            // U: Replaced render-time API call with an explicit load after flock selection.
-            getSalesList(flockPublicId)
+            selectFlockForSales(user);
         }
     }
     return (
@@ -194,24 +222,7 @@ const ViewSale = () => {
                                                     </div>
                                                     {salelist.length > 0 ? (
                                                         <>
-                                                            <div className="record-review-grid" aria-label="Sale review cards">
-                                                                {salelist.map((item) => (
-                                                                    <article key={item.public_id}>
-                                                                        <div>
-                                                                            <span>{saleTypeLabel(item.sales_type)}</span>
-                                                                            <strong>Rs. {Number(item.cost || 0).toFixed(2)}</strong>
-                                                                            <p>{item.date || "Date not added"}</p>
-                                                                        </div>
-                                                                        <dl>
-                                                                            <div><dt>Birds sold</dt><dd>{item.lifting_count || 0}</dd></div>
-                                                                            <div><dt>Total weight</dt><dd>{item.total_weight || 0} kg</dd></div>
-                                                                            <div><dt>Rate</dt><dd>Rs. {item.rate_per_kg || 0}/kg</dd></div>
-                                                                        </dl>
-                                                                        <Button color="danger" outline type="button" onClick={() => navigate('/editsale', { state: { item } })}>Review / edit</Button>
-                                                                    </article>
-                                                                ))}
-                                                            </div>
-                                                            <Table bordered striped responsive>
+                                                            <Table bordered striped responsive className="sales-review-table">
                                                                 <thead>
                                                                     <tr className="text-center">
                                                                         <th>Date</th>
@@ -227,7 +238,11 @@ const ViewSale = () => {
                                                                                 <th scope="row">{item.date}</th>
                                                                                 <td>{saleTypeLabel(item.sales_type)}</td>
                                                                                 <td>{item.lifting_count}</td>
-                                                                                <td className="text-blue-800 font-bold" onClick={() => navigate('/editsale', { state: { item } })} style={{ cursor: 'pointer' }}>View</td>
+                                                                                <td className="sales-review-table__action">
+                                                                                    <Button className="table-action-button table-action-button--compact" color="danger" outline size="sm" type="button" onClick={() => navigate('/editsale', { state: { item } })}>
+                                                                                        View
+                                                                                    </Button>
+                                                                                </td>
                                                                             </tr>
                                                                         )
                                                                     })}

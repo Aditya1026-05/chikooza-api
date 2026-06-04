@@ -536,6 +536,44 @@ textarea::placeholder {
   vertical-align: middle;
 }
 
+.table-action-button {
+  border-radius: var(--ck-radius-pill);
+  font-weight: 850;
+  min-width: 78px;
+  padding: 0.4rem 0.8rem;
+}
+
+.sales-review-table {
+  table-layout: fixed;
+}
+
+.sales-review-table th,
+.sales-review-table td {
+  padding: 0.7rem 0.85rem;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.sales-review-table tbody th {
+  color: var(--ck-red-700);
+  font-size: 0.95rem;
+  font-weight: 850;
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+.sales-review-table__action {
+  width: 120px;
+}
+
+.table-action-button--compact {
+  background: #ffffff;
+  border-width: 1px;
+  font-size: 0.9rem;
+  min-width: 64px;
+  padding: 0.28rem 0.65rem;
+}
+
 .modal-content {
   overflow: hidden;
 }
