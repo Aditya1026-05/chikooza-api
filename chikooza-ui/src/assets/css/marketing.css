@@ -510,6 +510,77 @@
   text-transform: uppercase;
 }
 
+.team-section {
+  background:
+    radial-gradient(circle at 90% 8%, rgba(180, 35, 24, 0.08), transparent 20rem),
+    linear-gradient(180deg, #fffaf7 0%, #fff1ed 100%);
+  border-top: 1px solid var(--ck-border, #f0ddd8);
+  max-width: none;
+}
+
+.team-section > * {
+  margin-left: auto;
+  margin-right: auto;
+  max-width: 1320px;
+}
+
+.team-grid {
+  display: grid;
+  gap: clamp(1rem, 2vw, 1.35rem);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: clamp(1.6rem, 4vw, 3rem);
+}
+
+.team-card {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.86);
+  border: 1px solid var(--ck-border, #f0ddd8);
+  border-radius: 1.2rem;
+  box-shadow: 0 16px 38px rgba(69, 34, 29, 0.07);
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: auto minmax(0, 1fr);
+  padding: clamp(1.1rem, 2vw, 1.45rem);
+}
+
+.team-avatar-frame {
+  align-items: center;
+  background:
+    linear-gradient(180deg, var(--ck-red-75, #fff1ed), #ffffff);
+  border: 1px solid rgba(180, 35, 24, 0.22);
+  border-radius: 1rem;
+  display: flex;
+  height: 5.1rem;
+  justify-content: center;
+  overflow: hidden;
+  width: 5.1rem;
+}
+
+.team-avatar-frame img {
+  display: block;
+  filter: sepia(1) saturate(5) hue-rotate(320deg) brightness(0.78) contrast(1.15);
+  height: 4.4rem;
+  mix-blend-mode: multiply;
+  object-fit: contain;
+  opacity: 0.9;
+  width: 4.4rem;
+}
+
+.team-card h3 {
+  color: var(--ck-ink, #231615);
+  font-size: clamp(1.2rem, 1.8vw, 1.45rem);
+  font-weight: 900;
+  letter-spacing: -0.04em;
+  margin: 0 0 0.25rem;
+}
+
+.team-card strong {
+  color: var(--ck-red-700, #9f201d);
+  display: block;
+  font-size: 0.9rem;
+  margin: 0;
+}
+
 .home-final-cta {
   align-items: center;
   background:
@@ -1659,7 +1730,8 @@
   }
 
   .home-tile-grid,
-  .home-know-grid {
+  .home-know-grid,
+  .team-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -1801,8 +1873,23 @@
   }
 
   .home-tile-grid,
-  .home-know-grid {
+  .home-know-grid,
+  .team-grid {
     grid-template-columns: 1fr;
+  }
+
+  .team-card {
+    grid-template-columns: 1fr;
+  }
+
+  .team-avatar-frame {
+    height: 4.6rem;
+    width: 4.6rem;
+  }
+
+  .team-avatar-frame img {
+    height: 4rem;
+    width: 4rem;
   }
 
   .home-tile {

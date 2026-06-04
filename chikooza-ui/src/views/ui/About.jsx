@@ -3,6 +3,7 @@ import "../../assets/css/marketing.css";
 import BroilerHouseImage from "../../assets/images/poultry/broiler-house.png";
 import FarmerBirdImage from "../../assets/images/poultry/farmer-holding-bird.png";
 import FeedingImage from "../../assets/images/poultry/broiler-feeding.png";
+import TeamAvatarImage from "../../assets/images/poultry/team-avatar.png";
 
 const principles = [
   {
@@ -19,6 +20,21 @@ const principles = [
     label: "Decisions",
     title: "Practical decisions",
     copy: "The product focuses on useful farm questions: FCR, current birds, mortality, sale amount, profit/loss, and purchase trends.",
+  },
+];
+
+const teamMembers = [
+  {
+    name: "Manish Goyal",
+    role: "Founder",
+  },
+  {
+    name: "Utkarsh Goel",
+    role: "Developer",
+  },
+  {
+    name: "Aditya Tayal",
+    role: "Team Member",
   },
 ];
 
@@ -77,6 +93,27 @@ const About = () => {
               <small>{item.label}</small>
               <h3>{item.title}</h3>
               <p>{item.copy}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="home-section team-section">
+        <div className="home-section-heading">
+          <span>Project team</span>
+        </div>
+
+        <div className="team-grid">
+          {teamMembers.map((member) => (
+            <article className="team-card" key={member.name}>
+              <div className="team-avatar-frame">
+                {/* U: NEW: reuse the supplied team avatar while tinting it through CSS to match the Chikooza palette. */}
+                <img src={TeamAvatarImage} alt="" aria-hidden="true" />
+              </div>
+              <div>
+                <h3>{member.name}</h3>
+                <strong>{member.role}</strong>
+              </div>
             </article>
           ))}
         </div>
