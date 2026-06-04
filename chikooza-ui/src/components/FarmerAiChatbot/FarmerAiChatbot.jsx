@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import axios from "axios";
 import { Button } from "reactstrap";
@@ -14,16 +14,107 @@ const initialMessages = [
   {
     id: "intro",
     sender: "bot",
-    text: "Ask about your farm records. I can handle rough English, for example: “profit for first flock”, “my total things”, “sales this month”, or “current birds”.",
+    text: "Ask me about your farms, flocks, sales, purchases, daily data, mortality, feed, weight, FCR, or profit.",
   },
 ];
+
+const quickPrompts = [
+  "Show my farm summary",
+  "Show all flocks",
+  "Profit or loss",
+  "Daily data for active flock",
+];
+
+const formatInlineText = (text) => {
+  const separatorIndex = text.indexOf(":");
+  if (separatorIndex > 0 && separatorIndex < 42) {
+    return (
+      <>
+        <strong>{text.slice(0, separatorIndex + 1)}</strong>
+        {text.slice(separatorIndex + 1)}
+      </>
+    );
+  }
+
+  return text;
+};
+
+const renderFormattedMessage = (text) => {
+  const lines = String(text || "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  if (lines.length === 0) {
+    return <p>No response available.</p>;
+  }
+
+  const blocks = [];
+  let listItems = [];
+
+  const flushList = () => {
+    if (listItems.length === 0) {
+      return;
+    }
+
+    blocks.push(
+      <ul className="farmer-ai-response-list" key={`list-${blocks.length}`}>
+        {listItems.map((item, index) => (
+          <li key={`${item}-${index}`}>{formatInlineText(item)}</li>
+        ))}
+      </ul>
+    );
+    listItems = [];
+  };
+
+  lines.forEach((line) => {
+    const bulletMatch = line.match(/^[-•]\s+(.*)$/);
+    const numberedMatch = line.match(/^\d+\.\s+(.*)$/);
+
+    if (bulletMatch || numberedMatch) {
+      listItems.push((bulletMatch || numberedMatch)[1]);
+      return;
+    }
+
+    flushList();
+
+    if (/^[A-Za-z][A-Za-z\s/-]{2,45}:$/.test(line)) {
+      blocks.push(
+        <h3 className="farmer-ai-response-heading" key={`heading-${blocks.length}`}>
+          {line.replace(/:$/, "")}
+        </h3>
+      );
+      return;
+    }
+
+    blocks.push(
+      <p key={`paragraph-${blocks.length}`}>{formatInlineText(line)}</p>
+    );
+  });
+
+  flushList();
+
+  return <>{blocks}</>;
+};
 
 const FarmerAiChatbot = () => {
   const navigate = useNavigate();
   const [messages, setMessages] = useState(initialMessages);
   const [draft, setDraft] = useState("");
   const [isSending, setIsSending] = useState(false);
+  const messagesPanelRef = useRef(null);
   const hasToken = localStorage.getItem("token") !== null;
+
+  useEffect(() => {
+    const panel = messagesPanelRef.current;
+    if (!panel) {
+      return;
+    }
+
+    window.requestAnimationFrame(() => {
+      panel.scrollTo({ top: panel.scrollHeight, behavior: "smooth" });
+    });
+  }, [messages]);
 
   const askQuestion = async (question) => {
     const cleanQuestion = question.trim();
@@ -43,7 +134,7 @@ const FarmerAiChatbot = () => {
     setMessages((prev) => [
       ...prev,
       userMessage,
-      { id: loadingId, sender: "bot", text: "Checking your farm data..." },
+      { id: loadingId, sender: "bot", text: "Checking your farm data...", status: "loading" },
     ]);
 
     try {
@@ -96,6 +187,13 @@ const FarmerAiChatbot = () => {
     askQuestion(draft);
   };
 
+  const handleComposerKeyDown = (event) => {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      askQuestion(draft);
+    }
+  };
+
   if (!hasToken) {
     return (
       <section className="farmer-ai-page">
@@ -121,34 +219,65 @@ const FarmerAiChatbot = () => {
         <div className="farmer-ai-chat">
           <div className="farmer-ai-chat-header">
             <div>
-              <span>AI Assistant</span>
-              <strong>Ask about your farm records</strong>
+              <span>Private farm workspace</span>
+              <strong>AI Assistant</strong>
+              <p>Ask questions from your saved farm records.</p>
             </div>
           </div>
 
-          <div className="farmer-ai-messages" aria-live="polite">
+          <div className="farmer-ai-messages" aria-live="polite" ref={messagesPanelRef}>
             {messages.map((message) => (
               <div
                 key={message.id}
-                className={`farmer-ai-message farmer-ai-message-${message.sender}`}
+                className={`farmer-ai-message-row farmer-ai-message-row-${message.sender}`}
               >
-                <p>{message.text}</p>
+                <div className="farmer-ai-avatar" aria-hidden="true">
+                  {message.sender === "user" ? "U" : "AI"}
+                </div>
+                <div
+                  className={`farmer-ai-message farmer-ai-message-${message.sender} ${message.status ? `farmer-ai-message-${message.status}` : ""}`}
+                >
+                  {message.status === "loading" ? (
+                    <div className="farmer-ai-typing">
+                      <span />
+                      <span />
+                      <span />
+                      <strong>{message.text}</strong>
+                    </div>
+                  ) : (
+                    <div className="farmer-ai-response">
+                      {message.sender === "bot" ? renderFormattedMessage(message.text) : <p>{message.text}</p>}
+                    </div>
+                  )}
+                </div>
               </div>
             ))}
           </div>
 
           <form className="farmer-ai-form" onSubmit={handleSubmit}>
-            <label htmlFor="farmer-ai-question">Ask a question</label>
-            <div>
+            <div className="farmer-ai-suggestions" aria-label="Suggested questions">
+              {quickPrompts.map((prompt) => (
+                <button
+                  key={prompt}
+                  type="button"
+                  onClick={() => askQuestion(prompt)}
+                  disabled={isSending}
+                >
+                  {prompt}
+                </button>
+              ))}
+            </div>
+            <div className="farmer-ai-composer">
               <textarea
                 id="farmer-ai-question"
                 value={draft}
                 onChange={(event) => setDraft(event.target.value)}
-                placeholder="Example: what is my total things i have?"
+                onKeyDown={handleComposerKeyDown}
+                placeholder="Ask about your farm records..."
                 rows={2}
               />
               <Button type="submit" disabled={isSending || !draft.trim()}>
-                {isSending ? "Asking..." : "Ask AI"}
+                {isSending ? "Thinking..." : "Send"}
               </Button>
             </div>
           </form>

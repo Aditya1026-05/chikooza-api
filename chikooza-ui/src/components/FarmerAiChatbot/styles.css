@@ -1,27 +1,36 @@
 .farmer-ai-page {
-  background: #fff8f4;
-  min-height: calc(100vh - 92px);
-  padding: clamp(1rem, 4vw, 2.5rem);
+  background:
+    radial-gradient(circle at top left, rgba(180, 35, 24, 0.08), transparent 34rem),
+    linear-gradient(180deg, #fffaf7 0%, #fff7f1 100%);
+  box-sizing: border-box;
+  display: flex;
+  height: calc(100dvh - 92px);
+  min-height: 0;
+  overflow: hidden;
+  padding: clamp(0.85rem, 2vw, 1.5rem);
 }
 
 .farmer-ai-shell {
+  display: flex;
+  height: 100%;
   margin: 0 auto;
-  max-width: 980px;
+  max-width: 1180px;
+  width: min(100%, 1180px);
 }
 
 .farmer-ai-shell-simple {
-  display: block;
+  display: flex;
 }
 
 .farmer-ai-chat,
 .farmer-ai-empty {
-  background: #ffffff;
-  border: 1px solid #f0ddd8;
-  box-shadow: 0 14px 40px rgba(69, 34, 29, 0.07);
+  background: rgba(255, 253, 251, 0.98);
+  border: 1px solid rgba(127, 29, 29, 0.13);
+  box-shadow: 0 22px 70px rgba(65, 16, 13, 0.09);
 }
 
 .farmer-ai-empty {
-  border-radius: 1rem;
+  border-radius: 1.3rem;
   margin: 0 auto;
   max-width: 720px;
   padding: clamp(1.5rem, 4vw, 2.5rem);
@@ -52,114 +61,339 @@
 }
 
 .farmer-ai-chat {
-  border-radius: 1rem;
+  border-radius: 1.35rem;
   display: grid;
-  grid-template-rows: auto minmax(420px, 1fr) auto;
-  min-height: min(760px, calc(100vh - 150px));
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  height: 100%;
+  min-height: 0;
   overflow: hidden;
+  width: 100%;
 }
 
 .farmer-ai-chat-header {
   align-items: center;
-  background: #9f201d;
+  background:
+    linear-gradient(135deg, rgba(159, 32, 29, 0.98), rgba(196, 70, 51, 0.94)),
+    #9f201d;
   color: #ffffff;
   display: flex;
+  gap: 1rem;
   justify-content: space-between;
-  padding: 1rem 1.25rem;
+  padding: clamp(1rem, 2.4vw, 1.35rem) clamp(1rem, 3vw, 1.6rem);
 }
 
 .farmer-ai-chat-header span {
-  color: rgba(255, 255, 255, 0.74);
+  color: rgba(255, 255, 255, 0.78);
   display: block;
-  font-size: 0.8rem;
-  font-weight: 750;
-  letter-spacing: 0.08em;
+  font-size: 0.76rem;
+  font-weight: 850;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
 }
 
 .farmer-ai-chat-header strong {
   display: block;
-  font-size: 1.05rem;
+  font-size: clamp(1.2rem, 2.5vw, 1.7rem);
+  font-weight: 950;
+  letter-spacing: -0.035em;
+  line-height: 1.05;
+  margin-top: 0.18rem;
+}
+
+.farmer-ai-chat-header p {
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 0.95rem;
+  margin: 0.35rem 0 0;
+}
+
+.farmer-ai-status {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: 0.86rem;
+  font-weight: 850;
+  gap: 0.45rem;
+  padding: 0.5rem 0.78rem;
+  white-space: nowrap;
+}
+
+.farmer-ai-status span {
+  background: #fef3c7;
+  border-radius: 999px;
+  box-shadow: 0 0 0 5px rgba(254, 243, 199, 0.12);
+  height: 0.55rem;
+  width: 0.55rem;
 }
 
 .farmer-ai-messages {
-  background: #fffaf7;
+  background:
+    linear-gradient(rgba(255, 253, 251, 0.86), rgba(255, 253, 251, 0.86)),
+    repeating-linear-gradient(90deg, rgba(180, 35, 24, 0.035) 0 1px, transparent 1px 56px),
+    repeating-linear-gradient(0deg, rgba(180, 35, 24, 0.028) 0 1px, transparent 1px 56px);
   display: flex;
   flex-direction: column;
-  gap: 0.8rem;
+  gap: 1rem;
+  min-height: 0;
   overflow-y: auto;
-  padding: 1.25rem;
+  padding: clamp(1rem, 2.5vw, 1.5rem);
+  scroll-behavior: smooth;
 }
 
-.farmer-ai-message {
-  border-radius: 1rem;
-  max-width: min(78%, 620px);
-  padding: 0.85rem 1rem;
+.farmer-ai-messages::-webkit-scrollbar {
+  width: 0.65rem;
 }
 
-.farmer-ai-message p {
-  line-height: 1.6;
-  margin: 0;
-  white-space: pre-wrap;
+.farmer-ai-messages::-webkit-scrollbar-track {
+  background: #fff4ee;
 }
 
-.farmer-ai-message-bot {
-  align-self: flex-start;
-  background: #ffffff;
-  border: 1px solid #f0ddd8;
-  color: #231615;
+.farmer-ai-messages::-webkit-scrollbar-thumb {
+  background: rgba(159, 32, 29, 0.34);
+  border: 2px solid #fff4ee;
+  border-radius: 999px;
 }
 
-.farmer-ai-message-user {
+.farmer-ai-message-row {
+  align-items: flex-start;
+  display: flex;
+  gap: 0.7rem;
+  max-width: min(88%, 820px);
+}
+
+.farmer-ai-message-row-user {
   align-self: flex-end;
+  flex-direction: row-reverse;
+}
+
+.farmer-ai-message-row-bot {
+  align-self: flex-start;
+}
+
+.farmer-ai-avatar {
+  align-items: center;
+  border-radius: 999px;
+  display: inline-flex;
+  flex: 0 0 2.35rem;
+  font-size: 0.76rem;
+  font-weight: 950;
+  height: 2.35rem;
+  justify-content: center;
+  letter-spacing: -0.02em;
+  margin-top: 0.1rem;
+  width: 2.35rem;
+}
+
+.farmer-ai-message-row-bot .farmer-ai-avatar {
+  background: #fff4ee;
+  border: 1px solid rgba(180, 35, 24, 0.18);
+  color: #9f201d;
+}
+
+.farmer-ai-message-row-user .farmer-ai-avatar {
   background: #b42318;
   color: #ffffff;
 }
 
-.farmer-ai-form {
+.farmer-ai-message {
+  border-radius: 1.15rem;
+  padding: 0.92rem 1rem;
+}
+
+.farmer-ai-message-bot {
   background: #ffffff;
-  border-top: 1px solid #f0ddd8;
+  border: 1px solid rgba(127, 29, 29, 0.13);
+  box-shadow: 0 12px 32px rgba(65, 16, 13, 0.06);
+  color: #241817;
+}
+
+.farmer-ai-message-user {
+  background: linear-gradient(135deg, #b42318, #9f201d);
+  box-shadow: 0 12px 28px rgba(180, 35, 24, 0.18);
+  color: #ffffff;
+}
+
+.farmer-ai-message-error {
+  background: #fff7ed;
+  border-color: rgba(194, 65, 12, 0.24);
+}
+
+.farmer-ai-message-loading {
+  min-width: 16rem;
+}
+
+.farmer-ai-response {
   display: grid;
-  gap: 0.55rem;
-  padding: 1rem;
+  gap: 0.72rem;
+}
+
+.farmer-ai-response p {
+  line-height: 1.65;
+  margin: 0;
+}
+
+.farmer-ai-response strong {
+  color: inherit;
+  font-weight: 900;
+}
+
+.farmer-ai-message-bot .farmer-ai-response strong {
+  color: #8f1f1b;
+}
+
+.farmer-ai-response-heading {
+  border-bottom: 1px solid rgba(127, 29, 29, 0.1);
+  color: #9f201d;
+  font-size: 0.92rem;
+  font-weight: 950;
+  letter-spacing: 0.08em;
+  margin: 0.35rem 0 0.1rem;
+  padding-bottom: 0.45rem;
+  text-transform: uppercase;
+}
+
+.farmer-ai-response-list {
+  display: grid;
+  gap: 0.45rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.farmer-ai-response-list li {
+  background: #fff8f4;
+  border: 1px solid rgba(127, 29, 29, 0.1);
+  border-radius: 0.8rem;
+  line-height: 1.55;
+  padding: 0.65rem 0.75rem;
+}
+
+.farmer-ai-response-list li::before {
+  background: #b42318;
+  border-radius: 999px;
+  content: "";
+  display: inline-block;
+  height: 0.42rem;
+  margin-right: 0.55rem;
+  vertical-align: 0.08rem;
+  width: 0.42rem;
+}
+
+.farmer-ai-typing {
+  align-items: center;
+  display: inline-flex;
+  gap: 0.35rem;
+}
+
+.farmer-ai-typing span {
+  animation: farmerAiTyping 1.2s ease-in-out infinite;
+  background: #b42318;
+  border-radius: 999px;
+  height: 0.45rem;
+  opacity: 0.45;
+  width: 0.45rem;
+}
+
+.farmer-ai-typing span:nth-child(2) {
+  animation-delay: 0.12s;
+}
+
+.farmer-ai-typing span:nth-child(3) {
+  animation-delay: 0.24s;
+}
+
+.farmer-ai-typing strong {
+  color: #6d514c;
+  font-size: 0.92rem;
+  margin-left: 0.25rem;
+}
+
+.farmer-ai-form {
+  background: rgba(255, 253, 251, 0.98);
+  border-top: 1px solid rgba(127, 29, 29, 0.12);
+  display: grid;
+  gap: 0.62rem;
+  padding: clamp(0.78rem, 1.6vw, 1rem);
 }
 
 .farmer-ai-form label {
   color: #231615;
-  font-weight: 800;
+  font-size: 0.9rem;
+  font-weight: 900;
 }
 
-.farmer-ai-form div {
+.farmer-ai-form small {
+  color: #7b5a54;
+  font-size: 0.78rem;
+}
+
+.farmer-ai-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.farmer-ai-suggestions button {
+  background: #fff8f4;
+  border: 1px solid rgba(180, 35, 24, 0.18);
+  border-radius: 999px;
+  color: #8f1f1b;
+  font-weight: 850;
+  padding: 0.5rem 0.72rem;
+}
+
+.farmer-ai-suggestions button:hover:not(:disabled),
+.farmer-ai-suggestions button:focus-visible:not(:disabled) {
+  background: #fee4dd;
+  border-color: rgba(180, 35, 24, 0.34);
+  outline: none;
+}
+
+.farmer-ai-composer {
   align-items: flex-end;
+  background: #ffffff;
+  border: 1px solid rgba(180, 35, 24, 0.18);
+  border-radius: 1.2rem;
+  box-shadow: 0 12px 34px rgba(65, 16, 13, 0.06);
   display: flex;
   gap: 0.75rem;
+  padding: 0.55rem;
 }
 
-.farmer-ai-form textarea {
-  background: #fffdfb;
-  border: 1px solid rgba(183, 28, 28, 0.2);
-  border-radius: 0.85rem;
+.farmer-ai-composer:focus-within {
+  border-color: rgba(180, 35, 24, 0.44);
+  box-shadow: 0 0 0 0.22rem rgba(180, 35, 24, 0.1);
+}
+
+.farmer-ai-composer textarea {
+  background: transparent;
+  border: 0;
+  box-shadow: none !important;
   color: #231615;
   flex: 1;
-  min-height: 58px;
+  line-height: 1.55;
+  max-height: 9rem;
+  min-height: 3rem;
   outline: none;
-  padding: 0.85rem 1rem;
-  resize: vertical;
+  padding: 0.62rem 0.72rem;
+  resize: none;
 }
 
-.farmer-ai-form textarea:focus {
-  border-color: #dc2626;
-  box-shadow: 0 0 0 4px rgba(220, 38, 38, 0.12);
+.farmer-ai-composer textarea:focus {
+  border: 0;
+  box-shadow: none;
 }
 
 .farmer-ai-form .btn,
 .farmer-ai-login-link {
   background: #b42318;
   border-color: #b42318;
-  border-radius: 0.7rem;
+  border-radius: 999px;
   color: #ffffff;
-  font-weight: 800;
-  padding: 0.8rem 1.15rem;
+  font-weight: 900;
+  min-height: 3rem;
+  padding: 0.78rem 1.1rem;
   text-decoration: none;
   white-space: nowrap;
 }
@@ -176,21 +410,60 @@
   margin-top: 1rem;
 }
 
-@media (max-width: 560px) {
+@keyframes farmerAiTyping {
+  0%,
+  80%,
+  100% {
+    opacity: 0.32;
+    transform: translateY(0);
+  }
+
+  40% {
+    opacity: 1;
+    transform: translateY(-0.16rem);
+  }
+}
+
+@media (max-width: 760px) {
   .farmer-ai-page {
-    padding: 0.75rem;
+    height: calc(100dvh - 92px);
+    min-height: 0;
+    padding: 0;
   }
 
   .farmer-ai-chat {
-    min-height: 76vh;
+    border-left: 0;
+    border-radius: 0;
+    border-right: 0;
+    height: 100%;
+    min-height: 0;
   }
 
-  .farmer-ai-message {
+  .farmer-ai-chat-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .farmer-ai-message-row {
+    max-width: 100%;
+  }
+
+  .farmer-ai-message-row-user {
     max-width: 92%;
   }
 
-  .farmer-ai-form div {
+  .farmer-ai-avatar {
+    flex-basis: 2rem;
+    height: 2rem;
+    width: 2rem;
+  }
+
+  .farmer-ai-composer {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .farmer-ai-form .btn {
+    width: 100%;
   }
 }
