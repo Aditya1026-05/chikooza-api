@@ -282,27 +282,96 @@
 .labelwidth{
   width: 25%;
 }
+.daily-week-grid {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 1.25rem 0;
+}
+
 .flockdate{
-  color: #ffffff;
-  background-color: var(--ck-forest);
-  margin: 10px 10px 10px 10px;
-  border-color: var(--ck-forest);
+  color: var(--ck-red-850);
+  background-color: #ffffff;
+  margin: 0;
+  border: 1px solid rgba(180, 35, 24, 0.28);
+  border-radius: 999px;
   align-items: center;
   display: inline-flex;
   justify-content: center;
-  min-height: 48px;
-  min-width: 112px;
+  min-height: 44px;
+  min-width: 0;
+  padding: 0.6rem 0.85rem;
   white-space: nowrap;
   width: auto;
 }
 .flockdate:active{
-  background: var(--ck-leaf);
+  background: var(--ck-red-75);
 }
 .flockdate:focus{
-  background: #7f1d1d;
+  background: var(--ck-red-75);
+  box-shadow: 0 0 0 0.18rem rgba(180, 35, 24, 0.16);
+  color: var(--ck-red-850);
 }
 .flockdate:hover{
-  background: #7f1d1d;
+  background: var(--ck-red-75);
+  color: var(--ck-red-850);
+}
+.flockdate.is-complete {
+  background-color: #b42318 !important;
+  border-color: #b42318 !important;
+  color: #ffffff !important;
+}
+.flockdate.is-complete:hover,
+.flockdate.is-complete:focus {
+  background-color: #922018 !important;
+  color: #ffffff !important;
+}
+.flockdate.is-current {
+  background-color: #f5c7bd !important;
+  border-color: rgba(180, 35, 24, 0.48) !important;
+  color: #7f1d1d !important;
+}
+.flockdate.is-current:hover,
+.flockdate.is-current:focus {
+  background-color: #f0b0a7 !important;
+  color: #7f1d1d !important;
+}
+.daily-day-grid {
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: repeat(7, minmax(78px, 1fr));
+}
+.daily-day-button {
+  border: 1px solid rgba(180, 35, 24, 0.22);
+  border-radius: var(--ck-radius-md);
+  min-height: 58px;
+  min-width: 0;
+  padding: 0.45rem 0.35rem;
+}
+.daily-day-button.is-complete {
+  background-color: #f5c7bd !important;
+  border-color: rgba(180, 35, 24, 0.36) !important;
+}
+.daily-day-button.is-complete .linkdailydata {
+  color: #7f1d1d;
+}
+.daily-day-button.is-current {
+  background-color: #f5c7bd !important;
+  border-color: rgba(180, 35, 24, 0.48) !important;
+}
+.daily-day-button.is-current .linkdailydata {
+  color: #7f1d1d;
+}
+.daily-day-button.is-disabled {
+  background: #f8f2ef;
+  opacity: 0.65;
+}
+
+@media (max-width: 768px) {
+  .daily-week-grid,
+  .daily-day-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 .sidemargin{
   margin-left: 2px;

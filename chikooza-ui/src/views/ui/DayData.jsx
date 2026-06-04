@@ -672,12 +672,12 @@ const DaywiseData = () => {
                                                                 <Alert color="danger" style={{ color: '#000' }}>{addData.avg_feed_per_bird}</Alert>
                                                             </Col>
                                                             <Col sm="6" md="4" lg="4">
-                                                                <Label for="flockname" className="font-bold flex">Avg. Bird Wt.(gm)</Label>
+                                                                <Label for="flockname" className="font-bold flex">Avg. Bird Wt.(gm) (optional)</Label>
                                                                 <input onBlur={getFcr} name="avgbirdweight" defaultValue={addData.average_bird_weight} placeholder="Avg. Bird Wt.(gm)" type="number" className="form-control" aria-label="avgcount" aria-describedby="basic-addon1" />
                                                                 <small className="text-danger">{averageBirdError}</small>
                                                             </Col>
                                                             <Col sm="6" md="4" lg="4">
-                                                                <Label for="flockname" className="font-bold">FCR/Total FCR</Label>
+                                                                <Label for="flockname" className="font-bold">FCR/Total FCR ({date})</Label>
                                                                 <Alert color="danger" style={{ color: '#000' }}>{`${addData.fcr ? addData.fcr : "-"}/${addData.total_fcr ? addData.total_fcr : "-"}`}</Alert>
                                                             </Col>
                                                         </Row>

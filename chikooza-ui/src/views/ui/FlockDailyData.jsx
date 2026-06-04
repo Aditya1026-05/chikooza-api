@@ -9,18 +9,13 @@ import { useNavigate } from 'react-router-dom';
 
 const DAILY_SELECTOR_DRAFT_KEY = "chikooza-daily-selector-draft";
 
-const dailySelectorSteps = [
-    { title: "Select", helper: "Farm and flock" },
-    { title: "Day", helper: "Choose week and date" },
-];
-
 const readDailySelectorDraft = () => {
     try {
         const draft = JSON.parse(localStorage.getItem(DAILY_SELECTOR_DRAFT_KEY) || "{}");
         return {
             selectedFarmId: draft.selectedFarmId || "0",
             selectedFlockId: draft.selectedFlockId || "0",
-            selectorStep: Number(draft.selectorStep || 0),
+            selectorStep: 0,
         };
     } catch {
         return { selectedFarmId: "0", selectedFlockId: "0", selectorStep: 0 };
@@ -41,6 +36,68 @@ const ManageFlock = () => {
     const [selectedFlockId, setSelectedFlockId] = useState(initialDraft.selectedFlockId);
     const [selectorStep, setSelectorStep] = useState(initialDraft.selectorStep);
 
+    function loadDailyDataForFlock(selectedFlock, nextStep = 0) {
+        if (!selectedFlock || String(selectedFlock.flock_public_id) === "0") {
+            setFlock({});
+            setShowForm(false);
+            setList([]);
+            setSelectedFlockId("0");
+            return;
+        }
+
+        setSelectedFlockId(String(selectedFlock.flock_public_id));
+        setFlock(selectedFlock);
+        setShowForm(true);
+        setSelectorStep(nextStep);
+
+        axios.get(`${apiPath}dailyDataDetail/?flock_public_id=${selectedFlock.flock_public_id}`, getAuthConfig()).then((res) => {
+            if (res.data.results.total_records > 0) {
+                setList(res.data.results.daily_data_list);
+            } else {
+                setList([]);
+            }
+        }).catch((err) => {
+            setList([]);
+            handleUnauthorized(err, navigate);
+        });
+    }
+
+    function loadFlocksForFarm(farmId, preferredFlockId = "0", nextStep = 0) {
+        if (String(farmId) === "0") {
+            setShowFlock(false);
+            setShowForm(false);
+            setFlocks([]);
+            setList([]);
+            setSelectedFarmId("0");
+            setSelectedFlockId("0");
+            setSelectorStep(0);
+            return;
+        }
+
+        setSelectedFarmId(String(farmId));
+        axios.get(`${apiPath}flocks/${farmId}/`, getAuthConfig()).then((res) => {
+            setShowFlock(true);
+            if (res.data.results.total_records === 0) {
+                setFlocks([{ flock_public_id: 0, flock_name: 'No flock available' }]);
+                setSelectedFlockId("0");
+                setFlock({});
+                setShowForm(false);
+                setList([]);
+                setSelectorStep(0);
+                return;
+            }
+
+            const flockList = res.data.results.flock_list;
+            const selectedFlock = flockList.find((item) => String(item.flock_public_id) === String(preferredFlockId)) || flockList[flockList.length - 1];
+            setFlocks(flockList);
+            loadDailyDataForFlock(selectedFlock, nextStep);
+        }).catch((err) => {
+            setFlocks([{ flock_public_id: 0, flock_name: 'No flock available' }]);
+            setShowForm(false);
+            setList([]);
+            handleUnauthorized(err, navigate);
+        });
+    }
 
     useEffect(() => {
         let url = `${apiPath}farm/`;
@@ -49,7 +106,10 @@ const ManageFlock = () => {
             if (res.data.results.length === 0) {
                 setFarms([{ public_id: 0, name: 'No farm available' }]);
             } else {
-                setFarms(res.data.results);
+                const farmList = res.data.results;
+                const selectedFarm = farmList.find((item) => String(item.public_id) === String(initialDraft.selectedFarmId)) || farmList[farmList.length - 1];
+                setFarms(farmList);
+                loadFlocksForFarm(selectedFarm.public_id, initialDraft.selectedFlockId);
             }
         }).catch((err) => {
             setFarms([{ public_id: 0, name: 'No farm available' }]);
@@ -65,88 +125,22 @@ const ManageFlock = () => {
         }));
     }, [selectedFarmId, selectedFlockId, selectorStep]);
 
-    useEffect(() => {
-        if (initialDraft.selectedFarmId === "0") {
-            return;
-        }
-        axios.get(`${apiPath}flocks/${initialDraft.selectedFarmId}/`, getAuthConfig()).then((res) => {
-            setShowFlock(true);
-            if (res.data.results.total_records === 0) {
-                setFlocks([{ flock_public_id: 0, flock_name: 'No flock available' }]);
-            } else {
-                const flockList = res.data.results.flock_list;
-                setFlocks(flockList);
-                const selectedFlock = flockList.find((item) => String(item.flock_public_id) === initialDraft.selectedFlockId);
-                if (selectedFlock) {
-                    setFlock(selectedFlock);
-                    setShowForm(true);
-                }
-            }
-        }).catch((err) => {
-            handleUnauthorized(err, navigate);
-        });
-    }, [initialDraft.selectedFarmId, initialDraft.selectedFlockId, navigate])
     let save = (e) => {
         e.preventDefault();
     }
     let changeFarm = (e) => {
-        if (e.target.value === "0") {
-            setShowFlock(false);
-            setShowForm(false);
-            setFlocks([]);
-            setList([]);
-            setSelectedFarmId("0");
-            setSelectedFlockId("0");
-            setSelectorStep(0);
-            return;
-        }
-        setSelectedFarmId(e.target.value);
-        setSelectedFlockId("0");
-        let url = `${apiPath}flocks/${e.target.value}/`;
-        // U: OLD: config.headers['Authorization'] was mutated before each request.
-        axios.get(url, getAuthConfig()).then((res) => {
-            setShowFlock(true);
-            if (res.data.results.total_records === 0) {
-                setFlocks([{ flock_public_id: 0, flock_name: 'No flock available' }]);
-            } else {
-                setFlocks(res.data.results.flock_list);
-            }
-            setShowForm(false);
-            setSelectorStep(0);
-        }).catch((err) => {
-            setFlocks([{ flock_public_id: 0, flock_name: 'No flock available' }]);
-            handleUnauthorized(err, navigate);
-        });
+        loadFlocksForFarm(e.target.value, "0", 0);
     }
     let changeFlocks = (e) => {
-        // U: OLD: e.target.value == 0 and numeric public_id comparisons were mixing strings and numbers.
-        if (e.target.value === "0") {
+        // U: OLD: selecting a flock did not share one loader with draft restore.
+        const selectedFlock = flocks.find((o) => String(o.flock_public_id) === e.target.value);
+        if (!selectedFlock) {
             setShowForm(false);
             setList([]);
             setSelectedFlockId("0");
-        } else {
-            setSelectedFlockId(e.target.value);
-            const selectedFlock = flocks.find((o) => String(o.flock_public_id) === e.target.value);
-            if (!selectedFlock) {
-                setShowForm(false);
-                setList([]);
-                return;
-            }
-            let url = `${apiPath}dailyDataDetail/?flock_public_id=${selectedFlock.flock_public_id}`;
-            axios.get(url, getAuthConfig()).then((res) => {
-                if (res.data.results.total_records > 0) {
-                    setList(res.data.results.daily_data_list);
-                } else {
-                    setList([]);
-                }
-            }).catch((err) => {
-                setList([]);
-                handleUnauthorized(err, navigate);
-            });
-            setShowForm(true);
-            setFlock(selectedFlock);
-            setSelectorStep(1);
+            return;
         }
+        loadDailyDataForFlock(selectedFlock, 0);
     }
     let [modalShow, setModalShow] = useState(false);
     let [week, setWeek] = useState(null);
@@ -184,7 +178,15 @@ const ManageFlock = () => {
     const latestDailyRecord = dailyRecords[dailyRecords.length - 1];
     const nextDailyDay = dailyRecords.length + 1;
     const nextDailyDate = showForm && flock.hatch_date ? getrealdate(flock.hatch_date, nextDailyDay) : "";
-    const recentDailyRecords = dailyRecords.slice(-6).reverse();
+    const latestEntryDate = latestDailyRecord?.date || "";
+    const summaryBirds = latestDailyRecord?.birds_count ?? latestDailyRecord?.current_bird_count ?? "NA";
+    const summaryMortality = latestDailyRecord?.cum_mort ?? latestDailyRecord?.total_mort ?? latestDailyRecord?.mortality ?? 0;
+    const summaryFeed = latestDailyRecord?.total_feed_consumed ?? latestDailyRecord?.total_feed ?? latestDailyRecord?.feed_intake ?? 0;
+    const summaryFcr = latestDailyRecord?.total_fcr ?? latestDailyRecord?.fcr ?? "-";
+    const summaryWeight = latestDailyRecord?.average_bird_weight ?? "NA";
+    const completedWeeks = Math.floor(dailyRecords.length / 7);
+    const activeWeek = Math.max(1, Math.min(12, Math.ceil(nextDailyDay / 7)));
+    const weekNumbers = Array.from({ length: 12 }, (_, index) => index + 1);
     function MyVerticallyCenteredModal(props) {
         return (
             <Modal
@@ -199,21 +201,23 @@ const ManageFlock = () => {
                     </Modal.Title>
                 </Modal.Header>
                 <Modal.Body>
-                    {days.map((number) => {
-                        return (
-                            (number <= list.length) ?
-                                <Button color="success" className="ml-3 mt-3 mb-3" key={number}>
-                                    <Link to={`/daydata/${flock.farm_public_id}/${flock.flock_public_id}/${getrealdate(flock.hatch_date, number)}`} className="linkdailydata">{getrealmonth(flock.hatch_date, number)}<br />Day {number}</Link>
-                                </Button> :
-                                (number === list.length + 1) ?
-                                    <Button color="warning" className="ml-3 mt-3 mb-3" key={number}>
+                    <div className="daily-day-grid">
+                        {days.map((number) => {
+                            return (
+                                (number <= list.length) ?
+                                    <Button color="light" className="daily-day-button is-complete" key={number}>
                                         <Link to={`/daydata/${flock.farm_public_id}/${flock.flock_public_id}/${getrealdate(flock.hatch_date, number)}`} className="linkdailydata">{getrealmonth(flock.hatch_date, number)}<br />Day {number}</Link>
                                     </Button> :
-                                    <Button color="light" className="ml-3 mt-3 mb-3" key={number}>
-                                        <span className="linkdailydata" style={{ cursor: 'default' }}>{getrealmonth(flock.hatch_date, number)}<br />Day {number}</span>
-                                    </Button>
-                        )
-                    })}
+                                    (number === list.length + 1) ?
+                                        <Button color="light" className="daily-day-button is-current" key={number}>
+                                            <Link to={`/daydata/${flock.farm_public_id}/${flock.flock_public_id}/${getrealdate(flock.hatch_date, number)}`} className="linkdailydata">{getrealmonth(flock.hatch_date, number)}<br />Day {number}</Link>
+                                        </Button> :
+                                        <Button color="light" className="daily-day-button is-disabled" key={number}>
+                                            <span className="linkdailydata" style={{ cursor: 'default' }}>{getrealmonth(flock.hatch_date, number)}<br />Day {number}</span>
+                                        </Button>
+                            )
+                        })}
+                    </div>
                     {/* {
                 days.map((item) =>{
                     return(
@@ -252,28 +256,10 @@ const ManageFlock = () => {
                                             </div>
                                         )}
                                         <Form onSubmit={save}>
-                                            <div className="form-stepper" aria-label="Daily data selector steps">
-                                                {dailySelectorSteps.map((step, index) => (
-                                                    <button
-                                                        key={step.title}
-                                                        type="button"
-                                                        className={index === selectorStep ? "is-active" : index < selectorStep ? "is-complete" : ""}
-                                                        onClick={() => {
-                                                            if (index === 0 || showForm) {
-                                                                setSelectorStep(index);
-                                                            }
-                                                        }}
-                                                    >
-                                                        <span>{index + 1}</span>
-                                                        <strong>{step.title}</strong>
-                                                        <small>{step.helper}</small>
-                                                    </button>
-                                                ))}
-                                            </div>
                                             {selectorStep === 0 && (
                                                 <>
                                                     <FormGroup>
-                                                        <Label for="farmselect">Select Farm</Label>
+                                                        <Label for="farmSelect">Select Farm</Label>
                                                         <div className="input-group">
                                                             <Input onChange={changeFarm} value={selectedFarmId} id="farmSelect" name="farm" type="select">
                                                                 <option value="0" disabled>Select Farm</option>
@@ -290,10 +276,10 @@ const ManageFlock = () => {
                                                     {
                                                         showFlock &&
                                                         <FormGroup>
-                                                            <Label for="farmselect">Select Flock</Label>
+                                                            <Label for="flockSelect">Select Flock</Label>
                                                             <div className="input-group">
                                                                 <Input onChange={changeFlocks} value={selectedFlockId} id="flockSelect" name="flock" type="select">
-                                                                    <option value="0" disabled>Select Flocks</option>
+                                                                    <option value="0" disabled>Select Flock</option>
                                                                     {
                                                                         flocks.map((item) => {
                                                                             return (
@@ -305,6 +291,10 @@ const ManageFlock = () => {
                                                             </div>
                                                         </FormGroup>
                                                     }
+                                                    <div className="form-wizard-actions">
+                                                        <Button type="button" color="danger" onClick={() => setSelectorStep(1)} disabled={!showForm || selectedFlockId === "0"}>Next</Button>
+                                                        <Button type="button" color="secondary" outline onClick={() => navigate("/member")}>Cancel</Button>
+                                                    </div>
                                                 </>
                                             )}
                                             {showFlock && !hasFlockOptions && (
@@ -317,76 +307,43 @@ const ManageFlock = () => {
                                             {
                                                 showForm && selectorStep === 1 &&
                                                 <>
-                                                    <div className="record-review-toolbar record-review-toolbar--compact">
+                                                    <div className="record-review-toolbar record-review-toolbar--compact daily-data-summary-card">
                                                         <div>
                                                             <span>Daily data</span>
-                                                            <strong>{flock.flock_name || "Selected flock"}</strong>
-                                                            <p>{dailyRecords.length} day{dailyRecords.length === 1 ? "" : "s"} completed. Select a week below or record the next open day.</p>
+                                                            <p>
+                                                                {dailyRecords.length} day{dailyRecords.length === 1 ? "" : "s"} completed{latestEntryDate ? ", latest entry " : ""}
+                                                                {latestEntryDate && <b className="daily-latest-date">{latestEntryDate}</b>}. Choose a week or go to the next open day.
+                                                            </p>
                                                         </div>
                                                         {nextDailyDate && (
                                                             <Button tag={Link} to={`/daydata/${flock.farm_public_id}/${flock.flock_public_id}/${nextDailyDate}`} color="danger" type="button">
-                                                                Record day {nextDailyDay}
+                                                                Go to day {nextDailyDay} →
                                                             </Button>
                                                         )}
                                                     </div>
-                                                    {latestDailyRecord && (
-                                                        <div className="record-summary-strip">
-                                                            <strong>Latest entry:</strong> {latestDailyRecord.date}
-                                                            <div className="record-summary-chips">
-                                                                <span>Birds {latestDailyRecord.current_bird_count ?? "NA"}</span>
-                                                                <span>Mortality {latestDailyRecord.mortality ?? 0}</span>
-                                                                <span>Feed {latestDailyRecord.feed_consumed ?? latestDailyRecord.feed_intake ?? 0} kg</span>
-                                                            </div>
-                                                        </div>
-                                                    )}
-                                                    <div>
+                                                    <div className="daily-data-metric-strip" aria-label="Daily data summary">
+                                                        <strong><span>Birds</span><b>{summaryBirds}</b></strong>
+                                                        <strong><span>Mortality</span><b>{summaryMortality}</b></strong>
+                                                        <strong><span>Feed</span><b>{summaryFeed} kg</b></strong>
+                                                        <strong><span>Avg. Bird Wt.</span><b>{summaryWeight} gm</b></strong>
+                                                        <strong><span>FCR{latestEntryDate ? ` (${latestEntryDate})` : ""}</span><b>{summaryFcr}</b></strong>
+                                                    </div>
+                                                    <div className="daily-week-grid" aria-label="Daily data weeks">
                                                         <MyVerticallyCenteredModal show={modalShow} onHide={() => setModalShow(false)} />
-                                                        <Button className="flockdate" value="1" onClick={handleShow}>
-                                                            Week 1
-                                                        </Button>
-                                                        <Button className="flockdate" value="2" onClick={handleShow}>
-                                                            Week 2
-                                                        </Button>
-                                                        <Button className="flockdate" value="3" onClick={handleShow}>
-                                                            Week 3
-                                                        </Button>
-                                                        <Button className="flockdate" value="4" onClick={handleShow}>
-                                                            Week 4
-                                                        </Button>
-                                                        <Button className="flockdate" value="5" onClick={handleShow}>
-                                                            Week 5
-                                                        </Button>
-                                                        <Button className="flockdate" value="6" onClick={handleShow}>
-                                                            Week 6
-                                                        </Button>
-                                                        <Button className="flockdate" value="7" onClick={handleShow}>
-                                                            Week 7
-                                                        </Button>
-                                                        <Button className="flockdate" value="8" onClick={handleShow}>
-                                                            Week 8
-                                                        </Button>
-                                                        <Button className="flockdate" value="9" onClick={handleShow}>
-                                                            Week 9
-                                                        </Button>
-                                                        <Button className="flockdate" value="10" onClick={handleShow}>
-                                                            Week 10
-                                                        </Button>
-                                                        <Button className="flockdate" value="11" onClick={handleShow}>
-                                                            Week 11
-                                                        </Button>
-                                                        <Button className="flockdate" value="12" onClick={handleShow}>
-                                                            Week 12
-                                                        </Button>
+                                                        {weekNumbers.map((weekNumber) => (
+                                                            <Button
+                                                                key={weekNumber}
+                                                                className={`flockdate ${weekNumber <= completedWeeks ? "is-complete" : ""} ${weekNumber === activeWeek ? "is-current" : ""}`}
+                                                                value={weekNumber}
+                                                                onClick={handleShow}
+                                                            >
+                                                                Week {weekNumber}
+                                                            </Button>
+                                                        ))}
                                                     </div>
                                                     <div className="form-wizard-actions">
                                                         <Button type="button" color="secondary" outline onClick={() => setSelectorStep(0)}>Back</Button>
-                                                        <Button type="button" color="secondary" outline onClick={() => {
-                                                            setSelectedFarmId("0");
-                                                            setSelectedFlockId("0");
-                                                            setSelectorStep(0);
-                                                            setShowForm(false);
-                                                            localStorage.removeItem(DAILY_SELECTOR_DRAFT_KEY);
-                                                        }}>Cancel</Button>
+                                                        <Button type="button" color="secondary" outline onClick={() => navigate("/member")}>Cancel</Button>
                                                     </div>
                                                 </>
                                             }
