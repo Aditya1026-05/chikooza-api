@@ -10,18 +10,28 @@ export const loadAutoTable = async () => {
   return autoTableModule.default || autoTableModule.autoTable;
 };
 
-export const addPdfReportHeader = (doc, { title, subtitle, meta = [] }) => {
+export const addPdfReportHeader = (doc, { title, subtitle, meta = [], theme = "dark" }) => {
   const pageWidth = doc.internal.pageSize.getWidth();
+  const isLightTheme = theme === "light";
 
-  doc.setFillColor(127, 29, 29);
+  if (isLightTheme) {
+    doc.setDrawColor(244, 214, 207);
+    doc.setFillColor(255, 247, 242);
+  } else {
+    doc.setFillColor(127, 29, 29);
+  }
   doc.rect(0, 0, pageWidth, 82, "F");
+  if (isLightTheme) {
+    doc.line(0, 82, pageWidth, 82);
+  }
 
-  doc.setTextColor(255, 250, 245);
+  doc.setTextColor(isLightTheme ? 36 : 255, isLightTheme ? 21 : 250, isLightTheme ? 20 : 245);
   doc.setFont("helvetica", "bold");
   doc.setFontSize(18);
   doc.text(title, 36, 34);
 
   if (subtitle) {
+    doc.setTextColor(isLightTheme ? 111 : 255, isLightTheme ? 80 : 250, isLightTheme ? 74 : 245);
     doc.setFont("helvetica", "normal");
     doc.setFontSize(9);
     doc.text(subtitle, 36, 54, { maxWidth: pageWidth - 72 });

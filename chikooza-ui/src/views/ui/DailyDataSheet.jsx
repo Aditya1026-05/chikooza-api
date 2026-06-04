@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import axios from "axios";
 import {
   Row,
@@ -22,7 +22,6 @@ import {
 } from "../../utils/pdf";
 import {
   buildReportFilename,
-  filterRowsByDate,
   formatDate,
   formatNumber,
   getAgeInDays,
@@ -32,62 +31,86 @@ import {
   toNumber,
 } from "../../utils/reporting";
 
+const DAILY_SELECTOR_DRAFT_KEY = "chikooza-daily-selector-draft";
+
+const readSelectorDraft = () => {
+  try {
+    return JSON.parse(localStorage.getItem(DAILY_SELECTOR_DRAFT_KEY) || "{}");
+  } catch {
+    return {};
+  }
+};
+
 // U: OLD: this report used doc.html() on the DOM and exported "Daily Data Sheet.pdf".
 // U: NEW: render filtered report rows once, then export the same rows through jsPDF tables.
 const DailyDataSheet = () => {
+  const [activeSelectorDraft] = useState(() => readSelectorDraft());
   const [farms, setFarms] = useState([]);
   const [flocks, setFlocks] = useState([]);
   const [selectedFarmId, setSelectedFarmId] = useState("0");
   const [selectedFlockId, setSelectedFlockId] = useState("0");
   const [selectedFlock, setSelectedFlock] = useState(null);
   const [dailyDataList, setDailyDataList] = useState([]);
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
   const [isLoadingFlocks, setIsLoadingFlocks] = useState(false);
   const [isLoadingReport, setIsLoadingReport] = useState(false);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
   const [reportError, setReportError] = useState("");
   const navigate = useNavigate();
-
-  useEffect(() => {
-    axios
-      .get(`${apiPath}farm/`, getAuthConfig())
-      .then((res) => {
-        setFarms(res.data.results.length ? res.data.results : []);
-      })
-      .catch((err) => {
-        setFarms([]);
-        handleUnauthorized(err, navigate);
-      });
-  }, [navigate]);
+  const location = useLocation();
+  const prefillFarmId = String(location.state?.farmPublicId || "0");
+  const prefillFlockId = String(location.state?.flockPublicId || "0");
 
   const filteredRows = useMemo(() => {
-    return sortByDate(filterRowsByDate(dailyDataList, startDate, endDate));
-  }, [dailyDataList, startDate, endDate]);
+    return sortByDate(dailyDataList);
+  }, [dailyDataList]);
 
   const dailyTotals = useMemo(() => summarizeDailyRows(filteredRows), [filteredRows]);
   const hasSelectedFlock = selectedFlockId !== "0" && selectedFlock;
   const hasAnyDailyData = dailyDataList.length > 0;
   const hasFilteredRows = filteredRows.length > 0;
 
-  const changeFarm = (event) => {
-    const farmPublicId = event.target.value;
-    setSelectedFarmId(farmPublicId);
-    setSelectedFlockId("0");
-    setSelectedFlock(null);
-    setDailyDataList([]);
-    setFlocks([]);
-    setReportError("");
-
-    if (farmPublicId === "0") {
+  const selectFlockForReport = (nextFlock) => {
+    if (!nextFlock || String(nextFlock.flock_public_id) === "0") {
+      setSelectedFlockId("0");
+      setSelectedFlock(null);
+      setDailyDataList([]);
       return;
     }
 
+    setSelectedFarmId(String(nextFlock.farm_public_id || selectedFarmId));
+    setSelectedFlockId(String(nextFlock.flock_public_id));
+    setSelectedFlock(nextFlock);
+    getDailyDataList(nextFlock.flock_public_id);
+  };
+
+  const loadFlocksForFarm = (farmPublicId, preferredFlockId = "0") => {
+    if (!farmPublicId || String(farmPublicId) === "0") {
+      setSelectedFarmId("0");
+      setSelectedFlockId("0");
+      setSelectedFlock(null);
+      setDailyDataList([]);
+      setFlocks([]);
+      return;
+    }
+
+    setSelectedFarmId(String(farmPublicId));
+    setSelectedFlockId("0");
+    setSelectedFlock(null);
+    setDailyDataList([]);
+    setReportError("");
     setIsLoadingFlocks(true);
     axios
       .get(`${apiPath}flocks/${farmPublicId}/`, getAuthConfig())
       .then((res) => {
-        setFlocks(res.data.results.total_records ? res.data.results.flock_list : []);
+        if (!res.data.results.total_records) {
+          setFlocks([]);
+          return;
+        }
+
+        const flockList = res.data.results.flock_list || [];
+        const nextFlock = flockList.find((item) => String(item.flock_public_id) === String(preferredFlockId)) || flockList[flockList.length - 1];
+        setFlocks(flockList);
+        selectFlockForReport(nextFlock);
       })
       .catch((err) => {
         setFlocks([]);
@@ -96,22 +119,51 @@ const DailyDataSheet = () => {
       .finally(() => setIsLoadingFlocks(false));
   };
 
+  useEffect(() => {
+    axios
+      .get(`${apiPath}farm/`, getAuthConfig())
+      .then((res) => {
+        const farmList = res.data.results.length ? res.data.results : [];
+        setFarms(farmList);
+
+        if (!farmList.length) {
+          return;
+        }
+
+        const selectorFarmId = String(activeSelectorDraft.selectedFarmId || "0");
+        const selectorFlockId = String(activeSelectorDraft.selectedFlockId || "0");
+        const latestFarm = farmList[farmList.length - 1];
+        const requestedFarmId = prefillFarmId !== "0" ? prefillFarmId : selectorFarmId !== "0" ? selectorFarmId : latestFarm?.public_id;
+        const selectedFarm = farmList.find((item) => String(item.public_id) === String(requestedFarmId)) || latestFarm;
+        const targetFlockId = prefillFlockId !== "0" ? prefillFlockId : selectorFlockId;
+
+        if (selectedFarm) {
+          loadFlocksForFarm(selectedFarm.public_id, targetFlockId);
+        }
+      })
+      .catch((err) => {
+        setFarms([]);
+        handleUnauthorized(err, navigate);
+      });
+  }, [activeSelectorDraft.selectedFarmId, activeSelectorDraft.selectedFlockId, navigate, prefillFarmId, prefillFlockId]);
+
+  const changeFarm = (event) => {
+    loadFlocksForFarm(event.target.value);
+  };
+
   const changeFlock = (event) => {
     const flockPublicId = event.target.value;
-    setSelectedFlockId(flockPublicId);
-    setDailyDataList([]);
     setReportError("");
 
     if (flockPublicId === "0") {
+      setSelectedFlockId("0");
       setSelectedFlock(null);
+      setDailyDataList([]);
       return;
     }
 
     const nextFlock = flocks.find((item) => String(item.flock_public_id) === flockPublicId);
-    setSelectedFlock(nextFlock || null);
-    if (nextFlock) {
-      getDailyDataList(nextFlock.flock_public_id);
-    }
+    selectFlockForReport(nextFlock);
   };
 
   const getDailyDataList = (flockPublicId) => {
@@ -129,16 +181,20 @@ const DailyDataSheet = () => {
       .finally(() => setIsLoadingReport(false));
   };
 
-  const resetFilters = () => {
-    setStartDate("");
-    setEndDate("");
-  };
-
   const dateRangeLabel = () => {
-    if (!startDate && !endDate) {
-      return "All dates";
+    if (!filteredRows.length) {
+      return "No saved dates";
     }
-    return `${startDate ? formatDate(startDate) : "Start"} to ${endDate ? formatDate(endDate) : "Today"}`;
+
+    const firstDate = filteredRows[0]?.date;
+    const lastDate = filteredRows[filteredRows.length - 1]?.date;
+    if (!firstDate || !lastDate) {
+      return "Saved daily records";
+    }
+    if (firstDate === lastDate) {
+      return formatDate(firstDate);
+    }
+    return `${formatDate(firstDate)} to ${formatDate(lastDate)}`;
   };
 
   const buildPdfRows = () => {
@@ -177,11 +233,12 @@ const DailyDataSheet = () => {
       const doc = new jsPDF("landscape", "pt", "a4");
       const startY = addPdfReportHeader(doc, {
         title: "Daily Data Sheet",
-        subtitle: "Filtered operational records for mortality, feed, weight, FCR, and current bird count.",
+        subtitle: "Saved operational records for mortality, feed, weight, FCR, and current bird count.",
+        theme: "light",
         meta: [
           { label: "Farm", value: selectedFlock.farm_name || "-" },
           { label: "Flock", value: selectedFlock.flock_name || "-" },
-          { label: "Date range", value: dateRangeLabel() },
+          { label: "Report period", value: dateRangeLabel() },
           { label: "Generated", value: formatDate(todayIso()) },
         ],
       });
@@ -219,10 +276,27 @@ const DailyDataSheet = () => {
           formatNumber(dailyTotals.latestFeedStock, 2),
           `${dailyTotals.recordCount} records`,
         ]],
-        styles: { fontSize: 7.5, cellPadding: 4, overflow: "linebreak" },
-        headStyles: { fillColor: [65, 16, 13], textColor: [255, 250, 245] },
-        footStyles: { fillColor: [255, 247, 237], textColor: [65, 16, 13], fontStyle: "bold" },
-        alternateRowStyles: { fillColor: [255, 250, 245] },
+        styles: {
+          cellPadding: 4,
+          fontSize: 7.5,
+          lineColor: [244, 214, 207],
+          lineWidth: 0.35,
+          overflow: "linebreak",
+          textColor: [51, 33, 29],
+        },
+        headStyles: {
+          fillColor: [255, 241, 235],
+          fontStyle: "bold",
+          lineColor: [230, 184, 174],
+          textColor: [143, 35, 27],
+        },
+        footStyles: {
+          fillColor: [255, 244, 238],
+          fontStyle: "bold",
+          lineColor: [230, 184, 174],
+          textColor: [127, 29, 29],
+        },
+        alternateRowStyles: { fillColor: [255, 250, 247] },
         margin: { left: 28, right: 28 },
       });
 
@@ -236,18 +310,18 @@ const DailyDataSheet = () => {
   return (
     <Row>
       <Col>
-        <Card className="report-page">
+        <Card className="report-page report-page--daily-sheet">
           <div className="report-page__header">
             <div>
               <div className="report-page__eyebrow">Operations report</div>
               <h1 className="report-page__title">Daily Data Sheet</h1>
               <p className="report-page__subtitle">
-                Select a farm, flock, and optional date range. The table and PDF use the same filtered rows and totals.
+                Select a farm and flock. The table and PDF use the same saved daily records and totals.
               </p>
             </div>
           </div>
           <CardBody className="report-page__body">
-            <div className="report-filter-grid">
+            <div className="report-filter-grid report-filter-grid--compact">
               <FormGroup>
                 <Label for="farmSelect">Farm</Label>
                 <Input id="farmSelect" type="select" value={selectedFarmId} onChange={changeFarm}>
@@ -276,20 +350,9 @@ const DailyDataSheet = () => {
                   ))}
                 </Input>
               </FormGroup>
-              <FormGroup>
-                <Label for="startDate">From date</Label>
-                <Input id="startDate" type="date" value={startDate} max={endDate || todayIso()} onChange={(event) => setStartDate(event.target.value)} />
-              </FormGroup>
-              <FormGroup>
-                <Label for="endDate">To date</Label>
-                <Input id="endDate" type="date" value={endDate} min={startDate || undefined} max={todayIso()} onChange={(event) => setEndDate(event.target.value)} />
-              </FormGroup>
             </div>
 
             <div className="report-actions">
-              <button type="button" className="report-reset-button" onClick={resetFilters}>
-                Clear dates
-              </button>
               <button
                 type="button"
                 className="report-export-button"
@@ -323,8 +386,8 @@ const DailyDataSheet = () => {
 
             {hasSelectedFlock && hasAnyDailyData && !hasFilteredRows && (
               <div className="report-empty-state">
-                <strong>No records in this date range.</strong>
-                Clear the date filter or choose a range that includes saved daily data.
+                <strong>No daily records found.</strong>
+                Add daily data for this flock before exporting the report.
               </div>
             )}
 
@@ -354,7 +417,7 @@ const DailyDataSheet = () => {
                     <h3>{selectedFlock?.flock_name} daily records</h3>
                     <span className="report-muted">{dateRangeLabel()}</span>
                   </div>
-                  <Table responsive className="report-table">
+                  <Table responsive className="report-table report-table--daily">
                     <thead>
                       <tr>
                         <th>Date</th>

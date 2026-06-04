@@ -44,10 +44,31 @@
   padding: 1.3rem;
 }
 
+.report-page--daily-sheet .report-page__header {
+  background:
+    radial-gradient(circle at 94% 4%, rgba(180, 35, 24, 0.1), transparent 18rem),
+    linear-gradient(135deg, #fff7f2 0%, #fffaf5 72%, #ffffff 100%);
+  border-bottom: 1px solid rgba(127, 29, 29, 0.12);
+  color: #241514;
+}
+
+.report-page--daily-sheet .report-page__eyebrow {
+  color: #b42318;
+}
+
+.report-page--daily-sheet .report-page__subtitle {
+  color: #6f504a;
+}
+
 .report-filter-grid {
   display: grid;
   gap: 1rem;
   grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.report-filter-grid--compact {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  max-width: 52rem;
 }
 
 .report-filter-grid .form-label {
@@ -166,6 +187,19 @@
   white-space: nowrap;
 }
 
+.report-table--daily {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.report-table--daily th {
+  background: #fff1eb;
+  border-bottom: 1px solid rgba(180, 35, 24, 0.18);
+  color: #8f231b;
+  font-size: 0.7rem;
+  letter-spacing: 0.055em;
+}
+
 .report-table td {
   color: #33211d;
   font-size: 0.9rem;
@@ -176,6 +210,20 @@
   background: #fff7ed;
   color: #41100d;
   font-weight: 900;
+}
+
+.report-page--daily-sheet .report-table--daily td {
+  border-color: rgba(127, 29, 29, 0.08);
+  font-size: 0.84rem;
+}
+
+.report-page--daily-sheet .report-table--daily tbody tr:nth-child(even) td {
+  background: #fffaf7;
+}
+
+.report-page--daily-sheet .report-table--daily tfoot td {
+  background: #fff4ee;
+  color: #7f1d1d;
 }
 
 .report-empty-state {
