@@ -7,10 +7,20 @@ import axios from 'axios';
 // U: OLD: import 'jspdf-autotable'
 // U: NEW: lazy-load the PDF runtime only when the user exports.
 import { loadAutoTable, loadJsPDF } from "../../utils/pdf";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 
+const DAILY_SELECTOR_DRAFT_KEY = "chikooza-daily-selector-draft";
+
+const readSelectorDraft = () => {
+    try {
+        return JSON.parse(localStorage.getItem(DAILY_SELECTOR_DRAFT_KEY) || "{}");
+    } catch {
+        return {};
+    }
+};
 
 const ListPurchase = () => {
+    const [activeSelectorDraft] = useState(() => readSelectorDraft());
     let [farms, setFarms] = useState([]);
     let [flocks, setFlocks] = useState([]);
     const [showFlock, setShowFlock] = useState(false);
@@ -26,6 +36,69 @@ const ListPurchase = () => {
     const prefillFlockId = String(location.state?.flockPublicId || "0");
     const purchaseTotal = purchaseList.reduce((total, item) => total + Number(item.cost || 0), 0);
 
+    const loadPurchaseList = (flockPublicId) => {
+        let url = `${apiPath}purchase/?flock_public_id=${flockPublicId}`;
+        axios.get(url, getAuthConfig()).then((res) => {
+            setPurchaseList(res.data.results.purchase_list || []);
+            setShowForm(true);
+        }).catch((err) => {
+            setShowForm(false);
+            setPurchaseList([]);
+            handleUnauthorized(err, navigate);
+        });
+    };
+
+    const selectFlockForPurchases = (selectedFlock) => {
+        if (!selectedFlock || String(selectedFlock.flock_public_id) === "0") {
+            setShowForm(false);
+            setPurchaseList([]);
+            setSelectedFlockId("0");
+            setSelectedFlockName("");
+            return;
+        }
+
+        setSelectedFarmId(String(selectedFlock.farm_public_id || selectedFarmId));
+        setSelectedFlockId(String(selectedFlock.flock_public_id));
+        setSelectedFlockName(selectedFlock.flock_name || "Selected flock");
+        loadPurchaseList(selectedFlock.flock_public_id);
+    };
+
+    const loadFlocksForFarm = (farmId, preferredFlockId = "0") => {
+        if (!farmId || String(farmId) === "0") {
+            setShowFlock(false);
+            setShowForm(false);
+            setFlocks([]);
+            setPurchaseList([]);
+            setSelectedFlockId("0");
+            setSelectedFlockName("");
+            return;
+        }
+
+        setSelectedFarmId(String(farmId));
+        axios.get(`${apiPath}flocks/${farmId}/`, getAuthConfig()).then((res) => {
+            setShowFlock(true);
+            if (res.data.results.total_records === 0) {
+                setFlocks([{ flock_public_id: 0, flock_name: 'No flock available' }]);
+                setShowForm(false);
+                setPurchaseList([]);
+                setSelectedFlockId("0");
+                setSelectedFlockName("");
+                return;
+            }
+
+            const flockList = res.data.results.flock_list || [];
+            const selected = flockList.find((item) => String(item.flock_public_id) === String(preferredFlockId)) || flockList[flockList.length - 1];
+            setFlocks(flockList);
+            selectFlockForPurchases(selected);
+        }).catch((err) => {
+            setFlocks([]);
+            setShowFlock(false);
+            setShowForm(false);
+            setPurchaseList([]);
+            handleUnauthorized(err, navigate);
+        });
+    };
+
     useEffect(() => {
         let url = `${apiPath}farm/`;
         // U: Replaced shared config mutation with per-request auth headers from getAuthConfig().
@@ -34,42 +107,23 @@ const ListPurchase = () => {
             if (res.data.results.length === 0) {
                 setFarms([{ public_id: 0, name: 'No farm available' }]);
             } else {
-                setFarms(res.data.results);
-            }
-
-            if (prefillFarmId !== "0") {
-                // U: NEW: when the farmer comes from add-purchase review,
-                // U: keep the same farm/flock selected on the manage screen.
-                setSelectedFarmId(prefillFarmId);
-                axios.get(`${apiPath}flocks/${prefillFarmId}/`, getAuthConfig()).then((flockRes) => {
-                    setShowFlock(true);
-                    if (flockRes.data.results.total_records === 0) {
-                        setFlocks([{ flock_public_id: 0, flock_name: 'No flock available' }]);
-                        return;
-                    }
-                    const flockList = flockRes.data.results.flock_list || [];
-                    setFlocks(flockList);
-                    const selected = flockList.find((item) => String(item.flock_public_id) === prefillFlockId);
-                    if (selected) {
-                        setSelectedFlockId(prefillFlockId);
-                        setSelectedFlockName(selected.flock_name || "Selected flock");
-                        axios.get(`${apiPath}purchase/?flock_public_id=${prefillFlockId}`, getAuthConfig()).then((purchaseRes) => {
-                            setPurchaseList(purchaseRes.data.results.purchase_list || []);
-                            setShowForm(true);
-                        }).catch((err) => {
-                            setPurchaseList([]);
-                            handleUnauthorized(err, navigate);
-                        });
-                    }
-                }).catch((err) => {
-                    handleUnauthorized(err, navigate);
-                });
+                const farmList = res.data.results;
+                setFarms(farmList);
+                const selectorFarmId = String(activeSelectorDraft.selectedFarmId || "0");
+                const selectorFlockId = String(activeSelectorDraft.selectedFlockId || "0");
+                const latestFarm = farmList[farmList.length - 1];
+                const requestedFarmId = prefillFarmId !== "0" ? prefillFarmId : selectorFarmId !== "0" ? selectorFarmId : latestFarm?.public_id;
+                const selectedFarm = farmList.find((item) => String(item.public_id) === String(requestedFarmId)) || latestFarm;
+                const targetFlockId = prefillFlockId !== "0" ? prefillFlockId : selectorFlockId;
+                if (selectedFarm) {
+                    loadFlocksForFarm(selectedFarm.public_id, targetFlockId);
+                }
             }
         }).catch((err) => {
             setFarms([{ public_id: 0, name: 'No farm available' }]);
             handleUnauthorized(err, navigate);
         });
-    }, [navigate, prefillFarmId, prefillFlockId])
+    }, [activeSelectorDraft.selectedFarmId, activeSelectorDraft.selectedFlockId, navigate, prefillFarmId, prefillFlockId])
 
     let changeFarm = (e) => {
         setSelectedFarmId(e.target.value);
@@ -82,22 +136,7 @@ const ListPurchase = () => {
             setShowFlock(false);
             setFlocks([]);
         } else {
-            let url = `${apiPath}flocks/${e.target.value}/`;
-            // U: Replaced shared config mutation with per-request auth headers from getAuthConfig().
-            // config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
-            axios.get(url, getAuthConfig()).then((res) => {
-                setShowFlock(true);
-                if (res.data.results.total_records === 0) {
-                    setFlocks([{ flock_public_id: 0, flock_name: 'No flock available' }]);
-                } else {
-                    setFlocks(res.data.results.flock_list);
-                }
-                setShowForm(false);
-            }).catch((err) => {
-                // U: Avoid reading err.data.results because Axios errors expose response data under err.response.
-                setFlocks([{ flock_public_id: 0, flock_name: 'No flock available' }]);
-                handleUnauthorized(err, navigate);
-            });
+            loadFlocksForFarm(e.target.value);
         }
     }
     let changeFlocks = (e) => {
@@ -108,18 +147,7 @@ const ListPurchase = () => {
             setSelectedFlockName("");
         } else {
             const selected = flocks.find((item) => String(item.flock_public_id) === e.target.value);
-            setSelectedFlockName(selected?.flock_name || "Selected flock");
-            let url = `${apiPath}purchase/?flock_public_id=${e.target.value}`;
-            // U: Replaced shared config mutation with per-request auth headers from getAuthConfig().
-            // config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
-            axios.get(url, getAuthConfig()).then((res) => {
-                setPurchaseList(res.data.results.purchase_list);
-                setShowForm(true);
-            }).catch((err) => {
-                setShowForm(false);
-                setPurchaseList([]);
-                handleUnauthorized(err, navigate);
-            });
+            selectFlockForPurchases(selected);
         }
     }
     let getformateddate = (tdate) => {
@@ -235,24 +263,7 @@ const ListPurchase = () => {
                                                 </div>
                                                 {purchaseList.length > 0 ? (
                                                     <>
-                                                        <div className="record-review-grid" aria-label="Purchase review cards">
-                                                            {purchaseList.map((item) => (
-                                                                <article key={item.public_id}>
-                                                                    <div>
-                                                                        <span>{item.type || "Purchase"}</span>
-                                                                        <strong>Rs. {Number(item.cost || 0).toFixed(2)}</strong>
-                                                                        <p>{item.date ? getformateddate(item.date) : "Date not added"}</p>
-                                                                    </div>
-                                                                    <dl>
-                                                                        <div><dt>Item</dt><dd>{item.item_name || item.company_name || "Not added"}</dd></div>
-                                                                        <div><dt>Quantity</dt><dd>{item.quantity || item.unit || "Not added"}</dd></div>
-                                                                        <div><dt>Remarks</dt><dd>{item.remarks || "Not added"}</dd></div>
-                                                                    </dl>
-                                                                    <Button tag={Link} to={`/viewpurchase/${item.flock_public_id}/${item.public_id}`} color="danger" outline type="button">Review</Button>
-                                                                </article>
-                                                            ))}
-                                                        </div>
-                                                        <Table bordered striped responsive>
+                                                        <Table bordered striped responsive className="sales-review-table">
                                                             <thead>
                                                                 <tr className="text-center">
                                                                     <th>Date</th>
@@ -265,11 +276,14 @@ const ListPurchase = () => {
                                                                 {purchaseList.map((item) => {
                                                                     return (
                                                                         <tr key={item.public_id} className="text-center">
-                                                                            <td>{getformateddate(item.date)}</td>
+                                                                            <th scope="row">{getformateddate(item.date)}</th>
                                                                             <td>{item.type}</td>
                                                                             <td>{item.cost}</td>
-                                                                            <td className="text-blue-800 font-bold">
-                                                                                <Link to={`/viewpurchase/${item.flock_public_id}/${item.public_id}`} style={{ textDecoration: "none" }}>View</Link></td>
+                                                                            <td className="sales-review-table__action">
+                                                                                <Button className="table-action-button table-action-button--compact" color="danger" outline size="sm" type="button" onClick={() => navigate(`/viewpurchase/${item.flock_public_id}/${item.public_id}`)}>
+                                                                                    View
+                                                                                </Button>
+                                                                            </td>
                                                                         </tr>
                                                                     )
                                                                 })}
