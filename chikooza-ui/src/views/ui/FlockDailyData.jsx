@@ -322,11 +322,26 @@ const ManageFlock = () => {
                                                         )}
                                                     </div>
                                                     <div className="daily-data-metric-strip" aria-label="Daily data summary">
-                                                        <strong><span>Birds</span><b>{summaryBirds}</b></strong>
-                                                        <strong><span>Mortality</span><b>{summaryMortality}</b></strong>
-                                                        <strong><span>Feed</span><b>{summaryFeed} kg</b></strong>
-                                                        <strong><span>Avg. Bird Wt.</span><b>{summaryWeight} gm</b></strong>
-                                                        <strong><span>FCR{latestEntryDate ? ` (${latestEntryDate})` : ""}</span><b>{summaryFcr}</b></strong>
+                                                        <div>
+                                                            <span>Birds</span>
+                                                            <strong>{summaryBirds}</strong>
+                                                        </div>
+                                                        <div>
+                                                            <span>Mortality</span>
+                                                            <strong>{summaryMortality}</strong>
+                                                        </div>
+                                                        <div>
+                                                            <span>Feed</span>
+                                                            <strong>{summaryFeed} kg</strong>
+                                                        </div>
+                                                        <div>
+                                                            <span>Avg. Bird Wt.</span>
+                                                            <strong>{summaryWeight} gm</strong>
+                                                        </div>
+                                                        <div>
+                                                            <span>FCR{latestEntryDate ? ` (${latestEntryDate})` : ""}</span>
+                                                            <strong>{summaryFcr}</strong>
+                                                        </div>
                                                     </div>
                                                     <div className="daily-week-grid" aria-label="Daily data weeks">
                                                         <MyVerticallyCenteredModal show={modalShow} onHide={() => setModalShow(false)} />

@@ -770,28 +770,36 @@ textarea::placeholder {
   padding: 0.85rem 1rem;
 }
 
-.daily-data-metric-strip strong {
+.daily-data-metric-strip > div {
   background: #ffffff;
   border: 1px solid rgba(180, 35, 24, 0.16);
-  border-radius: var(--ck-radius-pill);
+  border-radius: 1.1rem;
   color: var(--ck-text);
-  display: inline-flex;
-  gap: 0.4rem;
-  justify-content: space-between;
-  font-size: 0.86rem;
-  font-weight: 850;
-  line-height: 1.1;
-  padding: 0.45rem 0.65rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  justify-content: center;
+  min-height: 74px;
+  min-width: 0;
+  padding: 0.75rem 0.8rem;
   text-align: center;
 }
 
 .daily-data-metric-strip span {
   color: var(--ck-red-700);
+  font-size: 0.86rem;
+  font-weight: 850;
+  letter-spacing: -0.01em;
+  line-height: 1.05;
 }
 
-.daily-data-metric-strip b {
+.daily-data-metric-strip strong {
   color: var(--ck-text);
+  display: block;
+  font-size: 1rem;
   font-weight: 900;
+  line-height: 1.05;
+  overflow-wrap: anywhere;
 }
 
 @media (max-width: 991px) {
