@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import axios from "axios";
 import {
   Row,
@@ -22,7 +22,6 @@ import {
 } from "../../utils/pdf";
 import {
   buildReportFilename,
-  filterRowsByDate,
   formatCurrency,
   formatDate,
   formatNumber,
@@ -35,9 +34,20 @@ import {
   toNumber,
 } from "../../utils/reporting";
 
+const DAILY_SELECTOR_DRAFT_KEY = "chikooza-daily-selector-draft";
+
+const readSelectorDraft = () => {
+  try {
+    return JSON.parse(localStorage.getItem(DAILY_SELECTOR_DRAFT_KEY) || "{}");
+  } catch {
+    return {};
+  }
+};
+
 // U: OLD: this report exported a DOM screenshot and showed only all-time backend totals.
 // U: NEW: the screen and PDF use one filtered calculation path for purchases, sales, and daily rows.
 const FlockSummary = () => {
+  const [activeSelectorDraft] = useState(() => readSelectorDraft());
   const [farms, setFarms] = useState([]);
   const [flocks, setFlocks] = useState([]);
   const [selectedFarmId, setSelectedFarmId] = useState("0");
@@ -47,39 +57,30 @@ const FlockSummary = () => {
   const [purchaseList, setPurchaseList] = useState([]);
   const [salesList, setSalesList] = useState([]);
   const [dailyDataList, setDailyDataList] = useState([]);
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
   const [isLoadingFlocks, setIsLoadingFlocks] = useState(false);
   const [isLoadingReport, setIsLoadingReport] = useState(false);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
   const [reportError, setReportError] = useState("");
   const navigate = useNavigate();
-
-  useEffect(() => {
-    axios
-      .get(`${apiPath}farm/`, getAuthConfig())
-      .then((res) => setFarms(res.data.results.length ? res.data.results : []))
-      .catch((err) => {
-        setFarms([]);
-        handleUnauthorized(err, navigate);
-      });
-  }, [navigate]);
+  const location = useLocation();
+  const prefillFarmId = String(location.state?.farmPublicId || "0");
+  const prefillFlockId = String(location.state?.flockPublicId || "0");
 
   const filteredPurchases = useMemo(() => {
-    return sortByDate(filterRowsByDate(purchaseList, startDate, endDate));
-  }, [purchaseList, startDate, endDate]);
+    return sortByDate(purchaseList);
+  }, [purchaseList]);
 
   const filteredSales = useMemo(() => {
-    return sortByDate(filterRowsByDate(salesList, startDate, endDate));
-  }, [salesList, startDate, endDate]);
+    return sortByDate(salesList);
+  }, [salesList]);
 
   const filteredDailyRows = useMemo(() => {
-    return sortByDate(filterRowsByDate(dailyDataList, startDate, endDate));
-  }, [dailyDataList, startDate, endDate]);
+    return sortByDate(dailyDataList);
+  }, [dailyDataList]);
 
   const purchaseTotals = useMemo(() => {
-    return purchaseTypeTotals(filteredPurchases, currentFlock, startDate, endDate);
-  }, [filteredPurchases, currentFlock, startDate, endDate]);
+    return purchaseTypeTotals(filteredPurchases, currentFlock, "", "");
+  }, [filteredPurchases, currentFlock]);
 
   const totalCost = useMemo(() => summarizeCosts(purchaseTotals), [purchaseTotals]);
   const salesTotals = useMemo(() => summarizeSales(filteredSales), [filteredSales]);
@@ -89,26 +90,58 @@ const FlockSummary = () => {
   const hasAnyDailyData = dailyDataList.length > 0;
   const hasFilteredRows = filteredDailyRows.length || filteredPurchases.length || filteredSales.length;
 
-  const changeFarm = (event) => {
-    const farmPublicId = event.target.value;
-    setSelectedFarmId(farmPublicId);
+  const selectFlockForReport = (nextFlock) => {
+    if (!nextFlock || String(nextFlock.flock_public_id) === "0") {
+      setSelectedFlockId("0");
+      setCurrentFlock(null);
+      setFlockData({});
+      setPurchaseList([]);
+      setSalesList([]);
+      setDailyDataList([]);
+      return;
+    }
+
+    setSelectedFarmId(String(nextFlock.farm_public_id || selectedFarmId));
+    setSelectedFlockId(String(nextFlock.flock_public_id));
+    setCurrentFlock(nextFlock);
+    loadReportData(nextFlock.flock_public_id);
+  };
+
+  const loadFlocksForFarm = (farmPublicId, preferredFlockId = "0") => {
+    if (!farmPublicId || String(farmPublicId) === "0") {
+      setSelectedFarmId("0");
+      setSelectedFlockId("0");
+      setCurrentFlock(null);
+      setFlockData({});
+      setPurchaseList([]);
+      setSalesList([]);
+      setDailyDataList([]);
+      setFlocks([]);
+      return;
+    }
+
+    setSelectedFarmId(String(farmPublicId));
     setSelectedFlockId("0");
     setCurrentFlock(null);
     setFlockData({});
     setPurchaseList([]);
     setSalesList([]);
     setDailyDataList([]);
-    setFlocks([]);
     setReportError("");
-
-    if (farmPublicId === "0") {
-      return;
-    }
-
     setIsLoadingFlocks(true);
     axios
       .get(`${apiPath}flocks/${farmPublicId}/`, getAuthConfig())
-      .then((res) => setFlocks(res.data.results.total_records ? res.data.results.flock_list : []))
+      .then((res) => {
+        if (!res.data.results.total_records) {
+          setFlocks([]);
+          return;
+        }
+
+        const flockList = res.data.results.flock_list || [];
+        const nextFlock = flockList.find((item) => String(item.flock_public_id) === String(preferredFlockId)) || flockList[flockList.length - 1];
+        setFlocks(flockList);
+        selectFlockForReport(nextFlock);
+      })
       .catch((err) => {
         setFlocks([]);
         handleUnauthorized(err, navigate);
@@ -116,12 +149,44 @@ const FlockSummary = () => {
       .finally(() => setIsLoadingFlocks(false));
   };
 
+  useEffect(() => {
+    axios
+      .get(`${apiPath}farm/`, getAuthConfig())
+      .then((res) => {
+        const farmList = res.data.results.length ? res.data.results : [];
+        setFarms(farmList);
+
+        if (!farmList.length) {
+          return;
+        }
+
+        const selectorFarmId = String(activeSelectorDraft.selectedFarmId || "0");
+        const selectorFlockId = String(activeSelectorDraft.selectedFlockId || "0");
+        const latestFarm = farmList[farmList.length - 1];
+        const requestedFarmId = prefillFarmId !== "0" ? prefillFarmId : selectorFarmId !== "0" ? selectorFarmId : latestFarm?.public_id;
+        const selectedFarm = farmList.find((item) => String(item.public_id) === String(requestedFarmId)) || latestFarm;
+        const targetFlockId = prefillFlockId !== "0" ? prefillFlockId : selectorFlockId;
+
+        if (selectedFarm) {
+          loadFlocksForFarm(selectedFarm.public_id, targetFlockId);
+        }
+      })
+      .catch((err) => {
+        setFarms([]);
+        handleUnauthorized(err, navigate);
+      });
+  }, [activeSelectorDraft.selectedFarmId, activeSelectorDraft.selectedFlockId, navigate, prefillFarmId, prefillFlockId]);
+
+  const changeFarm = (event) => {
+    loadFlocksForFarm(event.target.value);
+  };
+
   const changeFlock = (event) => {
     const flockPublicId = event.target.value;
-    setSelectedFlockId(flockPublicId);
     setReportError("");
 
     if (flockPublicId === "0") {
+      setSelectedFlockId("0");
       setCurrentFlock(null);
       setFlockData({});
       setPurchaseList([]);
@@ -131,10 +196,7 @@ const FlockSummary = () => {
     }
 
     const nextFlock = flocks.find((item) => String(item.flock_public_id) === flockPublicId);
-    setCurrentFlock(nextFlock || null);
-    if (nextFlock) {
-      loadReportData(nextFlock.flock_public_id);
-    }
+    selectFlockForReport(nextFlock);
   };
 
   const loadReportData = (flockPublicId) => {
@@ -162,16 +224,51 @@ const FlockSummary = () => {
       .finally(() => setIsLoadingReport(false));
   };
 
-  const resetFilters = () => {
-    setStartDate("");
-    setEndDate("");
+  const dateRangeLabel = () => {
+    const datedRows = [...filteredDailyRows, ...filteredPurchases, ...filteredSales]
+      .map((row) => row?.date)
+      .filter(Boolean)
+      .sort((first, second) => String(first).localeCompare(String(second)));
+
+    if (!datedRows.length) {
+      return "No saved dates";
+    }
+
+    const firstDate = datedRows[0];
+    const lastDate = datedRows[datedRows.length - 1];
+    if (firstDate === lastDate) {
+      return formatDate(firstDate);
+    }
+    return `${formatDate(firstDate)} to ${formatDate(lastDate)}`;
   };
 
-  const dateRangeLabel = () => {
-    if (!startDate && !endDate) {
-      return "All dates";
+  const pdfDateRangeLabel = () => {
+    const datedRows = [...filteredDailyRows, ...filteredPurchases, ...filteredSales]
+      .map((row) => row?.date)
+      .filter(Boolean)
+      .sort((first, second) => String(first).localeCompare(String(second)));
+
+    if (!datedRows.length) {
+      return "No saved dates";
     }
-    return `${startDate ? formatDate(startDate) : "Start"} to ${endDate ? formatDate(endDate) : "Today"}`;
+
+    const firstDate = datedRows[0];
+    const lastDate = datedRows[datedRows.length - 1];
+    if (firstDate === lastDate) {
+      return formatDate(firstDate);
+    }
+
+    const first = new Date(`${firstDate}T00:00:00`);
+    const last = new Date(`${lastDate}T00:00:00`);
+    if (!Number.isNaN(first.getTime()) && !Number.isNaN(last.getTime()) && first.getFullYear() === last.getFullYear()) {
+      const firstCompact = first.toLocaleDateString("en-IN", {
+        day: "2-digit",
+        month: "short",
+      });
+      return `${firstCompact} - ${formatDate(lastDate)}`;
+    }
+
+    return `${formatDate(firstDate)} - ${formatDate(lastDate)}`;
   };
 
   const costRows = () => {
@@ -209,11 +306,12 @@ const FlockSummary = () => {
       const doc = new jsPDF("portrait", "pt", "a4");
       let startY = addPdfReportHeader(doc, {
         title: "Flock Summary",
-        subtitle: "Filtered flock performance, cost, sales, and profit/loss report.",
+        subtitle: "Saved flock performance, cost, sales, and profit/loss report.",
+        theme: "light",
         meta: [
           { label: "Farm", value: flockData.farm_name || currentFlock?.farm_name || "-" },
           { label: "Flock", value: flockData.flock_name || currentFlock?.flock_name || "-" },
-          { label: "Date range", value: dateRangeLabel() },
+          { label: "Report period", value: pdfDateRangeLabel() },
           { label: "Generated", value: formatDate(todayIso()) },
         ],
       });
@@ -228,9 +326,9 @@ const FlockSummary = () => {
           ["Total cost", formatCurrency(totalCost), "Total sales", formatCurrency(salesTotals.totalAmount)],
           ["Profit/Loss", formatCurrency(profitLoss), "Records", `${filteredDailyRows.length} daily / ${filteredPurchases.length} purchases / ${filteredSales.length} sales`],
         ],
-        styles: { fontSize: 9, cellPadding: 5 },
-        headStyles: { fillColor: [65, 16, 13], textColor: [255, 250, 245] },
-        alternateRowStyles: { fillColor: [255, 250, 245] },
+        styles: { cellPadding: 5, fontSize: 9, lineColor: [244, 214, 207], lineWidth: 0.35, textColor: [51, 33, 29] },
+        headStyles: { fillColor: [255, 241, 235], lineColor: [230, 184, 174], textColor: [143, 35, 27] },
+        alternateRowStyles: { fillColor: [255, 250, 247] },
         margin: { left: 36, right: 36 },
       });
 
@@ -240,9 +338,9 @@ const FlockSummary = () => {
         head: [["Cost type", "Amount"]],
         body: costRows(),
         foot: [["Total cost", formatCurrency(totalCost)]],
-        styles: { fontSize: 9, cellPadding: 5 },
-        headStyles: { fillColor: [65, 16, 13], textColor: [255, 250, 245] },
-        footStyles: { fillColor: [255, 247, 237], textColor: [65, 16, 13], fontStyle: "bold" },
+        styles: { cellPadding: 5, fontSize: 9, lineColor: [244, 214, 207], lineWidth: 0.35, textColor: [51, 33, 29] },
+        headStyles: { fillColor: [255, 241, 235], lineColor: [230, 184, 174], textColor: [143, 35, 27] },
+        footStyles: { fillColor: [255, 244, 238], fontStyle: "bold", lineColor: [230, 184, 174], textColor: [127, 29, 29] },
         margin: { left: 36, right: 36 },
       });
 
@@ -250,11 +348,11 @@ const FlockSummary = () => {
       autoTable(doc, {
         startY,
         head: [["Date", "Type", "Birds", "Weight", "Avg Wt", "Rate/Kg", "Amount"]],
-        body: salesRows().length ? salesRows() : [["No sales in selected range", "", "", "", "", "", ""]],
+        body: salesRows().length ? salesRows() : [["No sales saved", "", "", "", "", "", ""]],
         foot: [["Total", "", formatNumber(salesTotals.totalBirds, 0), formatNumber(salesTotals.totalWeight, 2), formatNumber(salesTotals.averageWeight, 2), formatNumber(salesTotals.averageRate, 2), formatCurrency(salesTotals.totalAmount)]],
-        styles: { fontSize: 8, cellPadding: 4 },
-        headStyles: { fillColor: [65, 16, 13], textColor: [255, 250, 245] },
-        footStyles: { fillColor: [255, 247, 237], textColor: [65, 16, 13], fontStyle: "bold" },
+        styles: { cellPadding: 4, fontSize: 8, lineColor: [244, 214, 207], lineWidth: 0.35, textColor: [51, 33, 29] },
+        headStyles: { fillColor: [255, 241, 235], lineColor: [230, 184, 174], textColor: [143, 35, 27] },
+        footStyles: { fillColor: [255, 244, 238], fontStyle: "bold", lineColor: [230, 184, 174], textColor: [127, 29, 29] },
         margin: { left: 36, right: 36 },
       });
 
@@ -268,18 +366,18 @@ const FlockSummary = () => {
   return (
     <Row>
       <Col>
-        <Card className="report-page">
+        <Card className="report-page report-page--flock-summary">
           <div className="report-page__header">
             <div>
               <div className="report-page__eyebrow">Performance report</div>
               <h1 className="report-page__title">Flock Summary</h1>
               <p className="report-page__subtitle">
-                Review flock performance, purchase cost, sales, and profit/loss for a selected date range.
+                Review flock performance, purchase cost, sales, and profit/loss from saved farm records.
               </p>
             </div>
           </div>
           <CardBody className="report-page__body">
-            <div className="report-filter-grid">
+            <div className="report-filter-grid report-filter-grid--compact">
               <FormGroup>
                 <Label for="farmSelect">Farm</Label>
                 <Input id="farmSelect" type="select" value={selectedFarmId} onChange={changeFarm}>
@@ -308,20 +406,9 @@ const FlockSummary = () => {
                   ))}
                 </Input>
               </FormGroup>
-              <FormGroup>
-                <Label for="summaryStartDate">From date</Label>
-                <Input id="summaryStartDate" type="date" value={startDate} max={endDate || todayIso()} onChange={(event) => setStartDate(event.target.value)} />
-              </FormGroup>
-              <FormGroup>
-                <Label for="summaryEndDate">To date</Label>
-                <Input id="summaryEndDate" type="date" value={endDate} min={startDate || undefined} max={todayIso()} onChange={(event) => setEndDate(event.target.value)} />
-              </FormGroup>
             </div>
 
             <div className="report-actions">
-              <button type="button" className="report-reset-button" onClick={resetFilters}>
-                Clear dates
-              </button>
               <button
                 type="button"
                 className="report-export-button"
@@ -355,8 +442,8 @@ const FlockSummary = () => {
 
             {hasSelectedFlock && !isLoadingReport && hasAnyDailyData && !hasFilteredRows && (
               <div className="report-empty-state">
-                <strong>No report records in this date range.</strong>
-                Clear the filter or select a range that includes daily data, purchases, or sales.
+                <strong>No report records found.</strong>
+                Add daily data, purchases, or sales before exporting this report.
               </div>
             )}
 
@@ -388,7 +475,7 @@ const FlockSummary = () => {
                     <h3>Flock details</h3>
                     <span className="report-muted">{dateRangeLabel()}</span>
                   </div>
-                  <Table responsive className="report-table">
+                  <Table responsive className="report-table report-table--soft">
                     <tbody>
                       <tr>
                         <th>Farm</th>
@@ -423,7 +510,7 @@ const FlockSummary = () => {
                     <h3>Cost breakdown</h3>
                     <span className="report-muted">{filteredPurchases.length} purchase records</span>
                   </div>
-                  <Table responsive className="report-table">
+                  <Table responsive className="report-table report-table--soft">
                     <thead>
                       <tr>
                         <th>Cost type</th>
@@ -452,7 +539,7 @@ const FlockSummary = () => {
                     <h3>Sales</h3>
                     <span className="report-muted">{filteredSales.length} sale records</span>
                   </div>
-                  <Table responsive className="report-table">
+                  <Table responsive className="report-table report-table--soft">
                     <thead>
                       <tr>
                         <th>Date</th>
@@ -479,7 +566,7 @@ const FlockSummary = () => {
                         ))
                       ) : (
                         <tr>
-                          <td colSpan="7">No sales recorded in this date range.</td>
+                          <td colSpan="7">No sales saved for this flock.</td>
                         </tr>
                       )}
                     </tbody>

@@ -44,7 +44,8 @@
   padding: 1.3rem;
 }
 
-.report-page--daily-sheet .report-page__header {
+.report-page--daily-sheet .report-page__header,
+.report-page--flock-summary .report-page__header {
   background:
     radial-gradient(circle at 94% 4%, rgba(180, 35, 24, 0.1), transparent 18rem),
     linear-gradient(135deg, #fff7f2 0%, #fffaf5 72%, #ffffff 100%);
@@ -52,11 +53,13 @@
   color: #241514;
 }
 
-.report-page--daily-sheet .report-page__eyebrow {
+.report-page--daily-sheet .report-page__eyebrow,
+.report-page--flock-summary .report-page__eyebrow {
   color: #b42318;
 }
 
-.report-page--daily-sheet .report-page__subtitle {
+.report-page--daily-sheet .report-page__subtitle,
+.report-page--flock-summary .report-page__subtitle {
   color: #6f504a;
 }
 
@@ -187,12 +190,14 @@
   white-space: nowrap;
 }
 
-.report-table--daily {
+.report-table--daily,
+.report-table--soft {
   border-collapse: separate;
   border-spacing: 0;
 }
 
-.report-table--daily th {
+.report-table--daily th,
+.report-table--soft th {
   background: #fff1eb;
   border-bottom: 1px solid rgba(180, 35, 24, 0.18);
   color: #8f231b;
@@ -212,16 +217,19 @@
   font-weight: 900;
 }
 
-.report-page--daily-sheet .report-table--daily td {
+.report-page--daily-sheet .report-table--daily td,
+.report-page--flock-summary .report-table--soft td {
   border-color: rgba(127, 29, 29, 0.08);
   font-size: 0.84rem;
 }
 
-.report-page--daily-sheet .report-table--daily tbody tr:nth-child(even) td {
+.report-page--daily-sheet .report-table--daily tbody tr:nth-child(even) td,
+.report-page--flock-summary .report-table--soft tbody tr:nth-child(even) td {
   background: #fffaf7;
 }
 
-.report-page--daily-sheet .report-table--daily tfoot td {
+.report-page--daily-sheet .report-table--daily tfoot td,
+.report-page--flock-summary .report-table--soft tfoot td {
   background: #fff4ee;
   color: #7f1d1d;
 }
