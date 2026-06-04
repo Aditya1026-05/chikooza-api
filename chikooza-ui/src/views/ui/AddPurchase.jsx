@@ -8,6 +8,7 @@ import Modal from 'react-bootstrap/Modal';
 import { Link, useLocation, useNavigate } from "react-router-dom";
 
 const PURCHASE_DRAFT_KEY = "chikooza-add-purchase-draft";
+const DAILY_SELECTOR_DRAFT_KEY = "chikooza-daily-selector-draft";
 
 const purchaseSteps = [
     { title: "Flock", helper: "Choose where this cost belongs" },
@@ -52,10 +53,19 @@ const readPurchaseDraft = () => {
     }
 };
 
+const readSelectorDraft = () => {
+    try {
+        return JSON.parse(localStorage.getItem(DAILY_SELECTOR_DRAFT_KEY) || "{}");
+    } catch {
+        return {};
+    }
+};
+
 const todayIso = () => new Date().toISOString().split("T")[0];
 
 const AddPurchase = () => {
-    const initialDraft = readPurchaseDraft();
+    const [initialDraft] = useState(() => readPurchaseDraft());
+    const [activeSelectorDraft] = useState(() => readSelectorDraft());
     let [loading, setLoading] = useState(false);
     const [show, setShow] = useState(false);
     let [err, setErr] = useState('');
@@ -107,6 +117,75 @@ const AddPurchase = () => {
         });
     };
 
+    const selectFlockForPurchase = (selectedFlock, { resetPurchaseFields = false } = {}) => {
+        if (!selectedFlock || String(selectedFlock.flock_public_id) === "0") {
+            setFlockerr('Please select a flock');
+            setAddData((current) => ({
+                ...(resetPurchaseFields ? emptyPurchaseData : current),
+                farm_public_id: current.farm_public_id || "0",
+                flock_public_id: "0",
+            }));
+            setShowForm(0);
+            setExistingPurchases([]);
+            return;
+        }
+
+        setFlockerr('');
+        setAddData((current) => ({
+            ...(resetPurchaseFields ? emptyPurchaseData : current),
+            farm_public_id: selectedFlock.farm_public_id || current.farm_public_id,
+            flock_public_id: selectedFlock.flock_public_id,
+        }));
+        if (resetPurchaseFields) {
+            setShowInputArea("0");
+            setPurchaseStep(0);
+        }
+        setShowForm(1);
+        loadExistingPurchases(selectedFlock.flock_public_id);
+    };
+
+    const loadFlocksForFarm = (farmPublicId, preferredFlockId = "0", { resetPurchaseFields = false } = {}) => {
+        if (!farmPublicId || String(farmPublicId) === "0") {
+            setShowFlocks(0);
+            setShowForm(0);
+            setFlocks([]);
+            setExistingPurchases([]);
+            setAddData((current) => ({
+                ...(resetPurchaseFields ? emptyPurchaseData : current),
+                farm_public_id: "0",
+                flock_public_id: "0",
+            }));
+            return;
+        }
+
+        setAddData((current) => ({
+            ...(resetPurchaseFields ? emptyPurchaseData : current),
+            farm_public_id: farmPublicId,
+            flock_public_id: resetPurchaseFields ? "0" : current.flock_public_id,
+        }));
+        axios.get(`${apiPath}flocks/${farmPublicId}/`, getAuthConfig()).then((res) => {
+            setShowFlocks(1);
+            if (res.data.results.total_records === 0) {
+                setFlocks([{ flock_public_id: 0, flock_name: 'No flock available' }]);
+                setShowForm(0);
+                setExistingPurchases([]);
+                setFlockerr('Please add a flock first');
+                return;
+            }
+
+            const flockList = res.data.results.flock_list;
+            const selected = flockList.find((item) => String(item.flock_public_id) === String(preferredFlockId)) || flockList[flockList.length - 1];
+            setFlocks(flockList);
+            selectFlockForPurchase(selected, { resetPurchaseFields });
+        }).catch((err) => {
+            setFlocks([]);
+            setShowFlocks(0);
+            setShowForm(0);
+            setExistingPurchases([]);
+            handleUnauthorized(err, navigate);
+        });
+    };
+
     useEffect(() => {
         // U: NEW: long purchase forms are draft-saved locally so a farmer can
         // U: leave the page and continue without retyping values.
@@ -128,42 +207,29 @@ const AddPurchase = () => {
             if (res.data.results.length === 0) {
                 setFarms([{ public_id: 0, name: 'No farm available' }]);
             } else {
-                setFarms(res.data.results);
-            }
-
-            if (prefillFarmId !== "0") {
-                // U: NEW: when dashboard sends a selected flock here, preserve it
-                // U: so farmers do not repeat farm/flock selection.
-                setAddData((current) => ({
-                    ...current,
-                    farm_public_id: prefillFarmId,
-                    flock_public_id: prefillFlockId,
-                }));
-                axios.get(`${apiPath}flocks/${prefillFarmId}/`, getAuthConfig()).then((flockRes) => {
-                    if (cancelled) {
-                        return;
-                    }
-                    setShowFlocks(1);
-                    if (flockRes.data.results.total_records === 0) {
-                        setFlocks([{ flock_public_id: 0, flock_name: 'No flock available' }]);
-                        setShowForm(0);
-                        return;
-                    }
-                    const flockList = flockRes.data.results.flock_list;
-                    const hasPrefillFlock = flockList.some((item) => String(item.flock_public_id) === prefillFlockId);
-                    setFlocks(flockList);
-                    setShowForm(hasPrefillFlock ? 1 : 0);
-                    setFlockerr(hasPrefillFlock ? '' : 'Please select a flock');
-                    if (hasPrefillFlock) {
-                        setPurchaseStep((currentStep) => Math.max(currentStep, 1));
-                        loadExistingPurchases(prefillFlockId);
-                    }
-                }).catch((err) => {
-                    if (!cancelled) {
-                        setFlocks([]);
-                    }
-                    handleUnauthorized(err, navigate);
-                });
+                const farmList = res.data.results;
+                setFarms(farmList);
+                const draftFarmId = String(initialDraft.data.farm_public_id || "0");
+                const draftFlockId = String(initialDraft.data.flock_public_id || "0");
+                const selectorFarmId = String(activeSelectorDraft.selectedFarmId || "0");
+                const selectorFlockId = String(activeSelectorDraft.selectedFlockId || "0");
+                const latestFarm = farmList[farmList.length - 1];
+                const requestedFarmId = prefillFarmId !== "0"
+                    ? prefillFarmId
+                    : draftFarmId !== "0"
+                        ? draftFarmId
+                        : selectorFarmId !== "0"
+                            ? selectorFarmId
+                            : latestFarm?.public_id;
+                const selectedFarm = farmList.find((item) => String(item.public_id) === String(requestedFarmId)) || latestFarm;
+                const targetFlockId = prefillFlockId !== "0"
+                    ? prefillFlockId
+                    : draftFlockId !== "0"
+                        ? draftFlockId
+                        : selectorFlockId;
+                if (selectedFarm) {
+                    loadFlocksForFarm(selectedFarm.public_id, targetFlockId);
+                }
             }
         }).catch((err) => {
             if (cancelled) {
@@ -175,31 +241,9 @@ const AddPurchase = () => {
         return () => {
             cancelled = true;
         };
-    }, [navigate, prefillFarmId, prefillFlockId])
+    }, [activeSelectorDraft.selectedFarmId, activeSelectorDraft.selectedFlockId, navigate, prefillFarmId, prefillFlockId])
     let changeFarm = (e) => {
-        setAddData({ ...addData, farm_public_id: e.target.value, flock_public_id: "0" });
-        setExistingPurchases([]);
-        // U: OLD: e.target.value === 0 compared a string to a number.
-        if (e.target.value === "0") {
-            //setFarm_public_iderr('Please select farm');
-            setShowFlocks(0);
-            setShowForm(0);
-            setFlocks([]);
-        } else {
-            let url = `${apiPath}flocks/${e.target.value}/`;
-            axios.get(url, getAuthConfig()).then((res) => {
-                setShowFlocks(1);
-                setShowForm(0);
-                if (res.data.results.total_records === 0) {
-                    setFlocks([{ flock_public_id: 0, flock_name: 'No flock available' }]);
-                } else {
-                    setFlocks(res.data.results.flock_list);
-                }
-            }).catch((err) => {
-                setFlocks([]);
-                handleUnauthorized(err, navigate);
-            });
-        }
+        loadFlocksForFarm(e.target.value, "0", { resetPurchaseFields: true });
     }
     let changeFlocks = (e) => {
         if (e.target.value === "0") {
@@ -208,10 +252,8 @@ const AddPurchase = () => {
             setShowForm(0);
             setExistingPurchases([]);
         } else {
-            setFlockerr('');
-            setAddData({ ...addData, flock_public_id: e.target.value });
-            setShowForm(1);
-            loadExistingPurchases(e.target.value);
+            const selected = flocks.find((item) => String(item.flock_public_id) === String(e.target.value));
+            selectFlockForPurchase(selected, { resetPurchaseFields: true });
         }
     }
     const validateSelectionStep = () => {
@@ -314,6 +356,22 @@ const AddPurchase = () => {
 
     const goPreviousStep = () => {
         setPurchaseStep((currentStep) => Math.max(currentStep - 1, 0));
+    };
+
+    const goToPurchaseStep = (targetStep) => {
+        if (targetStep <= purchaseStep) {
+            setPurchaseStep(targetStep);
+            return;
+        }
+        if (targetStep >= 1 && !validateSelectionStep()) {
+            setPurchaseStep(0);
+            return;
+        }
+        if (targetStep >= 2 && !validatePurchaseDetails()) {
+            setPurchaseStep(1);
+            return;
+        }
+        setPurchaseStep(targetStep);
     };
 
     const resetPurchaseForm = ({ keepSelection = false } = {}) => {
@@ -458,20 +516,24 @@ const AddPurchase = () => {
                                             </div>
                                         )}
                                         <Form onSubmit={save}>
-                                            <div className="form-stepper" aria-label="Purchase entry steps">
-                                                {purchaseSteps.map((step, index) => (
-                                                    <button
-                                                        key={step.title}
-                                                        type="button"
-                                                        className={index === purchaseStep ? "is-active" : index < purchaseStep ? "is-complete" : ""}
-                                                        onClick={() => setPurchaseStep(index)}
-                                                    >
-                                                        <span>{index + 1}</span>
-                                                        <strong>{step.title}</strong>
-                                                        <small>{step.helper}</small>
-                                                    </button>
-                                                ))}
-                                            </div>
+                                            {purchaseStep > 0 && (
+                                                <div className="form-stepper" aria-label="Purchase entry steps">
+                                                    {purchaseSteps.slice(1).map((step, index) => {
+                                                        const actualStep = index + 1;
+                                                        return (
+                                                            <button
+                                                                key={step.title}
+                                                                type="button"
+                                                                className={actualStep === purchaseStep ? "is-active" : actualStep < purchaseStep ? "is-complete" : ""}
+                                                                onClick={() => goToPurchaseStep(actualStep)}
+                                                            >
+                                                                <span>{index + 1}</span>
+                                                                <strong>{step.title}</strong>
+                                                            </button>
+                                                        );
+                                                    })}
+                                                </div>
+                                            )}
                                             {purchaseStep === 0 && (
                                                 <>
                                                     <Label for="farmselect">Select Farm</Label>
@@ -514,26 +576,6 @@ const AddPurchase = () => {
                                                             <Link to="/addflock">Add flock</Link>
                                                         </div>
                                                         : null}
-                                                    {showForm === 1 && (
-                                                        <>
-                                                            <div className="record-review-toolbar record-review-toolbar--compact">
-                                                                <div>
-                                                                    <span>Existing purchases</span>
-                                                                    <strong>{selectedFlockRecord?.flock_name || "Selected flock"}</strong>
-                                                                    <p>{purchaseReviewLoading ? "Checking previous costs..." : `${existingPurchases.length} purchase${existingPurchases.length === 1 ? "" : "s"} saved, Rs. ${purchaseReviewTotal.toFixed(2)} total cost. Continue below to add a new purchase.`}</p>
-                                                                </div>
-                                                                {existingPurchases.length > 0 && (
-                                                                    <Button color="danger" outline type="button" onClick={() => navigate("/listpurchase", { state: { farmPublicId: addData.farm_public_id, flockPublicId: addData.flock_public_id } })}>Review existing</Button>
-                                                                )}
-                                                            </div>
-                                                            {!purchaseReviewLoading && existingPurchases.length > 0 && (
-                                                                <div className="record-summary-strip">
-                                                                    <strong>Recent:</strong> {existingPurchases.slice(0, 3).map((item) => `${item.type || "Purchase"} Rs. ${Number(item.cost || 0).toFixed(0)}`).join(", ")}
-                                                                    {existingPurchases.length > 3 ? `, +${existingPurchases.length - 3} more` : ""}
-                                                                </div>
-                                                            )}
-                                                        </>
-                                                    )}
                                                 </>
                                             )}
                                             {(purchaseStep === 1 && showForm === 1) ?
@@ -800,7 +842,7 @@ const AddPurchase = () => {
                                             {purchaseStep === 1 && showForm !== 1 && (
                                                 <div className="form-helper-panel">
                                                     <strong>Select farm and flock first</strong>
-                                                    <p>Purchase records are saved against one flock. Complete the Flock step before adding purchase details.</p>
+                                                    <p>Purchase records are saved against one flock. Choose the farm and flock before adding purchase details.</p>
                                                 </div>
                                             )}
                                             {purchaseStep === 2 && (
