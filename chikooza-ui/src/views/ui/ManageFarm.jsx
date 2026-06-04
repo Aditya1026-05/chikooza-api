@@ -115,8 +115,14 @@ const ManageFarm = () => {
     axios.get(url, getAuthConfig()).then((res) => {
       if (res.data.results.length === 0) {
         setFarm([{ public_id: 0, name: 'No farm available' }]);
+        setSelectedFarmId("0");
+        setShowForm(false);
       } else {
-        setFarm(res.data.results);
+        const farmResults = res.data.results;
+        const draftFarmId = initialDraft.selectedFarmId !== "0" ? initialDraft.selectedFarmId : initialDraft.data.public_id;
+        const activeFarm = farmResults.find((item) => String(item.public_id) === String(draftFarmId)) || farmResults[farmResults.length - 1];
+        setFarm(farmResults);
+        loadFarmForEdit(activeFarm.public_id, initialDraft.farmStep > 0 ? initialDraft.farmStep : 0);
       }
     }).catch((err) => {
       setFarm([{ public_id: 0, name: 'No farm available' }]);
@@ -186,6 +192,7 @@ const ManageFarm = () => {
         // U: Replaced shared config mutation with per-request auth headers from getAuthConfig().
         // config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
         axios.patch(url, farmData, getAuthConfig()).then((res) => {
+          const updatedFarmId = addData.public_id;
           setShow(true);
           setLoading(false)
           setTimeout((() => {
@@ -194,9 +201,8 @@ const ManageFarm = () => {
             setFarm((currentFarm) => currentFarm.map((item) => (
               String(item.public_id) === String(addData.public_id) ? { ...item, ...addData, name: addData.name } : item
             )));
-            setAddData(emptyManageFarmData)
-            setSelectedFarmId("0");
-            setShowForm(false);
+            setSelectedFarmId(String(updatedFarmId));
+            setShowForm(true);
             setFarmStep(0);
             localStorage.removeItem(MANAGE_FARM_DRAFT_KEY);
 
@@ -243,7 +249,7 @@ const ManageFarm = () => {
     setAddData({ ...addData, city: e.target.value });
     e.target.value.trim() === '' ? setCityorvillageError('Please enter city/Village name') : setCityorvillageError('');
   }
-  const loadFarmForEdit = (farmId) => {
+  const loadFarmForEdit = (farmId, nextStep = 0) => {
     if (String(farmId) !== "0") {
       setSelectedFarmId(String(farmId));
       let url = `${apiPath}farm/${farmId}/`;
@@ -251,7 +257,7 @@ const ManageFarm = () => {
       // config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
       axios.get(url, getAuthConfig()).then((res) => {
         setAddData({ ...emptyManageFarmData, ...res.data.results });
-        setFarmStep(1);
+        setFarmStep(nextStep);
         setErr('');
       }).catch((err) => {
         //setFarm(res.data.results);
@@ -265,14 +271,11 @@ const ManageFarm = () => {
     }
   };
   let displayForm = (e) => {
-    loadFarmForEdit(e.target.value);
+    loadFarmForEdit(e.target.value, 0);
   }
   let closeAll = () => {
-    setAddData(emptyManageFarmData)
-    setSelectedFarmId("0");
-    setShowForm(false)
-    setFarmStep(0);
     localStorage.removeItem(MANAGE_FARM_DRAFT_KEY);
+    navigate("/member");
   }
   return (
     <>
@@ -311,88 +314,45 @@ const ManageFarm = () => {
                   <div className={contentArea}>
                     <div className='gridmargin'>
                       {(err !== '') && <Alert color="danger">{err}</Alert>}
-                      <div className="record-review-toolbar">
-                        <div>
-                          <span>Saved farms</span>
-                          <strong>{farmList.length} farm{farmList.length === 1 ? "" : "s"} in this account</strong>
-                          <p>Review an existing farm or add another location before creating more flocks.</p>
-                        </div>
-                        <Button color="danger" type="button" onClick={() => navigate("/addfarm")}>Add another farm</Button>
-                      </div>
                       {farmList.length > 0 ? (
-                        <div className="record-review-grid" aria-label="Saved farms">
-                          {farmList.map((item) => (
-                            <article
-                              key={item.public_id}
-                              className={`record-card-clickable ${String(item.public_id) === selectedFarmId ? "is-selected" : ""}`}
-                              role="button"
-                              tabIndex="0"
-                              onClick={() => loadFarmForEdit(item.public_id)}
-                              onKeyDown={(event) => {
-                                if (event.key === "Enter" || event.key === " ") {
-                                  event.preventDefault();
-                                  loadFarmForEdit(item.public_id);
-                                }
-                              }}
-                            >
-                              <div>
-                                <span>Farm</span>
-                                <strong>{item.name}</strong>
-                                <p>{[item.city, item.state_name].filter(Boolean).join(", ") || "Location not added"}</p>
-                              </div>
-                              <dl>
-                                <div><dt>Sheds</dt><dd>{item.shed_count ?? "Not added"}</dd></div>
-                                <div><dt>Status</dt><dd>{item.status ? "Active" : "Inactive"}</dd></div>
-                                <div><dt>Pin</dt><dd>{item.pin || "Not added"}</dd></div>
-                              </dl>
-                              <Button color="danger" outline type="button" onClick={(event) => {
-                                event.stopPropagation();
-                                loadFarmForEdit(item.public_id);
-                              }}>Review / edit</Button>
-                            </article>
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="record-review-empty">
-                          <strong>No farms saved yet.</strong>
-                          <p>Add the first farm before creating flocks, purchases, sales, reports, and Farmer AI answers.</p>
-                          <Button color="danger" type="button" onClick={() => navigate("/addfarm")}>Add first farm</Button>
-                        </div>
-                      )}
-                      <div className="form-stepper" aria-label="Manage farm steps">
-                        {manageFarmSteps.map((step, index) => (
-                          <button
-                            key={step.title}
-                            type="button"
-                            className={index === farmStep ? "is-active" : index < farmStep ? "is-complete" : ""}
-                            onClick={() => {
-                              if (index === 0 || showForm) {
-                                setFarmStep(index);
-                              }
-                            }}
-                          >
-                            <span>{index + 1}</span>
-                            <strong>{step.title}</strong>
-                            <small>{step.helper}</small>
-                          </button>
-                        ))}
-                      </div>
-                      {(!showForm || farmStep === 0) && (
-                        <FormGroup>
-                          <Label for="exampleSelect">Farm Name</Label>
-                          <Input onChange={displayForm} id="farmSelect" value={selectedFarmId} name="farm" type="select">
-                            <option value="0">Select Farm</option>
-                            {
-                              farm.map(item =>
-                                <option key={item.public_id} value={item.public_id}>{item.name}</option>
-                              )
-                            }
-                          </Input>
-                        </FormGroup>
-                      )}
-                      {
-                        showForm &&
                         <Form onSubmit={save}>
+                          {farmStep === 0 && (
+                            <FormGroup className="manage-farm-selector">
+                              <Label for="farmSelect">Select Farm</Label>
+                              <Input onChange={displayForm} id="farmSelect" value={selectedFarmId} name="farm" type="select">
+                                <option value="0" disabled>Select Farm</option>
+                                {
+                                  farmList.map(item =>
+                                    <option key={item.public_id} value={item.public_id}>{item.name}</option>
+                                  )
+                                }
+                              </Input>
+                            </FormGroup>
+                          )}
+
+                          {farmStep > 0 && (
+                            <div className="form-stepper" aria-label="Manage farm steps">
+                              {manageFarmSteps.slice(1).map((step, index) => {
+                                const actualStep = index + 1;
+                                return (
+                                  <button
+                                    key={step.title}
+                                    type="button"
+                                    className={actualStep === farmStep ? "is-active" : actualStep < farmStep ? "is-complete" : ""}
+                                    onClick={() => {
+                                      if (showForm) {
+                                        setFarmStep(actualStep);
+                                      }
+                                    }}
+                                  >
+                                    <span>{index + 1}</span>
+                                    <strong>{step.title}</strong>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          )}
+
                           {farmStep === 1 && (
                             <>
                               <Alert color="secondary">Farm Detail</Alert>
@@ -479,21 +439,29 @@ const ManageFarm = () => {
                               </dl>
                             </div>
                           )}
-                          <div className="form-wizard-actions">
-                            {farmStep > 0 && <Button type="button" color="secondary" outline onClick={goPreviousFarmStep}>Back</Button>}
-                            {farmStep < manageFarmSteps.length - 1 && <Button type="button" color="danger" onClick={goNextFarmStep}>Next</Button>}
+
+                          <div className="form-wizard-actions manage-farm-actions">
+                            {farmStep > 0 && <Button className="manage-farm-back-action" type="button" color="secondary" outline onClick={goPreviousFarmStep}>Back</Button>}
+                            {farmStep < manageFarmSteps.length - 1 && <Button className="manage-farm-next-action" type="button" color="danger" onClick={goNextFarmStep}>Next</Button>}
                             {farmStep === manageFarmSteps.length - 1 && (loading ?
-                              <Button className="btn" color="danger" type="submit" disabled>
+                              <Button className="btn manage-farm-save-action" color="danger" type="submit" disabled>
                                 Please wait...
                                 <span className="spinner-border spinner-border-sm" role="status" aria-hidden="true" />
                               </Button>
                               :
-                              <Button className="btn" color="danger" type="submit">Save</Button>
+                              <Button className="btn manage-farm-save-action" color="danger" type="submit">Save</Button>
                             )}
-                            <Button className="btn" color="secondary" outline type="button" onClick={closeAll}>Cancel</Button>
+                            <Button className="btn manage-farm-cancel-action" color="secondary" outline type="button" onClick={closeAll}>Cancel</Button>
+                            <Button className="btn manage-farm-add-action" color="danger" outline type="button" onClick={() => navigate("/addfarm")}>Add another farm</Button>
                           </div>
                         </Form>
-                      }
+                      ) : (
+                        <div className="record-review-empty">
+                          <strong>No farms saved yet.</strong>
+                          <p>Add the first farm before creating flocks, purchases, sales, reports, and Farmer AI answers.</p>
+                          <Button color="danger" type="button" onClick={() => navigate("/addfarm")}>Add first farm</Button>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </Col>

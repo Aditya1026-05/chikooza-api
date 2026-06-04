@@ -973,6 +973,18 @@ input[type=number]::-webkit-inner-spin-button,
   margin-top: 1rem;
 }
 
+.manage-farm-selector {
+  margin-bottom: 1rem;
+}
+
+.manage-farm-actions {
+  align-items: center;
+}
+
+.manage-farm-add-action {
+  margin-left: auto;
+}
+
 .form-prerequisite-card,
 .form-helper-panel {
   background: #fff8f4;
@@ -1786,6 +1798,32 @@ input[type=number]::-webkit-inner-spin-button,
   .member-context-grid,
   .form-review-card dl div {
     grid-template-columns: 1fr;
+  }
+
+  .manage-farm-actions {
+    align-items: center;
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 0.5rem;
+  }
+
+  .manage-farm-add-action {
+    margin-left: 0;
+    margin-right: auto;
+    order: 0;
+  }
+
+  .manage-farm-back-action {
+    order: 1;
+  }
+
+  .manage-farm-cancel-action {
+    order: 2;
+  }
+
+  .manage-farm-next-action,
+  .manage-farm-save-action {
+    order: 3;
   }
 
   .member-continue-card {
