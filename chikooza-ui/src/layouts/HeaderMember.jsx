@@ -7,7 +7,6 @@ import {
   NavItem,
   DropdownToggle,
   DropdownMenu,
-  DropdownItem,
   Dropdown,
   Button,
 } from "reactstrap";
@@ -167,9 +166,9 @@ const Header = () => {
             {/*<img src={user1} alt="profile" className="rounded-circle" width="30"></img>*/}
           </DropdownToggle>
           <DropdownMenu end className="member-user-dropdown">
-            <DropdownItem><Link to="/profile" className="link" onClick={toggle}>Profile</Link></DropdownItem>
-            <DropdownItem><Link to="/changepassword" className="link" onClick={toggle}>Change password</Link></DropdownItem>
-            <DropdownItem onClick={logout}>Logout</DropdownItem>
+            <Link to="/profile" className="member-user-dropdown__item" onClick={toggle}>Profile</Link>
+            <Link to="/changepassword" className="member-user-dropdown__item" onClick={toggle}>Change password</Link>
+            <button type="button" className="member-user-dropdown__item member-user-dropdown__item--danger" onClick={logout}>Logout</button>
           </DropdownMenu>
         </Dropdown>
       </Collapse>

@@ -1,8 +1,8 @@
-import { Alert, Row, Col, Card, CardTitle, CardBody, Button, Form, FormGroup, Label } from "reactstrap";
+import { Alert, Row, Col, Button, Form, FormGroup, Label } from "reactstrap";
 import '../../assets/css/header.css';
 import { useState } from "react";
 import { FaLock } from "react-icons/fa";
-import { contentArea, apiPath, getAuthConfig, handleUnauthorized } from "../../Constants";
+import { apiPath, getAuthConfig, handleUnauthorized } from "../../Constants";
 import axios from 'axios';
 import { useNavigate } from "react-router-dom";
 import Modal from 'react-bootstrap/Modal';
@@ -19,26 +19,21 @@ const ChangePassword = () => {
   let change = (e) => {
     e.preventDefault();
     setLoading(false)
-    if (addData.currentpassword === '') {
-      // U: Replaced direct error-state mutation with an immutable update.
-      // setaddDataError(addDataError.currentpassword = 'Current password is required');
-      setaddDataError({ ...addDataError, currentpassword: 'Current password is required' });
-    }
-    if (addData.currentpassword.length > 30) {
-      // U: Replaced direct error-state mutation with an immutable update.
-      // setaddDataError(addDataError.currentpassword = "Ensure this field has no more than 30 characters");
-      setaddDataError({ ...addDataError, currentpassword: "Ensure this field has no more than 30 characters" });
-    }
-    if (addData.npassword === '') {
-      // U: Replaced direct error-state mutation with an immutable update.
-      // setaddDataError(addDataError.npassword = 'New password is required');
-      setaddDataError({ ...addDataError, npassword: 'New password is required' });
-    }
-    if ((addData.cpassword === '') || (addData.npassword !== addData.cpassword)) {
-      setaddDataError({ ...addDataError, cpassword: 'Confirm password is required or password and confirm Password does not match' });
-    }
-    console.log(addDataError.currentpassword, addData.npassword, addData.cpassword, "0002");
-    if (!((addData.currentpassword === '') || (addData.npassword === '') || (addData.cpassword === '') || (addData.npassword !== addData.cpassword))) {
+    const nextError = {
+      currentpassword: addData.currentpassword === ''
+        ? 'Current password is required'
+        : addData.currentpassword.length > 30
+          ? 'Ensure this field has no more than 30 characters'
+          : '',
+      npassword: addData.npassword === '' ? 'New password is required' : '',
+      cpassword: addData.cpassword === ''
+        ? 'Confirm password is required'
+        : addData.npassword !== addData.cpassword
+          ? 'Password and confirm password do not match'
+          : '',
+    };
+    setaddDataError(nextError);
+    if (!nextError.currentpassword && !nextError.npassword && !nextError.cpassword) {
       setLoading(true)
       let user = {
         current_password: addData.currentpassword,
@@ -100,6 +95,7 @@ const ChangePassword = () => {
     setAddData({
       ...addData, currentpassword: '', npassword: '', cpassword: ''
     })
+    setaddDataError({ currentpassword: '', npassword: '', cpassword: '' });
     setErr("")
 
   }
@@ -117,60 +113,53 @@ const ChangePassword = () => {
         </Modal.Footer>
       </Modal>
       <Col>
-        <Card >
-          <CardTitle tag="h6" className="border-bottom p-3 mb-0">
-            <i className="bi bi-bell me-2"> </i>
-            Change Password
-          </CardTitle>
-          <CardBody>
-            <Row className="mt-3">
-              <Col sm="12" md={{ offset: 2, size: 8 }}>
-                <div className={contentArea}>
-                  <div className='gridmargin'>
-                    {(err !== '') && <Alert color="info">{err}</Alert>}
-                    <Form onSubmit={change}>
-                      <FormGroup>
-                        <Label for="examplePassword">Current Password</Label>
-                        <div className="input-group input-group">
-                          <span className="input-group-text" style={{ color: '#fd5c63' }} id="basic-addon1"><FaLock></FaLock></span>
-                          <input onChange={inputCurrentPassword} name="currentpassword" value={addData.currentpassword} placeholder="Current Password" type="password" className="form-control" aria-label="Password" aria-describedby="basic-addon1" />
-                        </div>
-                        <small id="passwordHelp" className="text-danger">{addDataError.currentpassword}</small>
-                      </FormGroup>
-                      <FormGroup>
-                        <Label for="examplePassword">New Password</Label>
-                        <div className="input-group input-group">
-                          <span className="input-group-text" style={{ color: '#fd5c63' }} id="basic-addon1"><FaLock></FaLock></span>
-                          <input onChange={inputNPassword} value={addData.npassword} name="npassword" placeholder="New Password" type="password" className="form-control" aria-label="Password" aria-describedby="basic-addon1" />
-                        </div>
-                        <small id="passwordHelp" className="text-danger">{addDataError.npassword}</small>
-                      </FormGroup>
-                      <FormGroup>
-                        <Label for="exampleConfirmPassword">Confirm Password</Label>
-                        <div className="input-group input-group">
-                          <span className="input-group-text" style={{ color: '#fd5c63' }} id="basic-addon1"><FaLock></FaLock></span>
-                          <input onChange={inputCPassword} value={addData.cpassword} name="cpassword" placeholder="Confirm Password" type="password" className="form-control" aria-label="cpassword" aria-describedby="basic-addon1" />
-                        </div>
-                        <small id="passwordHelp" className="text-danger">{addDataError.cpassword}</small>
-                      </FormGroup>
-                      <div className="button-group">
-                        {loading ?
-                          <Button className="btn" color="danger" type="submit" disabled  >
-                            Please wait...
-                            <span className="spinner-border spinner-border-sm" role="status" aria-hidden="true" />
-                          </Button>
-                          :
-                          <Button className="btn" color="danger" type="submit">Save</Button>
-                        }
-                        <Button color="warning" type="button" className="text-black" onClick={closeAll}>Cancel</Button>
-                      </div>
-                    </Form>
-                  </div>
+        <section className="account-settings-page">
+          <div className="account-settings-card">
+            <div className="account-settings-header">
+              <span>Account security</span>
+              <h1>Change password</h1>
+              <p>Use a password only you know. After changing it, continue using the same farmer workspace.</p>
+            </div>
+            {(err !== '') && <Alert color="info">{err}</Alert>}
+            <Form onSubmit={change} className="account-settings-form">
+              <FormGroup>
+                <Label for="currentPassword">Current password</Label>
+                <div className="account-password-input">
+                  <span><FaLock /></span>
+                  <input id="currentPassword" onChange={inputCurrentPassword} name="currentpassword" value={addData.currentpassword} placeholder="Current password" type="password" className="form-control" />
                 </div>
-              </Col>
-            </Row>
-          </CardBody>
-        </Card>
+                <small className="text-danger">{addDataError.currentpassword}</small>
+              </FormGroup>
+              <FormGroup>
+                <Label for="newPassword">New password</Label>
+                <div className="account-password-input">
+                  <span><FaLock /></span>
+                  <input id="newPassword" onChange={inputNPassword} value={addData.npassword} name="npassword" placeholder="New password" type="password" className="form-control" />
+                </div>
+                <small className="text-danger">{addDataError.npassword}</small>
+              </FormGroup>
+              <FormGroup>
+                <Label for="confirmPassword">Confirm password</Label>
+                <div className="account-password-input">
+                  <span><FaLock /></span>
+                  <input id="confirmPassword" onChange={inputCPassword} value={addData.cpassword} name="cpassword" placeholder="Confirm password" type="password" className="form-control" />
+                </div>
+                <small className="text-danger">{addDataError.cpassword}</small>
+              </FormGroup>
+              <div className="form-wizard-actions">
+                {loading ?
+                  <Button className="btn" color="danger" type="submit" disabled>
+                    Please wait...
+                    <span className="spinner-border spinner-border-sm" role="status" aria-hidden="true" />
+                  </Button>
+                  :
+                  <Button className="btn" color="danger" type="submit">Save</Button>
+                }
+                <Button color="secondary" type="button" onClick={closeAll}>Cancel</Button>
+              </div>
+            </Form>
+          </div>
+        </section>
       </Col>
     </Row>
   );

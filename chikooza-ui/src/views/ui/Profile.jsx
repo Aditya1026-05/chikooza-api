@@ -1,10 +1,10 @@
 // U: OLD unused reactstrap imports kept this screen noisy during builds.
 // import { Table, Input, FormText, Nav, NavItem } from "reactstrap";
-import { Alert, Row, Col, Card, CardTitle, CardBody, Button, Form, FormGroup, Label } from "reactstrap";
+import { Alert, Row, Col, Button, Form, FormGroup, Label } from "reactstrap";
 import '../../assets/css/header.css';
 import { Link } from "react-router-dom";
 import { useState, useEffect } from "react";
-import { contentArea, apiPath, getAuthConfig, handleUnauthorized } from "../../Constants";
+import { apiPath, getAuthConfig, handleUnauthorized } from "../../Constants";
 import axios from 'axios';
 import { useNavigate } from "react-router-dom";
 import Modal from 'react-bootstrap/Modal';
@@ -98,69 +98,53 @@ const Profile = () => {
         </Modal.Footer>
       </Modal>
       <Col>
-        <Card >
-          <CardTitle tag="h6" className="border-bottom p-3 mb-0">
-            <i className="bi bi-bell me-2"> </i>
-            User Profile
-          </CardTitle>
-          <CardBody>
-            <Row className="mt-3">
-              <Col sm="12" md={{ offset: 2, size: 8 }}>
-                <div className={contentArea}>
-                  <div className='gridmargin'>
-                    {/* U: OLD success/error alert was fully commented out, leaving err state unused. */}
-                    {(err !== '' && !show) && <Alert color="danger">{err}</Alert>}
-                    <Form onSubmit={update}>
-                      <FormGroup >
-                        <Row >
-                          <Label for="exampleEmail">Mobile No.</Label>
-                          <div className="input-group input-group col-6">
-                            <input name="mobile" value={data.mobile_number} className="form-control ml-1" aria-label="Username" aria-describedby="basic-addon1" disabled />
-                          </div>
-                          <div className="button-group col-6">
-                            <Link to="/updatemobile" ><Button className="btn " color="danger">Update Mobile No.</Button></Link>
-                          </div>
-                        </Row>
-                      </FormGroup>
-                      <FormGroup>
-                        <Label for="exampleEmail">Username</Label>
-                        <div className="input-group input-group">
-                          <input name="username" value={data.username} className="form-control " aria-label="Username" aria-describedby="basic-addon1" disabled />
-                        </div>
-                      </FormGroup>
-                      <FormGroup>
-                        <Label for="exampleEmail">Name</Label>
-                        <div className="input-group input-group">
-                          <input name="name" placeholder="Name" onChange={inputValue} value={data.name} className="form-control" aria-label="Username" aria-describedby="basic-addon1" />
-                        </div>
-                        <small id="passwordHelp" className="text-danger">{error.name}</small>
-                      </FormGroup>
-                      <FormGroup>
-                        <Label for="exampleEmail">Email</Label>
-                        <div className="input-group input-group">
-                          <input name="email" placeholder="Email" onChange={inputValue} value={data.email} type="email" className="form-control" aria-label="Username" aria-describedby="basic-addon1" />
-                        </div>
-                        <small id="passwordHelp" className="text-danger">{error.email}</small>
-                      </FormGroup>
-                      <div className="button-group">
-                        {loading ?
-                          <Button className="btn" color="danger" type="submit" disabled  >
-                            Please wait...
-                            <span className="spinner-border spinner-border-sm" role="status" aria-hidden="true" />
-                          </Button>
-                          :
-                          <Button className="btn" color="danger" type="submit">Save</Button>
-                        }
-                        <Button color="warning" type="button" className="text-black" onClick={closeAll}>Cancel</Button>
-                      </div>
-                    </Form>
+        <section className="account-settings-page">
+          <div className="account-settings-card">
+            <div className="account-settings-header">
+              <span>Account settings</span>
+              <h1>User profile</h1>
+              <p>Manage your account information.</p>
+            </div>
+            {/* U: OLD success/error alert was fully commented out, leaving err state unused. */}
+            {(err !== '' && !show) && <Alert color="danger">{err}</Alert>}
+            <Form onSubmit={update} className="account-settings-form">
+              <FormGroup>
+                <div className="account-field-row">
+                  <div>
+                    <Label for="mobileNumber">Mobile number</Label>
+                    <input id="mobileNumber" name="mobile" value={data.mobile_number} className="form-control" disabled />
                   </div>
+                  <Link to="/updatemobile" className="account-inline-action">Update mobile no.</Link>
                 </div>
-              </Col>
-            </Row>
-
-          </CardBody>
-        </Card>
+              </FormGroup>
+              <FormGroup>
+                <Label for="username">Username</Label>
+                <input id="username" name="username" value={data.username} className="form-control" disabled />
+              </FormGroup>
+              <FormGroup>
+                <Label for="profileName">Name</Label>
+                <input id="profileName" name="name" placeholder="Name" onChange={inputValue} value={data.name} className="form-control" />
+                <small className="text-danger">{error.name}</small>
+              </FormGroup>
+              <FormGroup>
+                <Label for="profileEmail">Email</Label>
+                <input id="profileEmail" name="email" placeholder="Email" onChange={inputValue} value={data.email} type="email" className="form-control" />
+                <small className="text-danger">{error.email}</small>
+              </FormGroup>
+              <div className="form-wizard-actions">
+                {loading ?
+                  <Button className="btn" color="danger" type="submit" disabled>
+                    Please wait...
+                    <span className="spinner-border spinner-border-sm" role="status" aria-hidden="true" />
+                  </Button>
+                  :
+                  <Button className="btn" color="danger" type="submit">Save</Button>
+                }
+                <Button color="secondary" type="button" onClick={closeAll}>Cancel</Button>
+              </div>
+            </Form>
+          </div>
+        </section>
       </Col>
     </Row>
   );

@@ -108,6 +108,37 @@
   z-index: 1070;
 }
 
+.member-user-dropdown .dropdown-item {
+  display: none;
+}
+
+.member-user-dropdown__item {
+  background: transparent;
+  border: 0;
+  border-radius: 0.8rem;
+  color: var(--ck-ink) !important;
+  display: block;
+  font-size: 0.96rem;
+  font-weight: 750;
+  line-height: 1.25;
+  margin: 0;
+  padding: 0.72rem 0.85rem;
+  text-align: left;
+  text-decoration: none;
+  width: 100%;
+}
+
+.member-user-dropdown__item:hover,
+.member-user-dropdown__item:focus {
+  background: rgba(180, 35, 24, 0.08);
+  color: var(--ck-primary) !important;
+  outline: none;
+}
+
+.member-user-dropdown__item--danger {
+  color: #7f1d1d !important;
+}
+
 .chikooza-brand {
   align-items: center;
   color: var(--ck-forest) !important;
@@ -1116,6 +1147,150 @@ input[type=number]::-webkit-inner-spin-button,
   color: #ffffff;
 }
 
+.account-settings-page {
+  padding: clamp(1rem, 3vw, 2rem);
+}
+
+.account-settings-card {
+  background: rgba(255, 253, 251, 0.96);
+  border: 1px solid rgba(127, 29, 29, 0.12);
+  border-radius: 1.45rem;
+  box-shadow: 0 22px 62px rgba(65, 16, 13, 0.08);
+  margin: 0 auto;
+  max-width: 52rem;
+  padding: clamp(1.15rem, 3vw, 2rem);
+}
+
+.account-settings-header {
+  border-bottom: 1px solid rgba(127, 29, 29, 0.12);
+  margin-bottom: 1.25rem;
+  padding-bottom: 1rem;
+}
+
+.account-settings-header span {
+  color: #b42318;
+  display: block;
+  font-size: 0.76rem;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  margin-bottom: 0.35rem;
+  text-transform: uppercase;
+}
+
+.account-settings-header h1 {
+  color: var(--ck-ink);
+  font-size: clamp(1.45rem, 2.5vw, 2.15rem);
+  font-weight: 950;
+  line-height: 1.08;
+  margin: 0;
+}
+
+.account-settings-header p {
+  color: var(--ck-muted);
+  line-height: 1.6;
+  margin: 0.55rem 0 0;
+  max-width: 42rem;
+}
+
+.account-settings-form .form-group {
+  margin-bottom: 1rem;
+}
+
+.account-settings-form label {
+  color: var(--ck-ink);
+  font-weight: 850;
+  margin-bottom: 0.45rem;
+}
+
+.account-settings-form .form-control {
+  background-color: #fffdfb;
+  border: 1px solid rgba(127, 29, 29, 0.16);
+  border-radius: 0.95rem;
+  color: var(--ck-ink);
+  min-height: 48px;
+  padding: 0.72rem 0.95rem;
+}
+
+.account-settings-form .form-control:disabled {
+  background: #fff7f2;
+  color: #6f504a;
+}
+
+.account-settings-form .form-control:focus {
+  border-color: rgba(180, 35, 24, 0.48);
+  box-shadow: 0 0 0 0.2rem rgba(180, 35, 24, 0.12);
+}
+
+.account-field-row {
+  align-items: end;
+  display: grid;
+  gap: 0.9rem;
+  grid-template-columns: 1fr auto;
+}
+
+.account-inline-action {
+  align-items: center;
+  background: #b42318;
+  border-radius: 999px;
+  color: #fff !important;
+  display: inline-flex;
+  font-weight: 850;
+  justify-content: center;
+  min-height: 48px;
+  padding: 0.72rem 1.05rem;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.account-inline-action:hover,
+.account-inline-action:focus {
+  background: #8f231b;
+  color: #fff !important;
+}
+
+.account-password-input {
+  align-items: stretch;
+  display: flex;
+}
+
+.account-password-input span {
+  align-items: center;
+  background: #fff4ee;
+  border: 1px solid rgba(127, 29, 29, 0.16);
+  border-right: 0;
+  border-radius: 0.95rem 0 0 0.95rem;
+  color: #b42318;
+  display: inline-flex;
+  justify-content: center;
+  min-width: 48px;
+}
+
+.account-password-input .form-control {
+  border-radius: 0 0.95rem 0.95rem 0;
+}
+
+.account-otp-modal .modal-content {
+  border: 1px solid rgba(127, 29, 29, 0.14);
+  border-radius: 1.25rem;
+  box-shadow: 0 24px 64px rgba(65, 16, 13, 0.16);
+  overflow: hidden;
+}
+
+.account-otp-modal .modal-header,
+.account-otp-modal .modal-footer {
+  border-color: rgba(127, 29, 29, 0.1);
+  padding: 1rem 1.25rem;
+}
+
+.account-otp-modal .modal-title {
+  color: var(--ck-ink);
+  font-weight: 900;
+}
+
+.account-otp-modal .modal-body {
+  padding: 1.25rem;
+}
+
 .member-dashboard {
   display: grid;
   gap: clamp(1rem, 2vw, 1.4rem);
@@ -1876,8 +2051,13 @@ input[type=number]::-webkit-inner-spin-button,
   .form-stepper,
   .member-workflow-steps,
   .member-context-grid,
+  .account-field-row,
   .form-review-card dl div {
     grid-template-columns: 1fr;
+  }
+
+  .account-inline-action {
+    width: 100%;
   }
 
   .manage-farm-actions,
