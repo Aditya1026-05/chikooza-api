@@ -51,8 +51,7 @@ const AddFlock = () => {
     let [farms, setFarms] = useState([]);
     let [breeds, setBreeds] = useState([]);
     let [intgcom, setIntgcom] = useState([]);
-    const [existingFlocks, setExistingFlocks] = useState([]);
-    const [flockReviewLoading, setFlockReviewLoading] = useState(false);
+    let [addData, setAddData] = useState(readFlockDraft);
 
     var hatchdate = moment();
     var currentDate = hatchdate.format('YYYY-MM-DD');
@@ -64,13 +63,19 @@ const AddFlock = () => {
             if (res.data.results.length === 0) {
                 setFarms([{ public_id: 0, name: 'No farm available' }]);
             } else {
-                setFarms(res.data.results);
+                const farmResults = res.data.results;
+                const draftHasSelectedFarm = addData.farm_public_id && String(addData.farm_public_id) !== "0";
+                const activeFarm = farmResults.find((item) => String(item.public_id) === String(addData.farm_public_id)) || farmResults[farmResults.length - 1];
+                setFarms(farmResults);
+                if (activeFarm && !draftHasSelectedFarm) {
+                    setAddData((current) => ({ ...current, farm_public_id: activeFarm.public_id }));
+                }
             }
         }).catch((err) => {
             setFarms([{ public_id: 0, name: 'No farm available' }]);
             handleUnauthorized(err, navigate);
         });
-    }, [navigate])
+    }, [addData.farm_public_id, navigate])
     useEffect(() => {
         let url = `${apiPath}breeds/`;
         // U: OLD: config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
@@ -90,7 +95,6 @@ const AddFlock = () => {
             handleUnauthorized(err, navigate);
         });
     }, [navigate])
-    let [addData, setAddData] = useState(readFlockDraft);
     let [hatch_dateerr, setHatch_dateerr] = useState(null);
     let [flock_sizeerr, setFlock_sizeerr] = useState(null);
     let [flock_nameerr, setFlock_nameerr] = useState(null);
@@ -113,36 +117,6 @@ const AddFlock = () => {
 
     const hasFarmPrerequisite = farms.some((farm) => String(farm.public_id) !== "0");
     const hasSelectedFarm = addData.farm_public_id && String(addData.farm_public_id) !== "0";
-    const selectedFarmRecord = farms.find((farm) => String(farm.public_id) === String(addData.farm_public_id));
-
-    const loadExistingFlocks = (farmPublicId) => {
-        if (!farmPublicId || String(farmPublicId) === "0") {
-            setExistingFlocks([]);
-            return;
-        }
-
-        setFlockReviewLoading(true);
-        axios.get(`${apiPath}flocks/${farmPublicId}/`, getAuthConfig()).then((res) => {
-            if (res.data.results.total_records === 0) {
-                setExistingFlocks([]);
-            } else {
-                setExistingFlocks(res.data.results.flock_list || []);
-            }
-        }).catch((err) => {
-            setExistingFlocks([]);
-            handleUnauthorized(err, navigate);
-        }).finally(() => {
-            setFlockReviewLoading(false);
-        });
-    };
-
-    useEffect(() => {
-        // U: NEW: if a saved draft already has a farm selected, show the saved
-        // U: flocks under that farm before the farmer creates another one.
-        if (hasSelectedFarm) {
-            loadExistingFlocks(addData.farm_public_id);
-        }
-    }, [navigate]);
 
     useEffect(() => {
         if (String(addData.integration) === "1") {
@@ -218,7 +192,6 @@ const AddFlock = () => {
         setAddData({ ...addData, farm_public_id: e.target.value });
         // U: OLD: e.target.value === 0 compared a string to a number.
         e.target.value === "0" ? setFarm_public_iderr('Please select farm') : setFarm_public_iderr('');
-        loadExistingFlocks(e.target.value);
     }
     let changeBreed = (e) => {
         setAddData({ ...addData, breed_public_id: e.target.value });
@@ -296,6 +269,22 @@ const AddFlock = () => {
             return;
         }
         setFlockStep((currentStep) => Math.min(currentStep + 1, flockSteps.length - 1));
+    };
+    const goToFlockStep = (targetStep) => {
+        if (targetStep <= flockStep) {
+            setFlockStep(targetStep);
+            return;
+        }
+
+        // U: NEW: farmers can go back freely, but cannot jump forward until
+        // U: each earlier flock step is complete and valid.
+        const validators = [validateFarmStep, validateBatchStep, validateSourceStep, validateSystemsStep];
+        for (let stepIndex = flockStep; stepIndex < targetStep; stepIndex += 1) {
+            if (validators[stepIndex] && !validators[stepIndex]()) {
+                return;
+            }
+        }
+        setFlockStep(targetStep);
     };
     const goPreviousStep = () => {
         setFlockStep((currentStep) => Math.max(currentStep - 1, 0));
@@ -377,20 +366,24 @@ const AddFlock = () => {
                                             </div>
                                         )}
                                         <Form onSubmit={save}>
-                                            <div className="form-stepper" aria-label="Flock setup steps">
-                                                {flockSteps.map((step, index) => (
-                                                    <button
-                                                        key={step.title}
-                                                        type="button"
-                                                        className={index === flockStep ? "is-active" : index < flockStep ? "is-complete" : ""}
-                                                        onClick={() => setFlockStep(index)}
-                                                    >
-                                                        <span>{index + 1}</span>
-                                                        <strong>{step.title}</strong>
-                                                        <small>{step.helper}</small>
-                                                    </button>
-                                                ))}
-                                            </div>
+                                            {flockStep > 0 && (
+                                                <div className="form-stepper form-stepper--four" aria-label="Flock setup steps">
+                                                    {flockSteps.slice(1).map((step, index) => {
+                                                        const actualStep = index + 1;
+                                                        return (
+                                                            <button
+                                                                key={step.title}
+                                                                type="button"
+                                                                className={actualStep === flockStep ? "is-active" : actualStep < flockStep ? "is-complete" : ""}
+                                                                onClick={() => goToFlockStep(actualStep)}
+                                                            >
+                                                                <span>{index + 1}</span>
+                                                                <strong>{step.title}</strong>
+                                                            </button>
+                                                        );
+                                                    })}
+                                                </div>
+                                            )}
                                             {flockStep === 0 && (
                                                 <>
                                                     <FormGroup>
@@ -409,31 +402,6 @@ const AddFlock = () => {
                                                         </div>
                                                         <small className="text-danger">{farm_public_iderr}</small>
                                                     </FormGroup>
-                                                    {hasSelectedFarm && (
-                                                        <>
-                                                            <div className="record-review-toolbar record-review-toolbar--compact">
-                                                                <div>
-                                                                    <span>Existing flocks</span>
-                                                                    <strong>{selectedFarmRecord?.name || "Selected farm"}</strong>
-                                                                    <p>{flockReviewLoading ? "Checking saved flocks..." : `${existingFlocks.length} flock${existingFlocks.length === 1 ? "" : "s"} already saved. Continue below only if you are adding a new batch.`}</p>
-                                                                </div>
-                                                                {existingFlocks.length > 0 && (
-                                                                    <Button color="danger" outline type="button" onClick={() => navigate("/manageflock", { state: { farmPublicId: addData.farm_public_id } })}>Review existing</Button>
-                                                                )}
-                                                            </div>
-                                                            {!flockReviewLoading && existingFlocks.length > 0 && (
-                                                                <div className="record-summary-strip">
-                                                                    <strong>Latest saved:</strong> {existingFlocks[0]?.flock_name || "Existing flock"}
-                                                                    <div className="record-summary-chips">
-                                                                        {existingFlocks.slice(0, 3).map((item) => (
-                                                                            <span key={item.flock_public_id}>{item.flock_name}</span>
-                                                                        ))}
-                                                                        {existingFlocks.length > 3 && <span>+{existingFlocks.length - 3} more</span>}
-                                                                    </div>
-                                                                </div>
-                                                            )}
-                                                        </>
-                                                    )}
                                                 </>
                                             )}
                                             {flockStep === 1 && (

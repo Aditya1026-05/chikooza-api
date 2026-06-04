@@ -918,6 +918,15 @@ input[type=number]::-webkit-inner-spin-button,
   color: #ffffff;
 }
 
+.form-stepper--four {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.form-stepper--four button {
+  min-height: 74px;
+  padding: 0.7rem 0.8rem;
+}
+
 .form-review-card {
   background: #fff8f4;
   border: 1px solid #f0ddd8;
