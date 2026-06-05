@@ -46,7 +46,7 @@ const Footer = () => {
           </div>
         </div>
         <div className="chikooza-footer-bottom">
-          <p>Copyright © 2026 chikooza.com. All rights reserved.</p>
+          <p>© 2027 Chikooza. All rights reserved.</p>
           <span>Built for broiler farm operations.</span>
         </div>
       </footer>

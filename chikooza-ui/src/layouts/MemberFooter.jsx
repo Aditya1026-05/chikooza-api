@@ -46,9 +46,9 @@ const MemberFooter = () => {
         </div>
       </div>
 
-      <div className="chikooza-footer-bottom">
-        <p>Farmer workspace. Your records stay scoped to your account.</p>
-        <span>About and Contact open member-side pages without adding them to the header.</span>
+      <div className="chikooza-footer-bottom chikooza-member-footer-bottom">
+        <p>© 2027 Chikooza. All rights reserved.</p>
+        <span>Farm records, reports, and AI in one workspace.</span>
       </div>
     </footer>
   );
