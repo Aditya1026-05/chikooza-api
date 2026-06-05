@@ -1,5 +1,7 @@
 // MV-2025-07-05-<2>  STARTS
 import { createChatBotMessage } from 'react-chatbot-kit';
+import React from 'react';
+import PublicAnswerMessage from './PublicAnswerMessage';
 
 const config = {
   // U: OLD: generic greeting did not explain what the public bot can do.
@@ -7,6 +9,9 @@ const config = {
   initialMessages: [createChatBotMessage("Hi, I am Chikbot. Ask me about Chikooza, poultry farm setup, broiler management, feed, mortality, FCR, or how to get started.")],
   botName: "Chikbot",
   customComponents: {},
+  customMessages: {
+    publicAnswer: (props) => React.createElement(PublicAnswerMessage, props),
+  },
   widgets: [],
 };
 

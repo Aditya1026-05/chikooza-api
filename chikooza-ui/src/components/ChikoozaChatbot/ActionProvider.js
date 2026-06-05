@@ -8,24 +8,11 @@ const getChatApiUrl = () => {
   return `${baseUrl.replace(/\/?$/, '/')}chat/`;
 };
 
-const formatSources = (sources = []) => {
-  const labels = sources
-    .map((source) => {
-      if (!source?.source) {
-        return '';
-      }
-      return source.page ? `${source.source} p.${source.page}` : source.source;
-    })
-    .filter(Boolean);
-
-  const uniqueLabels = [...new Set(labels)].slice(0, 3);
-  return uniqueLabels.length ? `\n\nSources: ${uniqueLabels.join('; ')}` : '';
-};
-
 class ActionProvider {
-  constructor(createChatBotMessage, setStateFunc) {
+  constructor(createChatBotMessage, setStateFunc, createClientMessage, stateRef, createCustomMessage) {
     this.createChatBotMessage = createChatBotMessage;
     this.setState = setStateFunc;
+    this.createCustomMessage = createCustomMessage;
   }
 
   handleUserMessage = async (message) => {
@@ -59,7 +46,16 @@ class ActionProvider {
       }
 
       const answer = data.response || data.message || "No response received.";
-      const botMessage = this.createChatBotMessage(`${answer}${formatSources(data.sources)}`);
+      const payload = {
+        answer,
+        display: data.display || {},
+        sources: data.sources || [],
+        provider: data.provider,
+        fallback: data.fallback
+      };
+      const botMessage = this.createCustomMessage
+        ? this.createCustomMessage(answer, 'publicAnswer', { payload })
+        : this.createChatBotMessage(answer);
       this.updateChatbotState(botMessage);
     } catch (error) {
       // U: OLD: every backend error displayed the same generic message.

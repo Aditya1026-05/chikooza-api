@@ -42,6 +42,9 @@ def chat_api(request):
             return JsonResponse({"error": "Invalid JSON body"}, status=400)
 
         query_text = data.get("query", "").strip()
+        chat_history = data.get("history", [])
+        if not isinstance(chat_history, list):
+            chat_history = []
         prompt_type = data.get("prompt_type", "qa")
         # U: OLD: /chat/ only supported the legacy poultry RAG assistant.
         # U: NEW: keep legacy RAG mode available, and add a public site mode
@@ -62,7 +65,7 @@ def chat_api(request):
 
         if chat_mode in {"site", "public", "public_site"}:
             assistant = get_public_site_assistant()
-            site_result = assistant.answer(clean_query)
+            site_result = assistant.answer(clean_query, history=chat_history)
             result = {
                 "result": site_result.result,
                 "source_documents": [],
@@ -72,6 +75,7 @@ def chat_api(request):
                 "provider": site_result.provider,
                 "model": site_result.model,
                 "fallback": site_result.fallback,
+                "display": site_result.display,
             }
         elif chat_mode == "rag":
             # OLD: result = rag_service.query(clean_query, prompt_type)
@@ -120,6 +124,7 @@ def chat_api(request):
             "model": result.get("model", "unknown"),
             "fallback": result.get("fallback", False),
             "sources": result.get("sources", []),
+            "display": result.get("display", {}),
         }
 
         return JsonResponse(
@@ -132,9 +137,12 @@ def chat_api(request):
                 "model": result.get("model", "unknown"),
                 "fallback": result.get("fallback", False),
                 "sources": result.get("sources", []),
+                "display": result.get("display", {}),
                 # 'context': serializable_context
             }
         )
+    except ValueError as e:
+        return JsonResponse({"error": str(e)}, status=400)
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=500)
 
