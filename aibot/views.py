@@ -50,6 +50,7 @@ class AIChatViewSet(viewsets.ViewSet):
                 "raw_query": raw_query,
                 "cleaned_query": query,
                 "query_id": query_id,
+                "active_context": self._active_context_from_request(request),
             }
 
             # U: OLD services kept for reference/rollback:
@@ -59,7 +60,11 @@ class AIChatViewSet(viewsets.ViewSet):
             # U: into Chikooza and uses request.user as the only tenant source.
             service = ChikoozaModernAgentService(user=request.user)
             history = self._recent_history(request.user)
-            result = service.query(query, history=history)
+            result = service.query(
+                query,
+                history=history,
+                active_context=request.chat_data["active_context"],
+            )
 
             self._log_interaction(request, result)
             self._save_to_db(request, result)
@@ -84,6 +89,7 @@ class AIChatViewSet(viewsets.ViewSet):
                     "route": result.get("route"),
                     "rows": result.get("rows"),
                     "query": result.get("query"),
+                    "display": result.get("display"),
                     "query_id": query_id,
                 },
                 status=status.HTTP_200_OK,
@@ -105,6 +111,16 @@ class AIChatViewSet(viewsets.ViewSet):
             "query_id": request.chat_data["query_id"],
         }
         self.log_handler.log_interaction(log_data)
+
+    def _active_context_from_request(self, request):
+        context = request.data.get("active_context")
+        if not isinstance(context, dict):
+            return {}
+        return {
+            "selected_farm_public_id": context.get("selected_farm_public_id"),
+            "selected_flock_public_id": context.get("selected_flock_public_id"),
+            "source": context.get("source"),
+        }
 
     def _save_to_db(self, request, result):
         try:

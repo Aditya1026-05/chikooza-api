@@ -105,6 +105,7 @@ const ManageFarm = () => {
       data: addData,
       selectedFarmId,
       farmStep,
+      updatedAt: Date.now(),
     }));
   }, [addData, selectedFarmId, farmStep, showForm]);
 

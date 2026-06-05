@@ -122,6 +122,8 @@ const ManageFlock = () => {
             selectedFarmId,
             selectedFlockId,
             selectorStep,
+            updatedAt: Date.now(),
+            source: "flock_daily_data",
         }));
     }, [selectedFarmId, selectedFlockId, selectorStep]);
 

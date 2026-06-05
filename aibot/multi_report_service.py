@@ -5,6 +5,10 @@ from decimal import Decimal
 
 logger = logging.getLogger(__name__)
 
+# U: LEGACY / NOT LIVE: this multi-report helper belongs to the old
+# U: deterministic intent-agent pipeline. The active Farmer AI endpoint now
+# U: uses aibot/llm_sql.py for Groq SQL planning and structured display data.
+
 
 class ChikoozaMultiReportService:
     """

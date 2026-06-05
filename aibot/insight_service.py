@@ -11,6 +11,10 @@ from common.groq_client import GroqAllKeysFailed, GroqChatClient
 
 logger = logging.getLogger(__name__)
 
+# U: LEGACY / NOT LIVE: this insight layer belongs to the old deterministic
+# U: intent-agent pipeline. The active Farmer AI endpoint now uses
+# U: aibot/llm_sql.py with Groq-generated SQL plans and tenant-safe execution.
+
 
 class ChikoozaFarmInsightService:
     """

@@ -28,6 +28,7 @@ from .modern_services import (
     ChikoozaQueryRouter,
     ChikoozaTextToSQLService,
     TenantSafeSQLExecutor,
+    normalize_ai_query,
 )
 from .views import AIChatViewSet
 
@@ -85,6 +86,19 @@ class ChikoozaModernAgentSecurityTests(SimpleTestCase):
 
         self.assertEqual(route, CONVERSATION)
         self.assertEqual(casual_route, CONVERSATION)
+
+    def test_router_treats_closing_phrases_as_conversation(self):
+        router = ChikoozaQueryRouter()
+
+        for question in ("okay thanks", "nothing more", "no more", "huh?"):
+            with self.subTest(question=question):
+                self.assertEqual(router.route(question, user_id=7), CONVERSATION)
+
+    def test_query_normalizer_corrects_common_farmer_typos(self):
+        self.assertEqual(
+            normalize_ai_query("breed of the first glock"),
+            "breed of the first flock",
+        )
 
     def test_router_allows_conversational_farm_insight_questions(self):
         router = ChikoozaQueryRouter()
@@ -1080,7 +1094,7 @@ class FakeEntityResolver:
             context="No fake entity context."
         )
 
-    def resolve(self, question, history=None):
+    def resolve(self, question, history=None, active_context=None):
         return self.resolution
 
 
@@ -1310,6 +1324,69 @@ class ChikoozaLLMSQLServiceTests(SimpleTestCase):
         self.assertIn("Last referenced flock from recent chat", result.context)
         self.assertIn("flock_id=77", result.context)
 
+    def test_llm_entity_resolver_uses_active_flock_context(self):
+        farm = SimpleNamespace(id=42, public_id=9001, name="Red Farm")
+        flock = SimpleNamespace(
+            id=77,
+            public_id=5001,
+            name="Alpha Batch",
+            farm=farm,
+        )
+        resolver = ChikoozaEntityResolver(self.user)
+        resolver._farms = lambda: [farm]
+        resolver._flocks = lambda: [flock]
+
+        result = resolver.resolve(
+            "breed of the active flock",
+            active_context={
+                "selected_farm_public_id": "9001",
+                "selected_flock_public_id": "5001",
+            },
+        )
+
+        self.assertIn("Active app flock context", result.context)
+        self.assertIn("Resolved flock mention", result.context)
+        self.assertIn("flock_id=77", result.context)
+
+    def test_llm_service_passes_active_context_to_entity_resolver(self):
+        class CapturingEntityResolver(FakeEntityResolver):
+            def __init__(self):
+                super().__init__()
+                self.active_context = None
+
+            def resolve(self, question, history=None, active_context=None):
+                self.active_context = active_context
+                return self.resolution
+
+        resolver = CapturingEntityResolver()
+        client = FakeGroqClient(
+            [
+                (
+                    '{"sql": "SELECT flock_name, breed_name FROM ai_farm_flock_data_view '
+                    'WHERE owner_id = %s AND flock_id = %s LIMIT 1", '
+                    f'"params": ["{OWNER_PARAM}", 77], '
+                    '"metric": "flock_breed", "result_type": "summary"}'
+                ),
+                "Alpha Batch is Hubbard.",
+            ]
+        )
+        service = ChikoozaLLMTextToSQLService(
+            user=self.user,
+            groq_client=client,
+            entity_resolver=resolver,
+        )
+        service.executor = SimpleNamespace(
+            execute=lambda plan: [{"flock_name": "Alpha Batch", "breed_name": "Hubbard"}]
+        )
+
+        result = service.answer(
+            "breed of the active flock",
+            active_context={"selected_flock_public_id": "5001"},
+        )
+
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(resolver.active_context, {"selected_flock_public_id": "5001"})
+
     def test_llm_service_uses_last_flock_context_for_daily_data_followup(self):
         client = FakeGroqClient(
             [
@@ -1407,6 +1484,44 @@ class ChikoozaLLMSQLServiceTests(SimpleTestCase):
         self.assertEqual(result["metric"], "flock_count_by_farm")
         self.assertIn("GROUP BY farm_id, farm_name", result["query"])
         self.assertEqual(result["answer"], "Red Farm has 2 flocks. Blue Farm has 1 flock.")
+
+    def test_llm_service_returns_display_payload_for_flock_rows(self):
+        client = FakeGroqClient(
+            [
+                (
+                    '{"sql": "SELECT flock_id, flock_name, farm_name, hatch_date, '
+                    'flock_size, actual_birds, breed_name FROM ai_farm_flock_data_view '
+                    'WHERE owner_id = %s AND flock_id IS NOT NULL LIMIT 100", '
+                    f'"params": ["{OWNER_PARAM}"], '
+                    '"metric": "flock_list", "result_type": "table"}'
+                ),
+                "You have one flock.",
+            ]
+        )
+        service = ChikoozaLLMTextToSQLService(
+            user=self.user,
+            groq_client=client,
+            entity_resolver=FakeEntityResolver(),
+        )
+        service.executor = SimpleNamespace(
+            execute=lambda plan: [
+                {
+                    "flock_id": 77,
+                    "flock_name": "Alpha Batch",
+                    "farm_name": "Red Farm",
+                    "hatch_date": "2026-05-01",
+                    "flock_size": 100,
+                    "actual_birds": 95,
+                    "breed_name": "Hubbard",
+                }
+            ]
+        )
+
+        result = service.answer("show all flocks")
+
+        self.assertEqual(result["display"]["type"], "cards")
+        self.assertEqual(result["display"]["cards"][0]["title"], "Alpha Batch")
+        self.assertEqual(result["display"]["cards"][0]["rows"][0]["label"], "Farm")
 
 
 class GroqChatClientTests(SimpleTestCase):

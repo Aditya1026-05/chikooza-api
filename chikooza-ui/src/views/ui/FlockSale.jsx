@@ -220,6 +220,7 @@ const FlockSale = () => {
             data,
             dataPopUp,
             saleStep,
+            updatedAt: Date.now(),
         }));
     }, [data, dataPopUp, saleStep]);
 

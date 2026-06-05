@@ -10,6 +10,10 @@ from common.groq_client import GroqAllKeysFailed, GroqChatClient
 
 logger = logging.getLogger(__name__)
 
+# U: LEGACY / NOT LIVE: this intent classifier belongs to the old deterministic
+# U: Farmer AI pipeline. It remains for tests/reference, while the live endpoint
+# U: routes through aibot/llm_sql.py.
+
 
 ALLOWED_INTENTS = {
     "farm_summary",

@@ -2,6 +2,10 @@ from dataclasses import dataclass
 
 from .intent_classifier import ChikoozaIntent
 
+# U: LEGACY / NOT LIVE: this resolver belongs to the old deterministic
+# U: intent-agent path. The live Groq SQL path uses ChikoozaEntityResolver
+# U: inside aibot/llm_sql.py.
+
 
 @dataclass(frozen=True)
 class ChikoozaEntityResolution:

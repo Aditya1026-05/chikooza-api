@@ -10,6 +10,90 @@ const getAiApiUrl = () => {
   return `${baseUrl.replace(/\/?$/, "/")}ai/`;
 };
 
+const DAILY_SELECTOR_DRAFT_KEY = "chikooza-daily-selector-draft";
+const ACTIVE_CONTEXT_DRAFT_SOURCES = [
+  {
+    key: DAILY_SELECTOR_DRAFT_KEY,
+    source: "daily_selector",
+    farmId: (draft) => draft.selectedFarmId,
+    flockId: (draft) => draft.selectedFlockId,
+  },
+  {
+    key: "chikooza-manage-flock-draft",
+    source: "manage_flock",
+    farmId: (draft) => draft.selectedFarmId,
+    flockId: (draft) => draft.selectedFlockId,
+  },
+  {
+    key: "chikooza-add-purchase-draft",
+    source: "add_purchase",
+    farmId: (draft) => draft.data?.farm_public_id,
+    flockId: (draft) => draft.data?.flock_public_id,
+  },
+  {
+    key: "chikooza-flock-sale-draft",
+    source: "flock_sale",
+    farmId: (draft) => draft.data?.farm,
+    flockId: (draft) => draft.data?.flock,
+  },
+  {
+    key: "chikooza-manage-farm-draft",
+    source: "manage_farm",
+    farmId: (draft) => draft.selectedFarmId || draft.data?.public_id,
+    flockId: () => null,
+  },
+];
+
+const normalizeSelectorId = (value) => {
+  if (value === undefined || value === null || String(value) === "0") {
+    return null;
+  }
+
+  return String(value);
+};
+
+const getActiveAiContext = () => {
+  const candidates = ACTIVE_CONTEXT_DRAFT_SOURCES.map((sourceConfig, index) => {
+    try {
+      const draft = JSON.parse(localStorage.getItem(sourceConfig.key) || "{}");
+      const farmId = normalizeSelectorId(sourceConfig.farmId(draft));
+      const flockId = normalizeSelectorId(sourceConfig.flockId(draft));
+
+      if (!farmId && !flockId) {
+        return null;
+      }
+
+      return {
+        selected_farm_public_id: farmId,
+        selected_flock_public_id: flockId,
+        source: sourceConfig.source,
+        updated_at: Number(draft.updatedAt || 0),
+        priority: index,
+      };
+    } catch {
+      return null;
+    }
+  }).filter(Boolean);
+
+  if (candidates.length > 0) {
+    // U: NEW: use the most recently touched selector so "active/current flock"
+    // U: works after daily data, purchase, sale, or manage screens.
+    candidates.sort((a, b) => (b.updated_at - a.updated_at) || (a.priority - b.priority));
+    const active = candidates[0];
+    return {
+      selected_farm_public_id: active.selected_farm_public_id,
+      selected_flock_public_id: active.selected_flock_public_id,
+      source: active.source,
+    };
+  }
+
+  return {
+    selected_farm_public_id: null,
+    selected_flock_public_id: null,
+    source: "none",
+  };
+};
+
 const initialMessages = [
   {
     id: "intro",
@@ -39,6 +123,79 @@ const formatInlineText = (text) => {
   return text;
 };
 
+const renderList = (items, key) => {
+  return (
+    <ul className="farmer-ai-response-list" key={key}>
+      {items.map((item, index) => (
+        <li key={`${item}-${index}`}>{formatInlineText(item)}</li>
+      ))}
+    </ul>
+  );
+};
+
+const renderDisplayPayload = (display) => {
+  if (!display || typeof display !== "object") {
+    return null;
+  }
+
+  if (display.type === "cards" && Array.isArray(display.cards)) {
+    return (
+      <div className="farmer-ai-display farmer-ai-display-cards">
+        {display.title ? <h3>{display.title}</h3> : null}
+        {display.cards.map((card, cardIndex) => (
+          <article className="farmer-ai-display-card" key={`ai-card-${cardIndex}`}>
+            {card.title ? <strong>{card.title}</strong> : null}
+            {Array.isArray(card.rows) && card.rows.length > 0 ? (
+              <dl>
+                {card.rows.map((row, rowIndex) => (
+                  <div key={`${row.label}-${rowIndex}`}>
+                    <dt>{row.label}</dt>
+                    <dd>{row.value}</dd>
+                  </div>
+                ))}
+              </dl>
+            ) : null}
+          </article>
+        ))}
+      </div>
+    );
+  }
+
+  if (
+    display.type === "table" &&
+    Array.isArray(display.columns) &&
+    Array.isArray(display.rows)
+  ) {
+    return (
+      <div className="farmer-ai-display farmer-ai-display-table">
+        {display.title ? <h3>{display.title}</h3> : null}
+        <div className="farmer-ai-display-table-scroll">
+          <table>
+            <thead>
+              <tr>
+                {display.columns.map((column) => (
+                  <th key={column.key}>{column.label}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {display.rows.map((row, rowIndex) => (
+                <tr key={`ai-row-${rowIndex}`}>
+                  {display.columns.map((column) => (
+                    <td key={`${column.key}-${rowIndex}`}>{row[column.key]}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  }
+
+  return null;
+};
+
 const renderFormattedMessage = (text) => {
   const lines = String(text || "")
     .split(/\r?\n/)
@@ -57,18 +214,12 @@ const renderFormattedMessage = (text) => {
       return;
     }
 
-    blocks.push(
-      <ul className="farmer-ai-response-list" key={`list-${blocks.length}`}>
-        {listItems.map((item, index) => (
-          <li key={`${item}-${index}`}>{formatInlineText(item)}</li>
-        ))}
-      </ul>
-    );
+    blocks.push(renderList(listItems, `list-${blocks.length}`));
     listItems = [];
   };
 
   lines.forEach((line) => {
-    const bulletMatch = line.match(/^[-•]\s+(.*)$/);
+    const bulletMatch = line.match(/^[-•*]\s+(.*)$/);
     const numberedMatch = line.match(/^\d+\.\s+(.*)$/);
 
     if (bulletMatch || numberedMatch) {
@@ -140,7 +291,7 @@ const FarmerAiChatbot = () => {
     try {
       const response = await axios.post(
         getAiApiUrl(),
-        { query: cleanQuestion },
+        { query: cleanQuestion, active_context: getActiveAiContext() },
         getAuthConfig()
       );
       const answer =
@@ -151,7 +302,12 @@ const FarmerAiChatbot = () => {
       setMessages((prev) =>
         prev.map((message) =>
           message.id === loadingId
-            ? { ...message, text: answer, status: "success" }
+            ? {
+                ...message,
+                text: answer,
+                display: response.data?.display || null,
+                status: "success",
+              }
             : message
         )
       );
@@ -246,7 +402,10 @@ const FarmerAiChatbot = () => {
                     </div>
                   ) : (
                     <div className="farmer-ai-response">
-                      {message.sender === "bot" ? renderFormattedMessage(message.text) : <p>{message.text}</p>}
+                      {message.sender === "bot"
+                        ? renderDisplayPayload(message.display) ||
+                          renderFormattedMessage(message.text)
+                        : <p>{message.text}</p>}
                     </div>
                   )}
                 </div>

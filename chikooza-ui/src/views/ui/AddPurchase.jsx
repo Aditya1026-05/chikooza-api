@@ -193,6 +193,7 @@ const AddPurchase = () => {
             data: addData,
             showInputArea,
             purchaseStep,
+            updatedAt: Date.now(),
         }));
     }, [addData, showInputArea, purchaseStep]);
 

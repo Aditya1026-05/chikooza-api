@@ -7,6 +7,10 @@ from .query_executor import ChikoozaSafeQueryExecutor
 
 logger = logging.getLogger(__name__)
 
+# U: LEGACY / NOT LIVE: this rule/intent agent is retained for tests and
+# U: reference. The active Farmer AI endpoint now uses Groq-backed Text-to-SQL
+# U: in aibot/llm_sql.py, not this deterministic intent pipeline.
+
 
 class ChikoozaIntentAgentService:
     """
@@ -33,7 +37,12 @@ class ChikoozaIntentAgentService:
         )
         self.formatter = formatter or ChikoozaAnswerFormatter()
 
-    def answer(self, question: str, history: list | None = None) -> dict:
+    def answer(
+        self,
+        question: str,
+        history: list | None = None,
+        active_context: dict | None = None,
+    ) -> dict:
         intent = self.classifier.classify(question, history=history)
         response = self.executor.execute(intent, question, history=history)
         return self.formatter.format(response, intent)

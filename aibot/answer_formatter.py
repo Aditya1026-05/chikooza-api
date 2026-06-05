@@ -1,5 +1,8 @@
 from .intent_classifier import ChikoozaIntent
 
+# U: LEGACY / NOT LIVE: this formatter belongs to the old deterministic
+# U: intent-agent path. It remains for tests/reference only.
+
 
 class ChikoozaAnswerFormatter:
     """

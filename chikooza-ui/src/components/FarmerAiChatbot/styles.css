@@ -234,12 +234,12 @@
 }
 
 .farmer-ai-response strong {
-  color: inherit;
-  font-weight: 900;
+  color: #241817;
+  font-weight: 800;
 }
 
 .farmer-ai-message-bot .farmer-ai-response strong {
-  color: #8f1f1b;
+  color: #241817;
 }
 
 .farmer-ai-response-heading {
@@ -262,15 +262,16 @@
 }
 
 .farmer-ai-response-list li {
-  background: #fff8f4;
-  border: 1px solid rgba(127, 29, 29, 0.1);
+  background: rgba(255, 248, 244, 0.58);
+  border: 1px solid rgba(127, 29, 29, 0.08);
   border-radius: 0.8rem;
+  color: #241817;
   line-height: 1.55;
   padding: 0.65rem 0.75rem;
 }
 
 .farmer-ai-response-list li::before {
-  background: #b42318;
+  background: #d8c5bd;
   border-radius: 999px;
   content: "";
   display: inline-block;
@@ -278,6 +279,98 @@
   margin-right: 0.55rem;
   vertical-align: 0.08rem;
   width: 0.42rem;
+}
+
+.farmer-ai-display {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.farmer-ai-display h3 {
+  color: #8f1f1b;
+  font-size: 0.88rem;
+  font-weight: 950;
+  letter-spacing: 0.06em;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.farmer-ai-display-card {
+  background: rgba(255, 248, 244, 0.36);
+  border: 1px solid rgba(127, 29, 29, 0.08);
+  border-radius: 0.95rem;
+  overflow: hidden;
+}
+
+.farmer-ai-display-card > strong {
+  color: #241817;
+  display: block;
+  font-weight: 900;
+  line-height: 1.4;
+  padding: 0.72rem 0.85rem;
+}
+
+.farmer-ai-display-card dl {
+  margin: 0;
+}
+
+.farmer-ai-display-card dl div {
+  border-top: 1px solid rgba(127, 29, 29, 0.07);
+  display: grid;
+  gap: 0.85rem;
+  grid-template-columns: minmax(8rem, 0.42fr) 1fr;
+  padding: 0.62rem 0.85rem;
+}
+
+.farmer-ai-display-card dt {
+  color: #7b5a54;
+  font-size: 0.9rem;
+  font-weight: 750;
+}
+
+.farmer-ai-display-card dd {
+  color: #241817;
+  font-weight: 800;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.farmer-ai-display-table-scroll {
+  border: 1px solid rgba(127, 29, 29, 0.08);
+  border-radius: 0.95rem;
+  overflow-x: auto;
+}
+
+.farmer-ai-display-table table {
+  border-collapse: collapse;
+  min-width: 32rem;
+  width: 100%;
+}
+
+.farmer-ai-display-table th,
+.farmer-ai-display-table td {
+  border-bottom: 1px solid rgba(127, 29, 29, 0.07);
+  padding: 0.65rem 0.75rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+.farmer-ai-display-table th {
+  color: #8f1f1b;
+  font-size: 0.78rem;
+  font-weight: 950;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.farmer-ai-display-table td {
+  color: #241817;
+  font-weight: 750;
+  line-height: 1.45;
+}
+
+.farmer-ai-display-table tbody tr:last-child td {
+  border-bottom: 0;
 }
 
 .farmer-ai-typing {
@@ -465,5 +558,10 @@
 
   .farmer-ai-form .btn {
     width: 100%;
+  }
+
+  .farmer-ai-display-card dl div {
+    gap: 0.25rem;
+    grid-template-columns: 1fr;
   }
 }

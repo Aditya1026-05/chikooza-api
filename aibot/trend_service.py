@@ -3,6 +3,10 @@ from datetime import timedelta
 
 from .modern_services import DateRange, SQLPlan, TEXT_TO_SQL
 
+# U: LEGACY / NOT LIVE: this trend helper belongs to the old deterministic
+# U: intent-agent pipeline. The active Farmer AI endpoint now uses
+# U: aibot/llm_sql.py for Groq SQL planning and answer formatting.
+
 
 class ChikoozaTrendComparisonService:
     """

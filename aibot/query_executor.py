@@ -5,6 +5,10 @@ from .insight_service import ChikoozaFarmInsightService
 from .multi_report_service import ChikoozaMultiReportService
 from .trend_service import ChikoozaTrendComparisonService
 
+# U: LEGACY / NOT LIVE: this deterministic query executor is part of the old
+# U: intent-agent path. It is kept for tests/reference; live Farmer AI SQL
+# U: planning now uses aibot/llm_sql.py with tenant-safe validation.
+
 
 class ChikoozaSafeQueryExecutor:
     """

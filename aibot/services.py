@@ -13,6 +13,11 @@ from langchain_classic.chains import LLMChain
 
 logger = logging.getLogger(__name__)
 
+# U: LEGACY / NOT LIVE: this module contains the older Ollama/LangChain SQL
+# U: chatbot implementation. The active authenticated Farmer AI endpoint now
+# U: uses aibot/modern_services.py -> aibot/llm_sql.py. Keep this file for
+# U: reference only; do not use it as a fallback unless explicitly requested.
+
 class SQLAgentService:
     def __init__(self, user=None, view_name="ai_farm_data_view"):
         self.user = user

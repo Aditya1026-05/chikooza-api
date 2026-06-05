@@ -51,9 +51,24 @@ SUMMARY_QUERY_PHRASES = (
     "what all do i have",
 )
 
+COMMON_QUERY_TYPO_REPLACEMENTS = (
+    (r"\bglock(s)?\b", r"flock\1"),
+    (r"\bflcok(s)?\b", r"flock\1"),
+    (r"\bfork(s)?\b", r"flock\1"),
+    (r"\bfamr(s)?\b", r"farm\1"),
+    (r"\bsail(s)?\b", r"sale\1"),
+    (r"\bpruchase(s)?\b", r"purchase\1"),
+    (r"\bpurchaes\b", "purchase"),
+    (r"\bmortilty\b", "mortality"),
+    (r"\bmortaltiy\b", "mortality"),
+)
+
 
 def normalize_ai_query(question: str) -> str:
-    return re.sub(r"\s+", " ", (question or "").lower()).strip()
+    query = re.sub(r"\s+", " ", (question or "").lower()).strip()
+    for pattern, replacement in COMMON_QUERY_TYPO_REPLACEMENTS:
+        query = re.sub(pattern, replacement, query)
+    return query
 
 
 def is_broad_summary_query(question: str) -> bool:
@@ -227,7 +242,9 @@ class ChikoozaQueryRouter:
     }
     GREETING_PATTERNS = (
         r"^(hi|hello|hey|namaste|hii|helo|good morning|good afternoon|good evening)(?:[!. ]+.*)?$",
-        r"^(thanks|thank you|ok|okay)[!. ]*$",
+        r"^(thanks|thank you|ok|okay|okay thanks|ok thanks|thanks okay|thank you okay)[!. ]*$",
+        r"^(nothing more|no more|that's all|thats all|all good|done|stop|enough)[!. ]*$",
+        r"^(huh|what do you mean|what meaning|what)[?!. ]*$",
     )
 
     def route(self, question: str, user_id: int) -> str:
@@ -409,6 +426,11 @@ class TenantSafeSQLExecutor:
 
 class ChikoozaTextToSQLService:
     """
+    U: LEGACY / NOT LIVE: this deterministic Text-to-SQL mapper is retained for
+    U: safety tests, old intent-agent tests, and rollback reference only.
+    U: The active Farmer AI endpoint uses ChikoozaLLMTextToSQLService in
+    U: aibot/llm_sql.py through ChikoozaModernAgentService._build_sql_service().
+
     U: Separate deterministic Text-to-SQL class inspired by the cloned BizBot
     U: pipeline. It uses Chikooza's existing SQL views and parameterized queries.
     """
@@ -2052,7 +2074,12 @@ class ChikoozaModernAgentService:
         self.router = ChikoozaQueryRouter()
         self.sql_service = self._build_sql_service()
 
-    def query(self, query_text: str, history: list | None = None) -> dict:
+    def query(
+        self,
+        query_text: str,
+        history: list | None = None,
+        active_context: dict | None = None,
+    ) -> dict:
         if not self.user or not self.user.is_authenticated:
             return {"status": "error", "message": "Authentication required."}
 
@@ -2096,7 +2123,11 @@ class ChikoozaModernAgentService:
             }
 
         if route in {TEXT_TO_SQL, HYBRID}:
-            result = self.sql_service.answer(query_text, history=history)
+            result = self.sql_service.answer(
+                query_text,
+                history=history,
+                active_context=active_context,
+            )
             result["route"] = route
             return result
 
@@ -2111,8 +2142,17 @@ class ChikoozaModernAgentService:
 
     def _conversation_answer(self, query_text: str) -> str:
         query = normalize_ai_query(query_text)
-        if re.match(r"^(thanks|thank you|ok|okay)[!. ]*$", query):
+        if re.match(r"^(thanks|thank you|okay thanks|ok thanks|thanks okay)[!. ]*$", query):
+            return "You're welcome. Ask me whenever you need farm records."
+        if re.match(r"^(ok|okay)[!. ]*$", query):
             return "Okay. Ask your next farm question whenever you want."
+        if re.match(r"^(nothing more|no more|that's all|thats all|all good|done|stop|enough)[!. ]*$", query):
+            return "Okay, I will stop here. Ask me whenever you need farm records."
+        if re.match(r"^(huh|what do you mean|what meaning|what)[?!. ]*$", query):
+            return (
+                "I mean I can answer questions from your saved farm records: farms, "
+                "flocks, sales, purchases, daily data, mortality, feed, weight, FCR, and profit."
+            )
         return (
             "Hello. I can help with your own Chikooza farm records, including farms, flocks, "
             "sales, purchases, daily data, mortality, feed, weight, FCR, profit/loss, and "
@@ -2210,7 +2250,12 @@ class ChikoozaModernAgentService:
 
 
 class _UnavailableFarmerAIService:
-    def answer(self, query_text: str, history: list | None = None) -> dict:
+    def answer(
+        self,
+        query_text: str,
+        history: list | None = None,
+        active_context: dict | None = None,
+    ) -> dict:
         return {
             "status": "error",
             "message": (

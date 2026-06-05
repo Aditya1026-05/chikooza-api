@@ -162,6 +162,7 @@ const ManageFlock = () => {
             selectedFarmId,
             selectedFlockId,
             flockStep,
+            updatedAt: Date.now(),
         }));
     }, [addData, selectedFarmId, selectedFlockId, flockStep, showForm]);
 

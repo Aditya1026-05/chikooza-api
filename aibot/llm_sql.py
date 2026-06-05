@@ -19,6 +19,7 @@ from .modern_services import (
     ChikoozaTextToSQLService,
     TenantSafeSQLExecutor,
     is_broad_summary_query,
+    normalize_ai_query,
 )
 
 logger = logging.getLogger(__name__)
@@ -98,6 +99,8 @@ Hard rules:
 15. If the user asks "daily data only", query ai_dailydata_data_view only. Do not answer with only flock master data.
 16. If the user asks "daily data and everything" after a selected flock, answer for that selected flock unless the user clearly asks for the whole account.
 17. If the user asks "total flocks in each farm", group by farm_id/farm_name and count DISTINCT flock_id. Do not ask the user to choose one farm.
+18. "active farm", "current farm", "selected farm", "active flock", "current flock", and "selected flock" mean the Active app farm/flock from Entity Context. Use those resolved ids when present.
+19. Do not restrict broad/list/count questions to the active app context. If the user says all/every/each/list/count, answer across the authenticated farmer's full account unless they explicitly name a farm/flock.
 
 Common Chikooza mappings:
 - revenue/sales/income -> SUM(sale_amount) from ai_sale_data_view.
@@ -182,6 +185,9 @@ If a result column is feed_consumed_kg, call it kg of feed, not generic units.
 If records are missing, say what data is missing and what the farmer should enter.
 For comparison answers, state the winner and the main reason.
 Keep simple answers to 1-3 sentences. Use short bullets only for multi-row results.
+For one direct fact, answer directly in one sentence.
+For multi-row results, use one short intro and structured rows/bullets. Do not write a long paragraph.
+If the farmer says thanks, okay, nothing more, huh, or similar conversational text, do not invent a data summary.
 Never claim to know another farmer's private data.
 """.strip()
 
@@ -283,23 +289,45 @@ class ChikoozaEntityResolver:
     def __init__(self, user):
         self.user = user
 
-    def resolve(self, question: str, history: list[dict] | None = None) -> EntityResolution:
+    def resolve(
+        self,
+        question: str,
+        history: list[dict] | None = None,
+        active_context: dict | None = None,
+    ) -> EntityResolution:
         farms = self._farms()
         flocks = self._flocks()
-        query = re.sub(r"\s+", " ", (question or "").lower()).strip()
+        query = normalize_ai_query(question)
+        active_farm, active_flock = self._active_entities(
+            active_context or {},
+            farms,
+            flocks,
+        )
         context_lines = [
             self._available_farms_context(farms),
             self._available_flocks_context(flocks),
         ]
+        active_context_text = self._active_context_text(active_farm, active_flock)
+        if active_context_text:
+            context_lines.append(active_context_text)
         history_context = self._history_entity_context(history or [], farms, flocks)
         if history_context:
             context_lines.append(history_context)
 
-        flock_resolution = self._resolve_flock(query, flocks)
+        flock_resolution = self._resolve_flock(
+            query,
+            flocks,
+            active_flock=active_flock,
+        )
         if flock_resolution == "not_found":
             return EntityResolution(
                 context="\n".join(context_lines),
                 direct_response=self._missing_flock_response(query, flocks),
+            )
+        if flock_resolution == "active_missing":
+            return EntityResolution(
+                context="\n".join(context_lines),
+                direct_response=self._active_missing_response("flock", flocks),
             )
         if flock_resolution:
             context_lines.append(
@@ -311,11 +339,20 @@ class ChikoozaEntityResolver:
                 f"farm_name={flock_resolution.farm.name}."
             )
 
-        farm_resolution = self._resolve_farm(query, farms)
+        farm_resolution = self._resolve_farm(
+            query,
+            farms,
+            active_farm=active_farm,
+        )
         if farm_resolution == "not_found":
             return EntityResolution(
                 context="\n".join(context_lines),
                 direct_response=self._missing_farm_response(query, farms),
+            )
+        if farm_resolution == "active_missing":
+            return EntityResolution(
+                context="\n".join(context_lines),
+                direct_response=self._active_missing_response("farm", farms),
             )
         if farm_resolution:
             context_lines.append(
@@ -326,6 +363,35 @@ class ChikoozaEntityResolver:
             )
 
         return EntityResolution(context="\n".join(context_lines))
+
+    def _active_entities(self, active_context: dict, farms: list, flocks: list):
+        farm_public_id = self._safe_public_id(active_context.get("selected_farm_public_id"))
+        flock_public_id = self._safe_public_id(active_context.get("selected_flock_public_id"))
+        active_farm = self._find_by_public_id(farms, farm_public_id)
+        active_flock = self._find_by_public_id(flocks, flock_public_id)
+        if active_flock and not active_farm:
+            active_farm = getattr(active_flock, "farm", None)
+        return active_farm, active_flock
+
+    def _active_context_text(self, active_farm, active_flock) -> str:
+        lines = []
+        if active_farm:
+            lines.append(
+                "Active app farm context: "
+                f"farm_id={active_farm.id}, "
+                f"farm_public_id={active_farm.public_id}, "
+                f"farm_name={active_farm.name}."
+            )
+        if active_flock:
+            lines.append(
+                "Active app flock context: "
+                f"flock_id={active_flock.id}, "
+                f"flock_public_id={active_flock.public_id}, "
+                f"flock_name={active_flock.name}, "
+                f"farm_id={active_flock.farm.id}, "
+                f"farm_name={active_flock.farm.name}."
+            )
+        return "\n".join(lines)
 
     def _history_entity_context(
         self,
@@ -370,9 +436,12 @@ class ChikoozaEntityResolver:
             .order_by("id")[:50]
         )
 
-    def _resolve_flock(self, query: str, flocks: list):
+    def _resolve_flock(self, query: str, flocks: list, active_flock=None):
         if not flocks:
             return None
+
+        if self._active_flock_reference_requested(query):
+            return active_flock or "active_missing"
 
         numeric_match = self.FLOCK_NUMBER_PATTERN.search(query)
         if numeric_match:
@@ -399,9 +468,12 @@ class ChikoozaEntityResolver:
 
         return None
 
-    def _resolve_farm(self, query: str, farms: list):
+    def _resolve_farm(self, query: str, farms: list, active_farm=None):
         if not farms:
             return None
+
+        if self._active_farm_reference_requested(query):
+            return active_farm or "active_missing"
 
         numeric_match = self.FARM_NUMBER_PATTERN.search(query)
         if numeric_match:
@@ -430,7 +502,20 @@ class ChikoozaEntityResolver:
             (
                 obj
                 for obj in objects
-                if int(obj.id) == number or int(obj.public_id) == number
+                if self._safe_public_id(obj.id) == number
+                or self._safe_public_id(getattr(obj, "public_id", None)) == number
+            ),
+            None,
+        )
+
+    def _find_by_public_id(self, objects: list, public_id: int | None):
+        if public_id is None:
+            return None
+        return next(
+            (
+                obj
+                for obj in objects
+                if self._safe_public_id(getattr(obj, "public_id", None)) == public_id
             ),
             None,
         )
@@ -447,6 +532,25 @@ class ChikoozaEntityResolver:
             if re.search(rf"\b(?:{word}\s+{label}|{label}\s+{word})\b", query):
                 return value
         return None
+
+    def _active_flock_reference_requested(self, query: str) -> bool:
+        return bool(
+            re.search(
+                r"\b(?:active|current|selected)\s+(?:flock|batch)\b",
+                query,
+            )
+        )
+
+    def _active_farm_reference_requested(self, query: str) -> bool:
+        return bool(re.search(r"\b(?:active|current|selected)\s+farm\b", query))
+
+    def _safe_public_id(self, value) -> int | None:
+        try:
+            if value in (None, "", "0"):
+                return None
+            return int(value)
+        except (TypeError, ValueError):
+            return None
 
     def _looks_like_named_flock_reference(self, query: str) -> bool:
         return bool(
@@ -518,6 +622,29 @@ class ChikoozaEntityResolver:
             "engine": "entity_resolver",
         }
 
+    def _active_missing_response(self, entity_type: str, objects: list) -> dict:
+        names = ", ".join(obj.name for obj in objects) if objects else "none yet"
+        label = "flock" if entity_type == "flock" else "farm"
+        return {
+            "status": "success",
+            "data": {f"available_{label}s": [obj.name for obj in objects]},
+            "answer": (
+                f"I do not know which {label} is active yet. "
+                f"Available {label}s: {names}. "
+                f"Select a {label} in the app or ask using its name."
+            ),
+            "message": (
+                f"I do not know which {label} is active yet. "
+                f"Available {label}s: {names}."
+            ),
+            "rows": [],
+            "query": None,
+            "params": [],
+            "route": TEXT_TO_SQL,
+            "metric": f"missing_active_{label}",
+            "engine": "entity_resolver",
+        }
+
 
 class ChikoozaLLMTextToSQLService:
     """
@@ -558,7 +685,12 @@ class ChikoozaLLMTextToSQLService:
     def is_available(self) -> bool:
         return self.client.has_keys
 
-    def answer(self, question: str, history: list[dict] | None = None) -> dict:
+    def answer(
+        self,
+        question: str,
+        history: list[dict] | None = None,
+        active_context: dict | None = None,
+    ) -> dict:
         # U: OLD: broad and known farm-data queries were short-circuited into
         # U: the rule/intent service before Groq could plan SQL.
         # if is_broad_summary_query(question):
@@ -572,7 +704,11 @@ class ChikoozaLLMTextToSQLService:
 
         last_error: Exception | None = None
         error_feedback = ""
-        entity_resolution = self.entity_resolver.resolve(question, history=history)
+        entity_resolution = self.entity_resolver.resolve(
+            question,
+            history=history,
+            active_context=active_context,
+        )
         if entity_resolution.direct_response:
             return entity_resolution.direct_response
 
@@ -593,6 +729,7 @@ class ChikoozaLLMTextToSQLService:
                     entity_context=entity_resolution.context,
                 )
                 metadata = self._entity_metadata(entity_resolution.context)
+                display = self._display_payload(plan, rows)
                 return {
                     "status": "success",
                     "data": rows[0] if len(rows) == 1 else rows,
@@ -604,6 +741,7 @@ class ChikoozaLLMTextToSQLService:
                     "route": TEXT_TO_SQL,
                     "metric": plan.metric,
                     "engine": "groq_sql",
+                    "display": display,
                     **metadata,
                 }
             except BlockedAIQuery as exc:
@@ -732,6 +870,7 @@ Result rows:
 If there are more than 25 matching rows, only the first 25 are shown here.
 Write the answer for the farmer.
 If the farmer used a rough phrase like "flock 1" but Entity Context resolved it to a real flock, answer for the resolved flock name/id and do not say the rough phrase has no data.
+If there are multiple rows, keep the text short because the frontend will render the rows in structured cards/tables.
 """.strip()
         try:
             result = self.client.chat(
@@ -754,10 +893,20 @@ If the farmer used a rough phrase like "flock 1" but Entity Context resolved it 
             return result.content
         except (GroqAllKeysFailed, KeyError, ValueError, httpx.HTTPError):
             logger.warning(
-                "Groq answer formatting failed; using deterministic formatter.",
+                "Groq answer formatting failed; returning safe unformatted result.",
                 exc_info=True,
             )
-            return self._deterministic_answer(plan, rows)
+            # U: OLD: return self._deterministic_answer(plan, rows)
+            # U: NEW: do not silently fall back to the old deterministic answer
+            # U: formatter. The response still includes rows/display payload, so
+            # U: the frontend can render the data without mixing approaches.
+            if rows:
+                return (
+                    "I found the matching farm records, but I could not format the "
+                    "answer naturally right now. Please ask again or use a more "
+                    "specific farm/flock question."
+                )
+            return "I could not find matching records in your farm data for that question."
 
     def _history_messages(self, history: list[dict]) -> list[dict[str, str]]:
         messages = []
@@ -811,6 +960,206 @@ If the farmer used a rough phrase like "flock 1" but Entity Context resolved it 
             "engine": "groq_sql",
         }
 
+    def _display_payload(self, plan: SQLPlan, rows: list[dict]) -> dict | None:
+        safe_rows = self._json_safe_rows(rows[:30])
+        if not safe_rows:
+            return None
+
+        if plan.metric in {"farm_list", "complete_farm_report"}:
+            return self._cards_payload(
+                title="Farm records",
+                rows=safe_rows,
+                title_keys=("farm_name",),
+                field_keys=(
+                    "farm_city",
+                    "farm_pin",
+                    "shed_count",
+                    "farm_status",
+                    "flock_count",
+                ),
+            )
+
+        if plan.metric in {"flock_list", "complete_flock_report"}:
+            return self._cards_payload(
+                title="Flock records",
+                rows=safe_rows,
+                title_keys=("flock_name",),
+                field_keys=(
+                    "farm_name",
+                    "hatch_date",
+                    "flock_size",
+                    "actual_birds",
+                    "current_birds",
+                    "breed_name",
+                    "flock_cost",
+                    "total_sales",
+                    "total_purchases",
+                    "profit_loss",
+                ),
+            )
+
+        if plan.metric in {"daily_data_by_flock", "latest_flock_status"}:
+            return self._table_payload(
+                title="Daily data",
+                rows=safe_rows,
+                preferred_keys=(
+                    "record_date",
+                    "flock_name",
+                    "birds_died",
+                    "total_mort",
+                    "birds_current",
+                    "feed_consumed_kg",
+                    "average_bird_weight",
+                    "fcr",
+                    "remarks",
+                ),
+            )
+
+        if "profit" in plan.metric or "loss" in plan.metric:
+            return self._table_payload(
+                title="Profit / loss",
+                rows=safe_rows,
+                preferred_keys=(
+                    "flock_name",
+                    "farm_name",
+                    "total_sales",
+                    "total_purchases",
+                    "flock_cost",
+                    "result",
+                    "profit_loss",
+                ),
+            )
+
+        if len(safe_rows) > 1 or plan.result_type == "table":
+            return self._table_payload(title="Records", rows=safe_rows)
+
+        return None
+
+    def _cards_payload(
+        self,
+        *,
+        title: str,
+        rows: list[dict],
+        title_keys: tuple[str, ...],
+        field_keys: tuple[str, ...],
+    ) -> dict:
+        cards = []
+        for row in rows:
+            card_title = next(
+                (self._format_display_value(key, row.get(key)) for key in title_keys if row.get(key) not in (None, "")),
+                "Record",
+            )
+            card_rows = []
+            for key in field_keys:
+                if key not in row or row.get(key) in (None, ""):
+                    continue
+                card_rows.append(
+                    {
+                        "label": self._display_label(key),
+                        "value": self._format_display_value(key, row.get(key)),
+                    }
+                )
+            cards.append({"title": card_title, "rows": card_rows})
+        return {"type": "cards", "title": title, "cards": cards}
+
+    def _table_payload(
+        self,
+        *,
+        title: str,
+        rows: list[dict],
+        preferred_keys: tuple[str, ...] | None = None,
+    ) -> dict:
+        keys = self._display_keys(rows, preferred_keys=preferred_keys)
+        return {
+            "type": "table",
+            "title": title,
+            "columns": [{"key": key, "label": self._display_label(key)} for key in keys],
+            "rows": [
+                {
+                    key: self._format_display_value(key, row.get(key))
+                    for key in keys
+                }
+                for row in rows
+            ],
+        }
+
+    def _display_keys(
+        self,
+        rows: list[dict],
+        *,
+        preferred_keys: tuple[str, ...] | None = None,
+    ) -> list[str]:
+        hidden = {"owner_id", "farm_id", "flock_id", "sale_id", "purchase_id", "daily_data_id"}
+        if preferred_keys:
+            keys = [
+                key
+                for key in preferred_keys
+                if any(key in row and row.get(key) not in (None, "") for row in rows)
+            ]
+        else:
+            keys = []
+            for row in rows:
+                for key in row.keys():
+                    if key not in hidden and key not in keys:
+                        keys.append(key)
+        return keys[:8]
+
+    def _display_label(self, key: str) -> str:
+        labels = {
+            "farm_name": "Farm",
+            "farm_city": "City",
+            "farm_pin": "PIN",
+            "shed_count": "Sheds",
+            "farm_status": "Status",
+            "flock_count": "Flocks",
+            "flock_name": "Flock",
+            "hatch_date": "Hatch date",
+            "flock_size": "Starting birds",
+            "actual_birds": "Actual birds",
+            "current_birds": "Current birds",
+            "breed_name": "Breed",
+            "flock_cost": "Flock cost",
+            "total_sales": "Sales",
+            "total_purchases": "Purchases",
+            "profit_loss": "Profit / loss",
+            "result": "Result",
+            "record_date": "Date",
+            "birds_died": "Mortality",
+            "total_mort": "Total mortality",
+            "birds_current": "Current birds",
+            "feed_consumed_kg": "Feed",
+            "average_bird_weight": "Avg. weight",
+            "fcr": "FCR",
+            "remarks": "Remarks",
+        }
+        return labels.get(key, key.replace("_", " ").title())
+
+    def _format_display_value(self, key: str, value):
+        if value in (None, ""):
+            return "Not available"
+        if isinstance(value, Decimal):
+            value = float(value)
+        if isinstance(value, (date, datetime)):
+            return value.isoformat()
+        if key in {"flock_cost", "total_sales", "total_purchases", "profit_loss", "result", "sale_amount", "purchase_amount"}:
+            try:
+                return f"Rs. {float(value):,.2f}"
+            except (TypeError, ValueError):
+                return str(value)
+        if key in {"feed_consumed_kg", "total_feed_consumed", "total_feed"}:
+            try:
+                return f"{float(value):,.2f} kg"
+            except (TypeError, ValueError):
+                return str(value)
+        if key in {"average_bird_weight"}:
+            try:
+                return f"{float(value):,.2f} gm"
+            except (TypeError, ValueError):
+                return str(value)
+        if isinstance(value, float):
+            return f"{value:,.2f}"
+        return str(value)
+
     def _entity_metadata(self, entity_context: str) -> dict:
         metadata = {}
         farm_match = re.search(
@@ -838,6 +1187,9 @@ If the farmer used a rough phrase like "flock 1" but Entity Context resolved it 
         return metadata
 
     def _deterministic_answer(self, plan: SQLPlan, rows: list[dict]) -> str:
+        # U: LEGACY / NOT LIVE: retained for older tests/reference only. The
+        # U: live Farmer AI path uses Groq to format SQL results and does not
+        # U: call this deterministic formatter as a fallback.
         if not rows:
             return (
                 "I could not find matching records in your farm data for that question."
@@ -859,6 +1211,7 @@ If the farmer used a rough phrase like "flock 1" but Entity Context resolved it 
     def _deterministic_metric_answer(
         self, rows: list[dict], entity_context: str = ""
     ) -> str | None:
+        # U: LEGACY / NOT LIVE: retained for older tests/reference only.
         if not rows:
             return None
 
