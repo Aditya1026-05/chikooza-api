@@ -164,6 +164,37 @@ class PurchaseTenantIsolationTests(TestCase):
                 }
             )
 
+    def test_create_feed_purchase_calculates_stock_quantity(self):
+        purchase = AddPurchaseService.execute(
+            {
+                "users": self.owner,
+                "data": {
+                    "flock_public_id": self.owner_flock.public_id,
+                    "type": "Feed",
+                    "date": date(2026, 1, 12),
+                    "cost": 120,
+                    "remarks": "feed stock",
+                    "company_name": "Feed Co",
+                    "item_name": "Starter",
+                    "unit": 3,
+                    "size": 50,
+                    "item_type": 100,
+                },
+            }
+        )
+
+        self.assertEqual(purchase.quantity, 150)
+
+    def test_update_feed_purchase_recalculates_stock_quantity(self):
+        response = PurchaseView.partial_update(
+            self._request(self.owner, data={"unit": 2, "size": 60}),
+            pk=self.owner_purchase.public_id,
+        )
+        self.owner_purchase.refresh_from_db()
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(self.owner_purchase.quantity, 120)
+
     def test_quantity_rejects_other_users_flock(self):
         response = QuantityView().list(
             self._request(

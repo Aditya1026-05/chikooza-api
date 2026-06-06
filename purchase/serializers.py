@@ -14,25 +14,29 @@ class AddPurchaseSerializer(serializers.Serializer):
     flock_public_id = serializers.IntegerField()
     type = serializers.ChoiceField(choices=feed_type_choice)
     date = serializers.DateField()
-    cost = serializers.IntegerField()
+    cost = serializers.IntegerField(min_value=1)
     remarks = serializers.CharField(max_length=255)
 
     def __init__(self, *args, **kwargs):
         super(AddPurchaseSerializer, self).__init__(*args, **kwargs)
-        if kwargs.get("data").get("type") == "Feed":
+        initial_data = kwargs.get("data") or {}
+        if initial_data.get("type") == "Feed":
             self.fields["company_name"] = serializers.CharField(
                 max_length=255, allow_null=True
             )
             self.fields["item_name"] = serializers.CharField(
                 max_length=255, allow_null=True
             )
-            self.fields["unit"] = serializers.IntegerField(allow_null=True)
-            self.fields["size"] = serializers.IntegerField(allow_null=True)
+            # U: OLD: feed bag count/size could be null or zero, which made
+            # U: feed stock stay at 0 after a feed purchase.
+            # U: NEW: feed stock can increase only from positive bag details.
+            self.fields["unit"] = serializers.IntegerField(min_value=1)
+            self.fields["size"] = serializers.IntegerField(min_value=1)
             self.fields["item_type"] = serializers.ChoiceField(
                 choices=item_type_choice, allow_null=True
             )
-        elif kwargs.get("data").get("type") in ["Medicine", "Vaccination", "Equipment"]:
-            self.fields["quantity"] = serializers.IntegerField(allow_null=True)
+        elif initial_data.get("type") in ["Medicine", "Vaccination", "Equipment"]:
+            self.fields["quantity"] = serializers.IntegerField(min_value=1)
             self.fields["company_name"] = serializers.CharField(
                 max_length=255, allow_null=True
             )
@@ -73,8 +77,8 @@ class UpdatePurchaseSerializer(serializers.ModelSerializer):
     """
 
     date = serializers.DateField(required=False)
-    cost = serializers.IntegerField(required=False)
-    quantity = serializers.IntegerField(required=False, allow_null=True)
+    cost = serializers.IntegerField(required=False, min_value=1)
+    quantity = serializers.IntegerField(required=False, min_value=1)
     company_id = serializers.IntegerField(required=False, allow_null=True)
     company_name = serializers.CharField(
         max_length=255, required=False, allow_null=True
@@ -83,8 +87,8 @@ class UpdatePurchaseSerializer(serializers.ModelSerializer):
     item_type = serializers.ChoiceField(
         choices=item_type_choice, required=False, allow_null=True
     )
-    unit = serializers.IntegerField(required=False, allow_null=True)
-    size = serializers.IntegerField(required=False, allow_null=True)
+    unit = serializers.IntegerField(required=False, min_value=1)
+    size = serializers.IntegerField(required=False, min_value=1)
     remarks = serializers.CharField(max_length=255, required=False, allow_null=True)
 
     class Meta:

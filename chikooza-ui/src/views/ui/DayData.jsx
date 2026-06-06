@@ -55,6 +55,33 @@ const DaywiseData = () => {
     let [feedAvaibilityError, setFeedAvaibilityError] = useState('');
     const [dailyStep, setDailyStep] = useState(0);
     const dailyDraftKey = `chikooza-day-data-draft-${flockid}-${date}`;
+    const FEED_STOCK_ERROR = "Feed intake is greater than available feed stock. Add a feed purchase for this flock first.";
+
+    const getAvailableFeedStock = () => Number(oldValues.feed_stock ?? oldValues.initial_total_feed ?? 0);
+    const getDisplayFeedStock = () => {
+        if (addData.feed_stock === null || addData.feed_stock === undefined) {
+            return getAvailableFeedStock();
+        }
+        return Number(addData.feed_stock || 0);
+    };
+    const getApiErrorMessage = (error) => {
+        const payload = error?.response?.data || {};
+        const result = payload.results || payload.result || {};
+        const resultValues = Object.values(result || {});
+        const firstResultValue = resultValues.length > 0
+            ? (Array.isArray(resultValues[0]) ? resultValues[0][0] : resultValues[0])
+            : "";
+        return firstResultValue || payload.message || payload.error || "Something went wrong. Please try again";
+    };
+    const handleSaveError = (error) => {
+        const message = getApiErrorMessage(error);
+        setErr(message);
+        if (String(message).toLowerCase().includes("feed")) {
+            setFeedintakeError(message);
+        }
+        setLoading(false);
+        handleUnauthorized(error, navigate);
+    };
 
     useEffect(() => {
         // U: NEW: daily data is a long multi-section form, so keep a local
@@ -109,9 +136,8 @@ const DaywiseData = () => {
         if (oldValues.current_bird_count === null) { midData = flockDetails.actual_birds; } else { midData = oldValues.current_bird_count; }
         // console.log(addData.mortality + " > " + midData);
         if (addData.mortality === null || addData.mortality === '' || addData.mortality < 0 || addData.mortality >= midData) { setMortalityError('This fields is not a valid.'); error = 1; } else { setMortalityError(''); }
-        midData = 0;
-        if (oldValues.feed_stock === 0) { midData = oldValues.initial_total_feed; } else { midData = oldValues.feed_stock; }
-        if (addData.feed_intake === null || addData.feed_intake === '' || addData.feed_intake <= 0 || addData.feed_intake > midData) { setFeedintakeError('This fields is not a valid.'); error = 1; } else { setFeedintakeError(''); }
+        midData = getAvailableFeedStock();
+        if (addData.feed_intake === null || addData.feed_intake === '' || Number(addData.feed_intake) <= 0 || Number(addData.feed_intake) > midData) { setFeedintakeError(FEED_STOCK_ERROR); error = 1; } else { setFeedintakeError(''); }
         let midWeight = 0;
         if (addData.average_bird_weight === null || addData.feed_intake === '') {
             midWeight = 0;
@@ -181,13 +207,7 @@ const DaywiseData = () => {
                         //setErr('Form created successfully');
                         setShow(true);
                         setTimeout(successMsg, 3000);
-                    }).catch((err) => {
-                        //  console.log(err);
-                        setErr('Something went wrong. Please try again');
-                        setLoading(false);
-                        handleUnauthorized(err, navigate);
-
-                    });
+                    }).catch(handleSaveError);
                 } else {
                     //console.log(dailyDataVaccination);
                     let url = `${apiPath}dailyData/${dailyDataPublicID}/`;
@@ -195,12 +215,7 @@ const DaywiseData = () => {
                         //setErr('Form created successfully');
                         setShow(true);
                         setTimeout(successMsg, 3000);
-                    }).catch((err) => {
-                        //console.log(err);
-                        setErr('Something went wrong. Please try again');
-                        setLoading(false);
-                        handleUnauthorized(err, navigate);
-                    });
+                    }).catch(handleSaveError);
                 }
             } else {
                 formValues.forEach((item) => {
@@ -222,12 +237,7 @@ const DaywiseData = () => {
                         setAddData({ ...addData, mortality: null, feed_intake: null, average_bird_weight: null })
                         setShow(true);
                         setTimeout(successMsg, 3000);
-                    }).catch((err) => {
-                        // console.log(err);
-                        setErr('Something went wrong. Please try again');
-                        setLoading(false);
-                        handleUnauthorized(err, navigate);
-                    });
+                    }).catch(handleSaveError);
                 } else {
                     // console.log(dailyDataVaccination);
                     let url = `${apiPath}dailyData/`;
@@ -236,12 +246,7 @@ const DaywiseData = () => {
                         setAddData({ ...addData, mortality: null, feed_intake: null, average_bird_weight: null })
                         setShow(true);
                         setTimeout(successMsg, 3000);
-                    }).catch((err) => {
-                        // console.log(err);
-                        setErr('Something went wrong. Please try again');
-                        setLoading(false);
-                        handleUnauthorized(err, navigate);
-                    });
+                    }).catch(handleSaveError);
                 }
             }
         } else {
@@ -460,22 +465,22 @@ const DaywiseData = () => {
         }
     }
     let feedData = (e) => {
-        let midData = 0;
-        if (oldValues.feed_stock === 0) { midData = oldValues.initial_total_feed; } else { midData = oldValues.feed_stock; }
-        if (e.target.value !== '' && e.target.value > 0) {
-            if (e.target.value <= midData) {
+        const feedIntake = Number(e.target.value);
+        const availableFeedStock = getAvailableFeedStock();
+        if (e.target.value !== '' && feedIntake > 0) {
+            if (feedIntake <= availableFeedStock) {
                 setFeedintakeError('');
                 let url = `${apiPath}dailyDataAvgFeed/?current_bird_count=${addData.current_bird_count}&date=${date}&feed_intake=${e.target.value}&flock_public_id=${flockid}`;
                 axios.get(url, getAuthConfig()).then((res) => {
                     // console.log(url); console.log(res.data.results);
-                    setAddData({ ...addData, feed_intake: e.target.value, avg_feed_per_bird: res.data.results.avg_feed_per_bird, total_feed: Number(oldValues.total_feed) + Number(e.target.value), feed_stock: oldValues.feed_stock - e.target.value });
+                    setAddData({ ...addData, feed_intake: e.target.value, avg_feed_per_bird: res.data.results.avg_feed_per_bird, total_feed: Number(oldValues.total_feed) + feedIntake, feed_stock: availableFeedStock - feedIntake });
                 }).catch((err) => {
                     setAddData({ ...addData, feed_intake: e.target.value });
                     handleUnauthorized(err, navigate);
                 });
             } else {
                 setAddData({ ...addData, feed_intake: e.target.value });
-                setFeedintakeError('Feed Intake cannot be more than the Feed Stock.');
+                setFeedintakeError(FEED_STOCK_ERROR);
             }
         } else {
             setAddData({ ...addData, feed_intake: e.target.value });
@@ -508,13 +513,13 @@ const DaywiseData = () => {
         let valid = true;
         if (dailyStep === 0) {
             let midData = oldValues.current_bird_count === null ? flockDetails.actual_birds : oldValues.current_bird_count;
-            let feedStock = oldValues.feed_stock === 0 ? oldValues.initial_total_feed : oldValues.feed_stock;
+            let feedStock = getAvailableFeedStock();
             if (addData.mortality === null || addData.mortality === '' || Number(addData.mortality) < 0 || Number(addData.mortality) >= Number(midData || 0)) {
                 setMortalityError('Mortality must be 0 or more and less than current bird count.');
                 valid = false;
             }
             if (addData.feed_intake === null || addData.feed_intake === '' || Number(addData.feed_intake) <= 0 || Number(addData.feed_intake) > Number(feedStock || 0)) {
-                setFeedintakeError('Feed intake must be greater than 0 and within feed stock.');
+                setFeedintakeError(FEED_STOCK_ERROR);
                 valid = false;
             }
             if (addData.average_bird_weight !== null && addData.average_bird_weight !== '' && Number(addData.average_bird_weight) <= 0) {
@@ -543,6 +548,7 @@ const DaywiseData = () => {
     const goPreviousDailyStep = () => {
         setDailyStep((currentStep) => Math.max(currentStep - 1, 0));
     };
+    const displayFeedStock = getDisplayFeedStock();
     // console.log(formValues, "lhgfdfgh");
     return (
         <Row>
@@ -663,7 +669,21 @@ const DaywiseData = () => {
                                                             </Col>
                                                             <Col sm="6" md="4" lg="4">
                                                                 <Label for="flockname" className="font-bold">Feed Stock(Kgs)</Label>
-                                                                <Alert color="danger" style={{ color: '#000' }}>{addData.feed_stock === null ? oldValues.initial_total_feed : addData.feed_stock}</Alert>
+                                                                <Alert color={displayFeedStock <= 0 ? "warning" : "secondary"} style={{ color: '#000' }}>{displayFeedStock}</Alert>
+                                                                {displayFeedStock <= 0 && (
+                                                                    <div className="form-helper-panel mt-2">
+                                                                        <strong>No feed stock available</strong>
+                                                                        <p>Add a feed purchase for this flock before recording feed consumed.</p>
+                                                                        <Button
+                                                                            color="danger"
+                                                                            outline
+                                                                            type="button"
+                                                                            onClick={() => navigate("/addpurchase", { state: { farmPublicId: farmid, flockPublicId: flockid } })}
+                                                                        >
+                                                                            Add feed purchase
+                                                                        </Button>
+                                                                    </div>
+                                                                )}
                                                             </Col>
                                                         </Row>
                                                         <Row>

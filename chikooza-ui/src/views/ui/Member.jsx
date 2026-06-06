@@ -36,7 +36,7 @@ const baseChartOptions = {
 
 const emptyRecordStatus = {
   dailyCount: 0,
-  purchaseCount: 0,
+  feedPurchaseCount: 0,
   salesCount: 0,
   lastDailyDate: "",
   currentBirdCount: null,
@@ -228,6 +228,7 @@ const Member = () => {
         saleResult.status === "fulfilled"
           ? saleResult.value.data?.results?.sales_list || []
           : [];
+      const feedPurchaseCount = purchaseList.filter((item) => item.type === "Feed").length;
       const latestDailyData = dailyList[dailyList.length - 1];
       const failed =
         dailyResult.status === "rejected" ||
@@ -236,7 +237,7 @@ const Member = () => {
 
       setRecordStatus({
         dailyCount: dailyList.length,
-        purchaseCount: purchaseList.length,
+        feedPurchaseCount,
         salesCount: salesList.length,
         lastDailyDate: latestDailyData?.date || "",
         currentBirdCount: latestDailyData?.birds_count ?? latestDailyData?.current_bird_count ?? null,
@@ -391,7 +392,7 @@ const Member = () => {
   const hasWeightData = weight.length > 0 || fcr.length > 0;
   const hasChartData = showForm && (hasMortalityData || hasWeightData);
   const hasDailyData = recordStatus.dailyCount > 0;
-  const hasPurchases = recordStatus.purchaseCount > 0;
+  const hasFeedPurchase = recordStatus.feedPurchaseCount > 0;
   const hasSales = recordStatus.salesCount > 0;
   const reportsReady = hasDailyData;
   const selectedRecordState = selectedFlock !== "0"
@@ -416,17 +417,18 @@ const Member = () => {
         action: hasFarm ? "Add flock" : "Add farm first",
       },
       {
-        title: "Record daily data",
-        complete: hasDailyData,
-        href: hasFlock ? "/flockdailydata" : "/addflock",
-        action: hasFlock ? "Add daily data" : "Add flock first",
+        title: "Add feed purchase",
+        complete: hasFeedPurchase,
+        href: hasFeedPurchase ? "/listpurchase" : hasFlock ? "/addpurchase" : "/addflock",
+        state: selectedRecordState,
+        action: hasFeedPurchase ? "Review feed purchases" : hasFlock ? "Add feed purchase" : "Add flock first",
       },
       {
-        title: "Add purchases",
-        complete: hasPurchases,
-        href: hasPurchases ? "/listpurchase" : hasFlock ? "/addpurchase" : "/addflock",
+        title: "Record daily data",
+        complete: hasDailyData,
+        href: hasFeedPurchase ? "/flockdailydata" : hasFlock ? "/addpurchase" : "/addflock",
         state: selectedRecordState,
-        action: hasPurchases ? "Review purchases" : hasFlock ? "Add purchase" : "Add flock first",
+        action: hasDailyData ? "Review daily data" : hasFeedPurchase ? "Add daily data" : hasFlock ? "Add feed first" : "Add flock first",
       },
       {
         title: "Record sales",
@@ -442,7 +444,7 @@ const Member = () => {
         action: reportsReady ? "Open reports" : "Add daily data first",
       },
     ];
-  }, [farmCount, flockCount, hasDailyData, hasPurchases, hasSales, reportsReady, selectedRecordState]);
+  }, [farmCount, flockCount, hasDailyData, hasFeedPurchase, hasSales, reportsReady, selectedRecordState]);
 
   const nextSetupStep = setupSteps.find((step) => !step.complete) || setupSteps[setupSteps.length - 1];
   const continueDraft = useMemo(() => {
@@ -473,6 +475,15 @@ const Member = () => {
         action: "Add flock",
       };
     }
+    if (!hasFeedPurchase) {
+      return {
+        title: "Add feed stock first",
+        body: "Feed purchases create the feed stock used by daily data. Add a feed purchase before recording feed consumed.",
+        href: "/addpurchase",
+        action: "Add feed purchase",
+        state: selectedRecordState,
+      };
+    }
     if (recordStatus.dailyCount === 1) {
       return {
         title: "Add one more daily entry",
@@ -487,7 +498,7 @@ const Member = () => {
       href: "/flockdailydata",
       action: "Add daily data",
     };
-  }, [farmCount, flockCount, recordStatus.dailyCount]);
+  }, [farmCount, flockCount, hasFeedPurchase, recordStatus.dailyCount, selectedRecordState]);
 
   const mortalityOptions = {
     ...baseChartOptions,
@@ -658,7 +669,7 @@ const Member = () => {
           <div className="member-empty-state">
             <span>{chartEmptyState.title}</span>
             <p>{chartEmptyState.body}</p>
-            <Link to={chartEmptyState.href}>{chartEmptyState.action}</Link>
+            <Link to={chartEmptyState.href} state={chartEmptyState.state}>{chartEmptyState.action}</Link>
           </div>
         )}
       </section>

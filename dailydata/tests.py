@@ -4,6 +4,7 @@ from types import SimpleNamespace
 from django.template.loader import render_to_string
 from django.test import TestCase
 from rest_framework import status
+from rest_framework.exceptions import ValidationError
 
 from common.base_models import Users
 from dailydata.models import DailyData, DarknessTime, FeedAvailability, FlockVaccination, Vaccines
@@ -19,6 +20,7 @@ from dailydata.views import (
 )
 from farm.models import Country, Farm, State
 from flocks.models import Breed, Flock
+from purchase.models import Purchase
 
 
 class DailyDataTenantIsolationTests(TestCase):
@@ -128,6 +130,24 @@ class DailyDataTenantIsolationTests(TestCase):
             flock_birds=99,
         )
 
+    def _feed_purchase(self, public_id, user, flock, quantity, purchase_date):
+        return Purchase.objects.create(
+            public_id=public_id,
+            flock=flock,
+            user=user,
+            type="Feed",
+            date=purchase_date,
+            cost=100,
+            quantity=quantity,
+            company_name="Feed Co",
+            item_name="Starter",
+            item_type=100,
+            unit=1,
+            size=quantity,
+            remarks="stock",
+            adjust_type="O",
+        )
+
     def _request(self, user, data=None, query=None):
         return SimpleNamespace(
             user=SimpleNamespace(users=user, is_superuser=False),
@@ -156,6 +176,66 @@ class DailyDataTenantIsolationTests(TestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_create_rejects_feed_intake_without_feed_purchase_stock(self):
+        with self.assertRaises(ValidationError) as ctx:
+            DailyDataView.create(
+                self._request(
+                    self.owner,
+                    data={
+                        "date": "2026-01-03",
+                        "mortality": 1,
+                        "feed_intake": 10,
+                        "average_bird_weight": 60,
+                        "flock_public_id": self.owner_flock.public_id,
+                        "cooling": False,
+                        "heating": False,
+                        "seek": False,
+                        "medicine": False,
+                        "darkness_time_public_id": self.darkness_time.public_id,
+                        "feed_availability_public_id": self.feed_availability.public_id,
+                    },
+                )
+            )
+
+        self.assertIn("Feed intake is greater than available feed stock", str(ctx.exception))
+
+    def test_create_uses_feed_purchase_as_available_stock(self):
+        self._feed_purchase(
+            9310,
+            self.owner,
+            self.owner_flock,
+            50,
+            date(2026, 1, 1),
+        )
+
+        response = DailyDataView.create(
+            self._request(
+                self.owner,
+                data={
+                    "date": "2026-01-03",
+                    "mortality": 1,
+                    "feed_intake": 20,
+                    "average_bird_weight": 60,
+                    "flock_public_id": self.owner_flock.public_id,
+                    "cooling": False,
+                    "heating": False,
+                    "seek": False,
+                    "medicine": False,
+                    "darkness_time_public_id": self.darkness_time.public_id,
+                    "feed_availability_public_id": self.feed_availability.public_id,
+                },
+            )
+        )
+        daily_data = DailyData.objects.get(
+            flock=self.owner_flock,
+            user=self.owner,
+            date=date(2026, 1, 3),
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(daily_data.total_feed, 30)
+        self.assertEqual(daily_data.feed_stock, 20)
 
     def test_list_rejects_other_users_flock(self):
         response = DailyDataView.list(

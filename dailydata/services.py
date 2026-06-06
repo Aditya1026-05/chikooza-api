@@ -4,6 +4,11 @@ from service_objects import services
 
 from common.base_models import PublicId
 from common.utils import validation_return_response
+from dailydata.feed_stock import (
+    available_feed_stock_for_date,
+    recalculate_feed_snapshots,
+    total_feed_consumed_before_date,
+)
 from dailydata.models import DailyData, FlockVaccination, Vaccines, DarknessTime, FeedAvailability
 from flocks.models import Flock
 
@@ -11,8 +16,13 @@ from flocks.models import Flock
 from flocks.utils import generate_remarks  
 #MV-23-6-25- 17-10 change end
 
-from purchase.models import Purchase
 from sales.models import Sales
+
+
+FEED_STOCK_VALIDATION_MESSAGE = (
+    "Feed intake is greater than available feed stock. Add a feed purchase for this "
+    "flock first, or reduce the feed intake."
+)
 
 
 class CreateDailyDataService(services.Service):
@@ -25,25 +35,20 @@ class CreateDailyDataService(services.Service):
         user = self.data.get("user")
         flock = self.data.get("flock")
         flock_vaccinations = data.get("flock_vaccination")
-        quantity = 0
         if flock is None:
             # U: OLD: Flock.objects.get(public_id=...) allowed daily data under another farmer's flock.
             # U: NEW: resolve the flock through the authenticated farmer.
             flock = Flock.objects.get(public_id=data.get("flock_public_id"), user=user)
-        purchases = Purchase.objects.filter(
-            # U: OLD: purchase totals were calculated by flock public_id only.
-            # U: NEW: use the already-owned flock and authenticated farmer.
-            flock=flock,
-            user=user,
-            type="Feed",
-            date__lte=data.get("date"),
+
+        # U: OLD: feed stock was calculated inline from purchases and could drift
+        # U: when purchase records were edited after daily data already existed.
+        # U: NEW: use the shared stock calculator, scoped to the authenticated farmer.
+        available_feed_stock = available_feed_stock_for_date(
+            flock, user, data.get("date")
         )
-        for purchase in purchases:
-            if purchase.quantity is None:
-                purchase.quantity = 0
-            else:
-                purchase.quantity = purchase.quantity
-            quantity = quantity + purchase.quantity
+        if data.get("feed_intake") > available_feed_stock:
+            validation_return_response("feed_intake", FEED_STOCK_VALIDATION_MESSAGE)
+
         yesterday = data.get("date") - datetime.timedelta(days=1)
 
         if DailyData.objects.filter(date=yesterday, flock=flock).exists():
@@ -53,20 +58,26 @@ class CreateDailyDataService(services.Service):
             else:
                 current_bird_count = flock.actual_birds
                 
-            total_feed = yesterday_daily_data.total_feed + data.get("feed_intake")
+            total_feed = total_feed_consumed_before_date(
+                flock, user, data.get("date")
+            ) + data.get("feed_intake")
             real_current_bird_count = current_bird_count - data.get("mortality")
             avg_feed = yesterday_daily_data.total_average_feed
             res_fcr = yesterday_daily_data.fcr
         else:
             current_bird_count = flock.actual_birds
             real_current_bird_count = current_bird_count - data.get("mortality")
-            total_feed = data.get("feed_intake")
+            total_feed = total_feed_consumed_before_date(
+                flock, user, data.get("date")
+            ) + data.get("feed_intake")
 
             avg_feed = 0
             res_fcr = 0
         #feed_stock = quantity - data.get("feed_intake")
 #MV-23-6-25- 17-10 changed feed stock calcuation formula
-        feed_stock = quantity-total_feed
+        # U: OLD: feed_stock = quantity - total_feed was duplicated here.
+        # U: NEW: consume from available feed stock for the selected day.
+        feed_stock = available_feed_stock - data.get("feed_intake")
 #MV-23-6-25- 17-10 change end
 
         if Sales.objects.filter(flock=flock).exists():
@@ -168,6 +179,8 @@ class CreateDailyDataService(services.Service):
                     status=flock_vaccinations["status"][i],
                 )
         
+        recalculate_feed_snapshots(flock, user)
+
         return daily_data
 
 
@@ -180,34 +193,38 @@ class UpdateDailyDataService(services.Service):
         data = self.data.get("data")
         daily_data = self.data.get("daily_data")
         flock_vaccinations = data.get("flock_vaccination")
-        quantity = 0
         flock = daily_data.flock
-        purchases = Purchase.objects.filter(
-            flock=flock, type="Feed", date__lte=daily_data.date
-        )
-        for purchase in purchases:
-            if purchase.quantity is None:
-                purchase.quantity = 0
-            else:
-                purchase.quantity = purchase.quantity
-            quantity = quantity + purchase.quantity
         yesterday = daily_data.date - datetime.timedelta(days=1)
-        mortality = data.get("mortality") if data.get("mortality") else daily_data.mortality
-        feed_intake = data.get("feed_intake") if data.get("feed_intake") else daily_data.feed_intake
+        mortality = data.get("mortality") if "mortality" in data else daily_data.mortality
+        feed_intake = data.get("feed_intake") if "feed_intake" in data else daily_data.feed_intake
+        available_feed_stock = available_feed_stock_for_date(
+            flock, daily_data.user, daily_data.date
+        )
+        if feed_intake > available_feed_stock:
+            validation_return_response("feed_intake", FEED_STOCK_VALIDATION_MESSAGE)
+
         if DailyData.objects.filter(date=yesterday, flock=flock).exists():
             yesterday_daily_data = DailyData.objects.get(date=yesterday, flock=flock)
             current_bird_count = yesterday_daily_data.current_bird_count
-            total_feed = yesterday_daily_data.total_feed + feed_intake
-            feed_stock = yesterday_daily_data.feed_stock - feed_intake
+            total_feed = total_feed_consumed_before_date(
+                flock, daily_data.user, daily_data.date
+            ) + feed_intake
+            feed_stock = available_feed_stock - feed_intake
             real_current_bird_count = current_bird_count - mortality
             average_feed = round(yesterday_daily_data.total_average_feed, 2)
+            fallback_fcr = yesterday_daily_data.fcr
+            fallback_total_fcr = yesterday_daily_data.total_fcr
         else:
             current_bird_count = flock.actual_birds
             real_current_bird_count = current_bird_count - mortality
-            total_feed = feed_intake
-            feed_stock = quantity - feed_intake
+            total_feed = total_feed_consumed_before_date(
+                flock, daily_data.user, daily_data.date
+            ) + feed_intake
+            feed_stock = available_feed_stock - feed_intake
             average_feed = 0
-        average_bird_weight = data.get("average_bird_weight") if data.get("average_bird_weight") else 0
+            fallback_fcr = daily_data.fcr
+            fallback_total_fcr = daily_data.total_fcr
+        average_bird_weight = data.get("average_bird_weight") if "average_bird_weight" in data else daily_data.average_bird_weight
         if real_current_bird_count == 0:
             avg_feed =0
         else:
@@ -220,11 +237,11 @@ class UpdateDailyDataService(services.Service):
         
         fcr = (
             total_average_feed / (average_bird_weight - flock.chick_weight)
-            if (average_bird_weight - flock.chick_weight)
-            else yesterday_daily_data.fcr
+            if (average_bird_weight - flock.chick_weight) > 0
+            else fallback_fcr
         )
         total_fcr = (
-            total_average_feed / average_bird_weight if average_bird_weight else yesterday_daily_data.total_fcr
+            total_average_feed / average_bird_weight if average_bird_weight else fallback_total_fcr
         )
         if fcr <= 0:
             fcr = 0
@@ -255,7 +272,7 @@ class UpdateDailyDataService(services.Service):
         seek = data.get("seek") or False
 
         medicine = data.get("medicine") or False
-        if data.get("mortality") > current_bird_count:
+        if mortality > current_bird_count:
             return validation_return_response("mortality", "Mortality cannot be greater than bird count")
         
 #MV-23-6-25- 17-10 empty remarks
@@ -322,9 +339,12 @@ class UpdateDailyDataService(services.Service):
                 dailydata.total_mort = round((total_dead_birds * 100) / flock.actual_birds, 2)
 
                 dailydata.save()
-            if data.get('feed_intake'):
-                dailydata.feed_stock = yes_daily_data.feed_stock - dailydata.feed_intake
-                dailydata.total_feed = yes_daily_data.total_feed + dailydata.feed_intake
+            if "feed_intake" in data:
+                # U: OLD: future stock was derived from the previous day's saved
+                # U: snapshot, so adding/editing feed purchases later left stale stock.
+                # U: NEW: feed stock and total feed are recalculated after the loop.
+                # dailydata.feed_stock = yes_daily_data.feed_stock - dailydata.feed_intake
+                # dailydata.total_feed = yes_daily_data.total_feed + dailydata.feed_intake
                 dailydata.average_feed = round((dailydata.feed_intake * 1000) / dailydata.current_bird_count, 2)
                 dailydata.total_average_feed = round(yes_daily_data.total_average_feed + dailydata.average_feed, 2)
                 dailydata.save()
@@ -335,6 +355,7 @@ class UpdateDailyDataService(services.Service):
                     dailydata.total_average_feed / dailydata.average_bird_weight if dailydata.average_bird_weight else yes_daily_data.total_fcr
                 ), 2)
                 dailydata.save()
+        recalculate_feed_snapshots(flock, daily_data.user)
 
 
 class CreateFlockVaccinationService(services.Service):

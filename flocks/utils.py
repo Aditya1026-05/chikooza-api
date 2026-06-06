@@ -1,4 +1,8 @@
 import datetime
+from dailydata.feed_stock import (
+    total_feed_consumed_before_date,
+    total_feed_purchased as stock_total_feed_purchased,
+)
 from dailydata.models import DailyData, Vaccines
 from purchase.models import Purchase
 from sales.models import Sales
@@ -51,10 +55,15 @@ def generate_remarks(daily_data):
     return ", ".join(remarks) if remarks else ""
 
 
-def calculate_total_feed_purchased(flock, date=None):
+def calculate_total_feed_purchased(flock, date=None, user=None):
     """
     Calculate total feed purchased for a flock up to a specific date
     """
+    if user:
+        # U: NEW: feed stock is tenant-scoped and comes from feed purchases.
+        return stock_total_feed_purchased(flock, user, date)
+
+    # U: OLD fallback kept for admin/report callers that do not pass a user yet.
     filters = {'flock': flock, 'type': 'Feed'}
     if date:
         filters['date__lte'] = date
@@ -184,9 +193,16 @@ def prepare_daily_data_response(daily_data, flock):
     yesterday_data = get_yesterday_daily_data(flock, daily_data.date)
     
     # Calculate derived values that won't be stored in DB
-    total_feed_purchased = calculate_total_feed_purchased(flock, daily_data.date)
+    total_feed_purchased = calculate_total_feed_purchased(
+        flock, daily_data.date, daily_data.user
+    )
     calculated_current_bird_count = calculate_current_bird_count(flock, daily_data, yesterday_data)
-    calculated_total_feed = calculate_total_feed(yesterday_data, daily_data.feed_intake)
+    # U: OLD: calculated_total_feed = calculate_total_feed(yesterday_data, daily_data.feed_intake)
+    # U: NEW: recalculate from all earlier daily rows so edited feed purchases/daily rows stay correct.
+    calculated_total_feed = (
+        total_feed_consumed_before_date(flock, daily_data.user, daily_data.date)
+        + daily_data.feed_intake
+    )
     calculated_feed_stock = calculate_feed_stock(total_feed_purchased, calculated_total_feed)
     calculated_avg_feed = calculate_average_feed_per_bird(daily_data.feed_intake, calculated_current_bird_count)
     
