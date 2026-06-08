@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import axios from "axios";
 import { Button } from "reactstrap";
 import { apiPath, getAuthConfig, handleUnauthorized } from "../../Constants";
+import { isValidWorkspaceId, readCurrentWorkspace } from "../../utils/currentWorkspace";
 import "./styles.css";
 
 const getAiApiUrl = () => {
@@ -53,6 +54,15 @@ const normalizeSelectorId = (value) => {
 };
 
 const getActiveAiContext = () => {
+  const currentWorkspace = readCurrentWorkspace();
+  if (isValidWorkspaceId(currentWorkspace.farmPublicId) || isValidWorkspaceId(currentWorkspace.flockPublicId)) {
+    return {
+      selected_farm_public_id: isValidWorkspaceId(currentWorkspace.farmPublicId) ? currentWorkspace.farmPublicId : null,
+      selected_flock_public_id: isValidWorkspaceId(currentWorkspace.flockPublicId) ? currentWorkspace.flockPublicId : null,
+      source: currentWorkspace.source || "current_workspace",
+    };
+  }
+
   const candidates = ACTIVE_CONTEXT_DRAFT_SOURCES.map((sourceConfig, index) => {
     try {
       const draft = JSON.parse(localStorage.getItem(sourceConfig.key) || "{}");
@@ -106,7 +116,7 @@ const quickPrompts = [
   "Show my farm summary",
   "Show all flocks",
   "Profit or loss",
-  "Daily data for active flock",
+  "Daily data for current flock",
 ];
 
 const formatInlineText = (text) => {

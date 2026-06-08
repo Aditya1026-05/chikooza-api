@@ -9,6 +9,7 @@ import axios from 'axios';
 import Modal from 'react-bootstrap/Modal';
 import { useParams } from "react-router-dom";
 import { useNavigate } from "react-router-dom";
+import { writeCurrentWorkspace } from "../../utils/currentWorkspace";
 
 const ViewPurchase = () => {
     let { flockPublicId, purchasePublicID } = useParams();
@@ -110,6 +111,11 @@ const ViewPurchase = () => {
             }
             let url = `${apiPath}purchase/${purchase.public_id}/`;
             axios.patch(url, purchasePayload, getAuthConfig()).then(() => {
+                writeCurrentWorkspace({
+                    farmPublicId: farm.farm_public_id,
+                    flockPublicId,
+                    source: "view_purchase_save",
+                });
                 setShow(true);
                 setLoading(false);
                 setTimeout((() => {

@@ -10,6 +10,12 @@ import Modal from 'react-bootstrap/Modal';
 import Spinner from 'react-bootstrap/Spinner';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import moment from "moment";
+import {
+    readInitialWorkspace,
+    resolveWorkspaceFarm,
+    resolveWorkspaceFlock,
+    writeCurrentWorkspace,
+} from "../../utils/currentWorkspace";
 
 const getFlockAgeInDays = (hatchDate) => {
     if (!hatchDate) {
@@ -21,7 +27,6 @@ const getFlockAgeInDays = (hatchDate) => {
 };
 
 const SALE_DRAFT_KEY = "chikooza-flock-sale-draft";
-const DAILY_SELECTOR_DRAFT_KEY = "chikooza-daily-selector-draft";
 
 const saleSteps = [
     { title: "Flock", helper: "Choose farm and flock" },
@@ -83,14 +88,6 @@ const readSaleDraft = () => {
     }
 };
 
-const readSelectorDraft = () => {
-    try {
-        return JSON.parse(localStorage.getItem(DAILY_SELECTOR_DRAFT_KEY) || "{}");
-    } catch {
-        return {};
-    }
-};
-
 const getSaleTypeLabel = (saleType) => {
     if (saleType === "partial_lifting") {
         return "Partial Lifting";
@@ -123,7 +120,7 @@ const FlockSale = () => {
 //MV-16-6-25- 17-10 change end
 
     let [dataPopUp, setDataPopUp] = useState(initialDraft.dataPopUp);
-    const [activeSelectorDraft] = useState(() => readSelectorDraft());
+    const [activeWorkspace] = useState(() => readInitialWorkspace());
     let [error, setError] = useState({});
     let [totalChickCount, setTotalChickCount] = useState(0);
     let [submitError, setSubmitError] = useState('');
@@ -167,7 +164,7 @@ const FlockSale = () => {
         });
     };
 
-    const selectFlockForSale = (selectedFlock, { resetSaleFields = false, nextStep = 0 } = {}) => {
+    const selectFlockForSale = (selectedFlock, { resetSaleFields = false, nextStep = 0, persistCurrent = false, source = "flock_sale_manual_flock" } = {}) => {
         if (!selectedFlock || String(selectedFlock.flock_public_id) === "0") {
             setFlock([]);
             setShowFlockSale(false);
@@ -177,6 +174,9 @@ const FlockSale = () => {
             setExistingSales([]);
             setTotalChickCount(0);
             setSaleStep(0);
+            if (persistCurrent) {
+                writeCurrentWorkspace({ farmPublicId: data.farm, flockPublicId: "0", source });
+            }
             return;
         }
 
@@ -207,6 +207,13 @@ const FlockSale = () => {
         setSaleStep(nextStep);
         loadExistingSales(selectedFlock.flock_public_id);
         loadCurrentBirdCount(selectedFlock);
+        if (persistCurrent) {
+            writeCurrentWorkspace({
+                farmPublicId: selectedFlock.farm_public_id || data.farm,
+                flockPublicId: selectedFlock.flock_public_id,
+                source,
+            });
+        }
     };
 
     function successMsg() {
@@ -411,6 +418,11 @@ const FlockSale = () => {
             // U: Replaced shared config mutation with per-request auth headers from getAuthConfig().
             // config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
             axios.post(url, saleData, getAuthConfig()).then((res) => {
+                writeCurrentWorkspace({
+                    farmPublicId: data.farm,
+                    flockPublicId: savedFlockPublicId,
+                    source: "flock_sale_save",
+                });
                 setShow(true);
                 setLoading(false)
                 setTimeout(successMsg, 3000);
@@ -453,23 +465,18 @@ const FlockSale = () => {
 
             const draftFarmId = String(initialDraft.data.farm || "0");
             const draftFlockId = String(initialDraft.data.flock || "0");
-            const selectorFarmId = String(activeSelectorDraft.selectedFarmId || "0");
-            const selectorFlockId = String(activeSelectorDraft.selectedFlockId || "0");
-            const latestFarm = res.data.results[res.data.results.length - 1];
             const requestedFarmId = prefillFarmId !== "0"
                 ? prefillFarmId
                 : draftFarmId !== "0"
                     ? draftFarmId
-                    : selectorFarmId !== "0"
-                        ? selectorFarmId
-                        : latestFarm?.public_id;
-            const targetFarm = res.data.results.find((item) => String(item.public_id) === String(requestedFarmId)) || latestFarm;
+                    : activeWorkspace.farmPublicId;
+            const targetFarm = resolveWorkspaceFarm(res.data.results, requestedFarmId);
             const targetFarmId = targetFarm?.public_id;
             const targetFlockId = prefillFlockId !== "0"
                 ? prefillFlockId
                 : draftFlockId !== "0"
                     ? draftFlockId
-                    : selectorFlockId;
+                    : activeWorkspace.flockPublicId;
             const shouldResumeSaleDraft = draftFlockId !== "0" && prefillFlockId === "0";
 
             if (targetFarmId !== "0") {
@@ -488,7 +495,7 @@ const FlockSale = () => {
                     }
 
                     const flockList = flockRes.data.results.flock_list;
-                    const selected = flockList.find((item) => String(item.flock_public_id) === String(targetFlockId)) || flockList[flockList.length - 1];
+                    const selected = resolveWorkspaceFlock(flockList, targetFlockId);
                     setFlocks(flockList);
                     if (!selected) {
                         setShowFlockSale(false);
@@ -536,7 +543,7 @@ const FlockSale = () => {
         return () => {
             cancelled = true;
         };
-    }, [activeSelectorDraft.selectedFarmId, activeSelectorDraft.selectedFlockId, navigate, prefillFarmId, prefillFlockId])
+    }, [activeWorkspace.farmPublicId, activeWorkspace.flockPublicId, navigate, prefillFarmId, prefillFlockId])
     let changeFarm = (e) => {
         if (e.target.value === "0") {
             setFlocks([]);
@@ -550,6 +557,7 @@ const FlockSale = () => {
             setSubmitError("");
             setSaleStep(0);
             setExistingSales([]);
+            writeCurrentWorkspace({ farmPublicId: "0", flockPublicId: "0", source: "flock_sale_manual_farm" });
         } else {
             let url = `${apiPath}flocks/${e.target.value}/`;
             // U: Replaced shared config mutation with per-request auth headers from getAuthConfig().
@@ -566,11 +574,17 @@ const FlockSale = () => {
                     setSubmitError("");
                     setSaleStep(0);
                     setExistingSales([]);
+                    writeCurrentWorkspace({ farmPublicId: e.target.value, flockPublicId: "0", source: "flock_sale_manual_farm" });
                 } else {
                     const flockList = res.data.results.flock_list;
-                    const selected = flockList[flockList.length - 1];
+                    const selected = resolveWorkspaceFlock(flockList, "0");
                     setFlocks(flockList);
-                    selectFlockForSale(selected, { resetSaleFields: true, nextStep: 0 });
+                    selectFlockForSale(selected, {
+                        resetSaleFields: true,
+                        nextStep: 0,
+                        persistCurrent: true,
+                        source: "flock_sale_manual_farm",
+                    });
                 }
                 setShowFlocks(true);
             }).catch((err) => {
@@ -599,7 +613,12 @@ const FlockSale = () => {
             }
             setShowForm(false);
             setShowButton(false);
-            selectFlockForSale(user, { resetSaleFields: true, nextStep: 0 });
+            selectFlockForSale(user, {
+                resetSaleFields: true,
+                nextStep: 0,
+                persistCurrent: true,
+                source: "flock_sale_manual_flock",
+            });
         }
     }
     let changeFlockSale = (e) => {

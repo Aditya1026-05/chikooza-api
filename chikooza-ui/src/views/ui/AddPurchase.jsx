@@ -6,9 +6,14 @@ import Accordion from 'react-bootstrap/Accordion'
 import axios from 'axios';
 import Modal from 'react-bootstrap/Modal';
 import { Link, useLocation, useNavigate } from "react-router-dom";
+import {
+    readInitialWorkspace,
+    resolveWorkspaceFarm,
+    resolveWorkspaceFlock,
+    writeCurrentWorkspace,
+} from "../../utils/currentWorkspace";
 
 const PURCHASE_DRAFT_KEY = "chikooza-add-purchase-draft";
-const DAILY_SELECTOR_DRAFT_KEY = "chikooza-daily-selector-draft";
 
 const purchaseSteps = [
     { title: "Flock", helper: "Choose where this cost belongs" },
@@ -53,19 +58,11 @@ const readPurchaseDraft = () => {
     }
 };
 
-const readSelectorDraft = () => {
-    try {
-        return JSON.parse(localStorage.getItem(DAILY_SELECTOR_DRAFT_KEY) || "{}");
-    } catch {
-        return {};
-    }
-};
-
 const todayIso = () => new Date().toISOString().split("T")[0];
 
 const AddPurchase = () => {
     const [initialDraft] = useState(() => readPurchaseDraft());
-    const [activeSelectorDraft] = useState(() => readSelectorDraft());
+    const [activeWorkspace] = useState(() => readInitialWorkspace());
     let [loading, setLoading] = useState(false);
     const [show, setShow] = useState(false);
     let [err, setErr] = useState('');
@@ -117,7 +114,7 @@ const AddPurchase = () => {
         });
     };
 
-    const selectFlockForPurchase = (selectedFlock, { resetPurchaseFields = false } = {}) => {
+    const selectFlockForPurchase = (selectedFlock, { resetPurchaseFields = false, persistCurrent = false, source = "add_purchase_manual_flock" } = {}) => {
         if (!selectedFlock || String(selectedFlock.flock_public_id) === "0") {
             setFlockerr('Please select a flock');
             setAddData((current) => ({
@@ -127,6 +124,9 @@ const AddPurchase = () => {
             }));
             setShowForm(0);
             setExistingPurchases([]);
+            if (persistCurrent) {
+                writeCurrentWorkspace({ farmPublicId: addData.farm_public_id, flockPublicId: "0", source });
+            }
             return;
         }
 
@@ -142,9 +142,16 @@ const AddPurchase = () => {
         }
         setShowForm(1);
         loadExistingPurchases(selectedFlock.flock_public_id);
+        if (persistCurrent) {
+            writeCurrentWorkspace({
+                farmPublicId: selectedFlock.farm_public_id || addData.farm_public_id,
+                flockPublicId: selectedFlock.flock_public_id,
+                source,
+            });
+        }
     };
 
-    const loadFlocksForFarm = (farmPublicId, preferredFlockId = "0", { resetPurchaseFields = false } = {}) => {
+    const loadFlocksForFarm = (farmPublicId, preferredFlockId = "0", { resetPurchaseFields = false, persistCurrent = false, source = "add_purchase_manual_farm" } = {}) => {
         if (!farmPublicId || String(farmPublicId) === "0") {
             setShowFlocks(0);
             setShowForm(0);
@@ -155,6 +162,9 @@ const AddPurchase = () => {
                 farm_public_id: "0",
                 flock_public_id: "0",
             }));
+            if (persistCurrent) {
+                writeCurrentWorkspace({ farmPublicId: "0", flockPublicId: "0", source });
+            }
             return;
         }
 
@@ -170,13 +180,16 @@ const AddPurchase = () => {
                 setShowForm(0);
                 setExistingPurchases([]);
                 setFlockerr('Please add a flock first');
+                if (persistCurrent) {
+                    writeCurrentWorkspace({ farmPublicId, flockPublicId: "0", source });
+                }
                 return;
             }
 
             const flockList = res.data.results.flock_list;
-            const selected = flockList.find((item) => String(item.flock_public_id) === String(preferredFlockId)) || flockList[flockList.length - 1];
+            const selected = resolveWorkspaceFlock(flockList, preferredFlockId);
             setFlocks(flockList);
-            selectFlockForPurchase(selected, { resetPurchaseFields });
+            selectFlockForPurchase(selected, { resetPurchaseFields, persistCurrent, source });
         }).catch((err) => {
             setFlocks([]);
             setShowFlocks(0);
@@ -212,22 +225,17 @@ const AddPurchase = () => {
                 setFarms(farmList);
                 const draftFarmId = String(initialDraft.data.farm_public_id || "0");
                 const draftFlockId = String(initialDraft.data.flock_public_id || "0");
-                const selectorFarmId = String(activeSelectorDraft.selectedFarmId || "0");
-                const selectorFlockId = String(activeSelectorDraft.selectedFlockId || "0");
-                const latestFarm = farmList[farmList.length - 1];
                 const requestedFarmId = prefillFarmId !== "0"
                     ? prefillFarmId
                     : draftFarmId !== "0"
                         ? draftFarmId
-                        : selectorFarmId !== "0"
-                            ? selectorFarmId
-                            : latestFarm?.public_id;
-                const selectedFarm = farmList.find((item) => String(item.public_id) === String(requestedFarmId)) || latestFarm;
+                        : activeWorkspace.farmPublicId;
+                const selectedFarm = resolveWorkspaceFarm(farmList, requestedFarmId);
                 const targetFlockId = prefillFlockId !== "0"
                     ? prefillFlockId
                     : draftFlockId !== "0"
                         ? draftFlockId
-                        : selectorFlockId;
+                        : activeWorkspace.flockPublicId;
                 if (selectedFarm) {
                     loadFlocksForFarm(selectedFarm.public_id, targetFlockId);
                 }
@@ -242,9 +250,9 @@ const AddPurchase = () => {
         return () => {
             cancelled = true;
         };
-    }, [activeSelectorDraft.selectedFarmId, activeSelectorDraft.selectedFlockId, navigate, prefillFarmId, prefillFlockId])
+    }, [activeWorkspace.farmPublicId, activeWorkspace.flockPublicId, navigate, prefillFarmId, prefillFlockId])
     let changeFarm = (e) => {
-        loadFlocksForFarm(e.target.value, "0", { resetPurchaseFields: true });
+        loadFlocksForFarm(e.target.value, "0", { resetPurchaseFields: true, persistCurrent: true, source: "add_purchase_manual_farm" });
     }
     let changeFlocks = (e) => {
         if (e.target.value === "0") {
@@ -254,7 +262,7 @@ const AddPurchase = () => {
             setExistingPurchases([]);
         } else {
             const selected = flocks.find((item) => String(item.flock_public_id) === String(e.target.value));
-            selectFlockForPurchase(selected, { resetPurchaseFields: true });
+            selectFlockForPurchase(selected, { resetPurchaseFields: true, persistCurrent: true });
         }
     }
     const validateSelectionStep = () => {
@@ -406,6 +414,11 @@ const AddPurchase = () => {
             let url = `${apiPath}purchase/`;
             const savedFlockPublicId = addData.flock_public_id;
             axios.post(url, addData, getAuthConfig()).then((res) => {
+                writeCurrentWorkspace({
+                    farmPublicId: addData.farm_public_id,
+                    flockPublicId: savedFlockPublicId,
+                    source: "add_purchase_save",
+                });
                 setShow(true);
                 setLoading(false);
                 setTimeout((() => {

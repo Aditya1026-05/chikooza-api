@@ -8,6 +8,7 @@ import axios from 'axios';
 import Modal from 'react-bootstrap/Modal';
 import Spinner from 'react-bootstrap/Spinner';
 import { useNavigate } from "react-router-dom";
+import { writeCurrentWorkspace } from "../../utils/currentWorkspace";
 
 const dailyDataSteps = [
     { title: "Flock", helper: "Mortality and feed" },
@@ -81,6 +82,11 @@ const DaywiseData = () => {
         }
         setLoading(false);
         handleUnauthorized(error, navigate);
+    };
+    const handleDailySaveSuccess = () => {
+        writeCurrentWorkspace({ farmPublicId: farmid, flockPublicId: flockid, source: "daily_data_save" });
+        setShow(true);
+        setTimeout(successMsg, 3000);
     };
 
     useEffect(() => {
@@ -205,16 +211,14 @@ const DaywiseData = () => {
                     // U: OLD: config.headers['Authorization'] was mutated before each save request.
                     axios.patch(url, dailyData, getAuthConfig()).then(() => {
                         //setErr('Form created successfully');
-                        setShow(true);
-                        setTimeout(successMsg, 3000);
+                        handleDailySaveSuccess();
                     }).catch(handleSaveError);
                 } else {
                     //console.log(dailyDataVaccination);
                     let url = `${apiPath}dailyData/${dailyDataPublicID}/`;
                     axios.patch(url, dailyDataVaccination, getAuthConfig()).then(() => {
                         //setErr('Form created successfully');
-                        setShow(true);
-                        setTimeout(successMsg, 3000);
+                        handleDailySaveSuccess();
                     }).catch(handleSaveError);
                 }
             } else {
@@ -235,8 +239,7 @@ const DaywiseData = () => {
                     axios.post(url, dailyData, getAuthConfig()).then(() => {
                         //setErr('Form created successfully');
                         setAddData({ ...addData, mortality: null, feed_intake: null, average_bird_weight: null })
-                        setShow(true);
-                        setTimeout(successMsg, 3000);
+                        handleDailySaveSuccess();
                     }).catch(handleSaveError);
                 } else {
                     // console.log(dailyDataVaccination);
@@ -244,8 +247,7 @@ const DaywiseData = () => {
                     axios.post(url, dailyDataVaccination, getAuthConfig()).then(() => {
                         //setErr('Form created successfully');
                         setAddData({ ...addData, mortality: null, feed_intake: null, average_bird_weight: null })
-                        setShow(true);
-                        setTimeout(successMsg, 3000);
+                        handleDailySaveSuccess();
                     }).catch(handleSaveError);
                 }
             }

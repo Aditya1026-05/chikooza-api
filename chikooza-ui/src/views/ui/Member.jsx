@@ -8,6 +8,13 @@ import axios from "axios";
 // U: NEW: use the lazy chart wrapper so ApexCharts is split out of this route chunk.
 import Chart from "../../components/ApexChart";
 import { Link, useNavigate } from "react-router-dom";
+import {
+  isValidWorkspaceId,
+  readInitialWorkspace,
+  resolveWorkspaceFarm,
+  resolveWorkspaceFlock,
+  writeCurrentWorkspace,
+} from "../../utils/currentWorkspace";
 
 const chartPalette = ["#b42318", "#2563eb"];
 
@@ -271,6 +278,55 @@ const Member = () => {
     });
   }, [navigate]);
 
+  const loadFlocksForFarm = useCallback((farmId, options = {}) => {
+    const {
+      preferredFlockId = "0",
+      persistCurrent = false,
+      source = "dashboard",
+    } = options;
+
+    if (!isValidWorkspaceId(farmId)) {
+      setShowFlock(false);
+      setShowForm(false);
+      setFlocks([]);
+      setSelectedFarm("0");
+      setSelectedFlock("0");
+      if (persistCurrent) {
+        writeCurrentWorkspace({ farmPublicId: "0", flockPublicId: "0", source });
+      }
+      return;
+    }
+
+    const resolvedFarmId = String(farmId);
+    setSelectedFarm(resolvedFarmId);
+
+    axios.get(`${apiPath}flocks/${resolvedFarmId}/`, getAuthConfig()).then((flockRes) => {
+      if (flockRes.data.results.total_records === 0) {
+        setFlocks([{ flock_public_id: 0, flock_name: "No flock available" }]);
+        setSelectedFlock("0");
+        setShowForm(false);
+        if (persistCurrent) {
+          writeCurrentWorkspace({ farmPublicId: resolvedFarmId, flockPublicId: "0", source });
+        }
+      } else {
+        const flockList = flockRes.data.results.flock_list;
+        const resolvedFlock = resolveWorkspaceFlock(flockList, preferredFlockId);
+        const resolvedFlockId = String(resolvedFlock.flock_public_id);
+
+        getsetFlockData2(resolvedFlockId);
+        setSelectedFlock(resolvedFlockId);
+        setFlocks(flockList);
+        setShowForm(true);
+        if (persistCurrent) {
+          writeCurrentWorkspace({ farmPublicId: resolvedFarmId, flockPublicId: resolvedFlockId, source });
+        }
+      }
+      setShowFlock(true);
+    }).catch((err) => {
+      handleUnauthorized(err, navigate);
+    });
+  }, [getsetFlockData2, navigate]);
+
   useEffect(() => {
     loadRecordStatus(selectedFlock);
   }, [loadRecordStatus, selectedFlock]);
@@ -283,28 +339,17 @@ const Member = () => {
         setFarms([{ public_id: 0, name: "No farm available" }]);
         setSelectedFarm("0");
         setTotalFlockCount(0);
+        writeCurrentWorkspace({ farmPublicId: "0", flockPublicId: "0", source: "dashboard_empty" });
       } else {
-        setFarms(res.data.results);
-        loadTotalFlockCount(res.data.results);
-        const latestFarm = res.data.results[res.data.results.length - 1];
-        setSelectedFarm(String(latestFarm.public_id));
-        url = `${apiPath}flocks/${latestFarm.public_id}/`;
-        axios.get(url, getAuthConfig()).then((flockRes) => {
-          if (flockRes.data.results.total_records === 0) {
-            setFlocks([{ flock_public_id: 0, flock_name: "No flock available" }]);
-            setSelectedFlock("0");
-            setShowForm(false);
-          } else {
-            const flockList = flockRes.data.results.flock_list;
-            const latestFlock = flockList[flockList.length - 1];
-            getsetFlockData2(latestFlock.flock_public_id);
-            setSelectedFlock(String(latestFlock.flock_public_id));
-            setFlocks(flockList);
-            setShowForm(true);
-          }
-          setShowFlock(true);
-        }).catch((err) => {
-          handleUnauthorized(err, navigate);
+        const farmList = res.data.results;
+        const savedWorkspace = readInitialWorkspace();
+        const resolvedFarm = resolveWorkspaceFarm(farmList, savedWorkspace.farmPublicId);
+        setFarms(farmList);
+        loadTotalFlockCount(farmList);
+        loadFlocksForFarm(resolvedFarm.public_id, {
+          preferredFlockId: savedWorkspace.flockPublicId,
+          persistCurrent: true,
+          source: "dashboard_init",
         });
       }
     }).catch((err) => {
@@ -313,7 +358,7 @@ const Member = () => {
       setTotalFlockCount(0);
       handleUnauthorized(err, navigate);
     });
-  }, [getsetFlockData2, loadTotalFlockCount, navigate]);
+  }, [loadFlocksForFarm, loadTotalFlockCount, navigate]);
 
   const changeFarm = (event) => {
     // U: OLD: e.target.value === 0 compared a string to a number.
@@ -323,34 +368,25 @@ const Member = () => {
       setFlocks([]);
       setSelectedFarm("0");
       setSelectedFlock("0");
+      writeCurrentWorkspace({ farmPublicId: "0", flockPublicId: "0", source: "dashboard_manual_farm" });
       return;
     }
 
-    setSelectedFarm(event.target.value);
-    const url = `${apiPath}flocks/${event.target.value}/`;
-    axios.get(url, getAuthConfig()).then((res) => {
-      if (res.data.results.total_records === 0) {
-        setFlocks([{ flock_public_id: 0, flock_name: "No flock available" }]);
-        setSelectedFlock("0");
-        setShowForm(false);
-      } else {
-        const flockList = res.data.results.flock_list;
-        const latestFlock = flockList[flockList.length - 1];
-        getsetFlockData2(latestFlock.flock_public_id);
-        setSelectedFlock(String(latestFlock.flock_public_id));
-        setFlocks(flockList);
-        setShowForm(true);
-      }
-      setShowFlock(true);
-    }).catch((err) => {
-      handleUnauthorized(err, navigate);
+    loadFlocksForFarm(event.target.value, {
+      preferredFlockId: "0",
+      persistCurrent: true,
+      source: "dashboard_manual_farm",
     });
   };
 
-  const selectFlockRecord = (flock) => {
+  const selectFlockRecord = (flock, options = {}) => {
+    const { persistCurrent = false, farmId = selectedFarm, source = "dashboard_manual_flock" } = options;
     if (!flock || String(flock.flock_public_id) === "0") {
       setShowForm(false);
       setSelectedFlock("0");
+      if (persistCurrent) {
+        writeCurrentWorkspace({ farmPublicId: farmId, flockPublicId: "0", source });
+      }
       return;
     }
 
@@ -358,11 +394,14 @@ const Member = () => {
     getsetFlockData2(flock.flock_public_id);
     setShowForm(true);
     setSelectedFlock(String(flock.flock_public_id));
+    if (persistCurrent) {
+      writeCurrentWorkspace({ farmPublicId: farmId, flockPublicId: flock.flock_public_id, source });
+    }
   };
 
   const changeFlock = (event) => {
     const flock = flocks.find((item) => String(item.flock_public_id) === event.target.value);
-    selectFlockRecord(flock);
+    selectFlockRecord(flock, { persistCurrent: true });
   };
 
   const selectedFarmRecord = useMemo(() => {
@@ -547,7 +586,7 @@ const Member = () => {
       <section className="member-dashboard-hero">
         <div>
           <span>Farmer dashboard</span>
-          <h1>Flock performance at a glance.</h1>
+          <h1>FLOCK PERFORMANCE<br />AT A GLANCE</h1>
         </div>
         <div className="member-dashboard-summary" aria-label="Dashboard record summary">
           <article>
@@ -558,13 +597,23 @@ const Member = () => {
             <span>Flocks</span>
             <strong>{totalFlockCount}</strong>
           </article>
-          <article>
-            <span>Active farm</span>
-            <strong>{selectedFarmLabel}</strong>
+          <article className="member-dashboard-select-card">
+            <label htmlFor="currentFarmSelect">Current farm</label>
+            <Input value={selectedFarm} onChange={changeFarm} id="currentFarmSelect" name="currentFarm" type="select">
+              <option value="0" disabled>Select Farm</option>
+              {farms.map((item) => (
+                <option key={item.public_id} value={item.public_id}>{item.name}</option>
+              ))}
+            </Input>
           </article>
-          <article>
-            <span>Active flock</span>
-            <strong>{selectedFlockLabel}</strong>
+          <article className="member-dashboard-select-card">
+            <label htmlFor="currentFlockSelect">Current flock</label>
+            <Input value={selectedFlock} onChange={changeFlock} id="currentFlockSelect" name="currentFlock" type="select" disabled={!showFlock}>
+              <option value="0" disabled>Select Flock</option>
+              {flocks.map((item) => (
+                <option key={item.flock_public_id} value={item.flock_public_id}>{item.flock_name}</option>
+              ))}
+            </Input>
           </article>
         </div>
       </section>

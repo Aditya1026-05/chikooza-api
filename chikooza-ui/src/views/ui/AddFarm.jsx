@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import Modal from 'react-bootstrap/Modal';
+import { writeCurrentWorkspace } from "../../utils/currentWorkspace";
 
 const FARM_DRAFT_KEY = "chikooza-add-farm-draft";
 
@@ -120,6 +121,10 @@ const AddFarm = () => {
       let url = `${apiPath}farm/`;
       // U: OLD: config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
       axios.post(url, farm, getAuthConfig()).then((res) => {
+        const createdFarmId = res.data?.results?.public_id;
+        if (createdFarmId) {
+          writeCurrentWorkspace({ farmPublicId: createdFarmId, flockPublicId: "0", source: "add_farm_save" });
+        }
         localStorage.removeItem(FARM_DRAFT_KEY);
         setLoading(false);
         setAddData(emptyFarmDraft);

@@ -6,20 +6,21 @@ import Modal from 'react-bootstrap/Modal'
 import { Link } from "react-router-dom";
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
-
-const DAILY_SELECTOR_DRAFT_KEY = "chikooza-daily-selector-draft";
+import {
+    readInitialWorkspace,
+    resolveWorkspaceFarm,
+    resolveWorkspaceFlock,
+    writeCurrentWorkspace,
+    writeLegacySelectorWorkspace,
+} from "../../utils/currentWorkspace";
 
 const readDailySelectorDraft = () => {
-    try {
-        const draft = JSON.parse(localStorage.getItem(DAILY_SELECTOR_DRAFT_KEY) || "{}");
-        return {
-            selectedFarmId: draft.selectedFarmId || "0",
-            selectedFlockId: draft.selectedFlockId || "0",
-            selectorStep: 0,
-        };
-    } catch {
-        return { selectedFarmId: "0", selectedFlockId: "0", selectorStep: 0 };
-    }
+    const workspace = readInitialWorkspace();
+    return {
+        selectedFarmId: workspace.farmPublicId || "0",
+        selectedFlockId: workspace.flockPublicId || "0",
+        selectorStep: 0,
+    };
 };
 
 const ManageFlock = () => {
@@ -36,12 +37,15 @@ const ManageFlock = () => {
     const [selectedFlockId, setSelectedFlockId] = useState(initialDraft.selectedFlockId);
     const [selectorStep, setSelectorStep] = useState(initialDraft.selectorStep);
 
-    function loadDailyDataForFlock(selectedFlock, nextStep = 0) {
+    function loadDailyDataForFlock(selectedFlock, nextStep = 0, { persistCurrent = false, source = "flock_daily_data_manual_flock" } = {}) {
         if (!selectedFlock || String(selectedFlock.flock_public_id) === "0") {
             setFlock({});
             setShowForm(false);
             setList([]);
             setSelectedFlockId("0");
+            if (persistCurrent) {
+                writeCurrentWorkspace({ farmPublicId: selectedFarmId, flockPublicId: "0", source });
+            }
             return;
         }
 
@@ -60,9 +64,16 @@ const ManageFlock = () => {
             setList([]);
             handleUnauthorized(err, navigate);
         });
+        if (persistCurrent) {
+            writeCurrentWorkspace({
+                farmPublicId: selectedFlock.farm_public_id || selectedFarmId,
+                flockPublicId: selectedFlock.flock_public_id,
+                source,
+            });
+        }
     }
 
-    function loadFlocksForFarm(farmId, preferredFlockId = "0", nextStep = 0) {
+    function loadFlocksForFarm(farmId, preferredFlockId = "0", nextStep = 0, { persistCurrent = false, source = "flock_daily_data_manual_farm" } = {}) {
         if (String(farmId) === "0") {
             setShowFlock(false);
             setShowForm(false);
@@ -71,6 +82,9 @@ const ManageFlock = () => {
             setSelectedFarmId("0");
             setSelectedFlockId("0");
             setSelectorStep(0);
+            if (persistCurrent) {
+                writeCurrentWorkspace({ farmPublicId: "0", flockPublicId: "0", source });
+            }
             return;
         }
 
@@ -84,13 +98,16 @@ const ManageFlock = () => {
                 setShowForm(false);
                 setList([]);
                 setSelectorStep(0);
+                if (persistCurrent) {
+                    writeCurrentWorkspace({ farmPublicId: farmId, flockPublicId: "0", source });
+                }
                 return;
             }
 
             const flockList = res.data.results.flock_list;
-            const selectedFlock = flockList.find((item) => String(item.flock_public_id) === String(preferredFlockId)) || flockList[flockList.length - 1];
+            const selectedFlock = resolveWorkspaceFlock(flockList, preferredFlockId);
             setFlocks(flockList);
-            loadDailyDataForFlock(selectedFlock, nextStep);
+            loadDailyDataForFlock(selectedFlock, nextStep, { persistCurrent, source });
         }).catch((err) => {
             setFlocks([{ flock_public_id: 0, flock_name: 'No flock available' }]);
             setShowForm(false);
@@ -107,9 +124,12 @@ const ManageFlock = () => {
                 setFarms([{ public_id: 0, name: 'No farm available' }]);
             } else {
                 const farmList = res.data.results;
-                const selectedFarm = farmList.find((item) => String(item.public_id) === String(initialDraft.selectedFarmId)) || farmList[farmList.length - 1];
+                const selectedFarm = resolveWorkspaceFarm(farmList, initialDraft.selectedFarmId);
                 setFarms(farmList);
-                loadFlocksForFarm(selectedFarm.public_id, initialDraft.selectedFlockId);
+                loadFlocksForFarm(selectedFarm.public_id, initialDraft.selectedFlockId, 0, {
+                    persistCurrent: true,
+                    source: "flock_daily_data_init",
+                });
             }
         }).catch((err) => {
             setFarms([{ public_id: 0, name: 'No farm available' }]);
@@ -118,20 +138,21 @@ const ManageFlock = () => {
     }, [navigate])
 
     useEffect(() => {
-        localStorage.setItem(DAILY_SELECTOR_DRAFT_KEY, JSON.stringify({
-            selectedFarmId,
-            selectedFlockId,
-            selectorStep,
-            updatedAt: Date.now(),
+        writeLegacySelectorWorkspace({
+            farmPublicId: selectedFarmId,
+            flockPublicId: selectedFlockId,
             source: "flock_daily_data",
-        }));
+        });
     }, [selectedFarmId, selectedFlockId, selectorStep]);
 
     let save = (e) => {
         e.preventDefault();
     }
     let changeFarm = (e) => {
-        loadFlocksForFarm(e.target.value, "0", 0);
+        loadFlocksForFarm(e.target.value, "0", 0, {
+            persistCurrent: true,
+            source: "flock_daily_data_manual_farm",
+        });
     }
     let changeFlocks = (e) => {
         // U: OLD: selecting a flock did not share one loader with draft restore.
@@ -142,7 +163,10 @@ const ManageFlock = () => {
             setSelectedFlockId("0");
             return;
         }
-        loadDailyDataForFlock(selectedFlock, 0);
+        loadDailyDataForFlock(selectedFlock, 0, {
+            persistCurrent: true,
+            source: "flock_daily_data_manual_flock",
+        });
     }
     let [modalShow, setModalShow] = useState(false);
     let [week, setWeek] = useState(null);

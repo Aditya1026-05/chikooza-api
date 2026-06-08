@@ -6,6 +6,11 @@ import { useState, useEffect } from "react";
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import Modal from 'react-bootstrap/Modal';
+import {
+  readInitialWorkspace,
+  resolveWorkspaceFarm,
+  writeCurrentWorkspace,
+} from "../../utils/currentWorkspace";
 
 const MANAGE_FARM_DRAFT_KEY = "chikooza-manage-farm-draft";
 
@@ -44,6 +49,7 @@ const readManageFarmDraft = () => {
 const ManageFarm = () => {
 
   const [initialDraft] = useState(() => readManageFarmDraft());
+  const [activeWorkspace] = useState(() => readInitialWorkspace());
   const navigate = useNavigate();
   const [show, setShow] = useState(false);
   const [quardinatesModel, setQuardinatesModel] = useState(false);
@@ -121,7 +127,8 @@ const ManageFarm = () => {
       } else {
         const farmResults = res.data.results;
         const draftFarmId = initialDraft.selectedFarmId !== "0" ? initialDraft.selectedFarmId : initialDraft.data.public_id;
-        const activeFarm = farmResults.find((item) => String(item.public_id) === String(draftFarmId)) || farmResults[farmResults.length - 1];
+        const requestedFarmId = draftFarmId && String(draftFarmId) !== "0" ? draftFarmId : activeWorkspace.farmPublicId;
+        const activeFarm = resolveWorkspaceFarm(farmResults, requestedFarmId);
         setFarm(farmResults);
         loadFarmForEdit(activeFarm.public_id, initialDraft.farmStep > 0 ? initialDraft.farmStep : 0);
       }
@@ -129,7 +136,7 @@ const ManageFarm = () => {
       setFarm([{ public_id: 0, name: 'No farm available' }]);
       handleUnauthorized(err, navigate);
     });
-  }, [navigate])
+  }, [activeWorkspace.farmPublicId, initialDraft.data.public_id, initialDraft.farmStep, initialDraft.selectedFarmId, navigate])
 
   const validateFarmDetails = () => {
     // U: OLD: validation depended on e.target indexes, which breaks when the
@@ -196,6 +203,7 @@ const ManageFarm = () => {
           const updatedFarmId = addData.public_id;
           setShow(true);
           setLoading(false)
+          writeCurrentWorkspace({ farmPublicId: updatedFarmId, flockPublicId: "0", source: "manage_farm_save" });
           setTimeout((() => {
             setShow(false);
             // U: Replaced find side effects with map so the callback always returns a value.
@@ -272,6 +280,7 @@ const ManageFarm = () => {
     }
   };
   let displayForm = (e) => {
+    writeCurrentWorkspace({ farmPublicId: e.target.value, flockPublicId: "0", source: "manage_farm_manual" });
     loadFarmForEdit(e.target.value, 0);
   }
   let closeAll = () => {

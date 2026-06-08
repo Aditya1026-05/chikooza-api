@@ -6,6 +6,12 @@ import axios from 'axios';
 import { useLocation, useNavigate } from 'react-router-dom';
 import Modal from 'react-bootstrap/Modal';
 import moment from "moment/moment";
+import {
+    readInitialWorkspace,
+    resolveWorkspaceFarm,
+    resolveWorkspaceFlock,
+    writeCurrentWorkspace,
+} from "../../utils/currentWorkspace";
 
 const MANAGE_FLOCK_DRAFT_KEY = "chikooza-manage-flock-draft";
 
@@ -50,14 +56,17 @@ const readManageFlockDraft = () => {
 
 const ManageFlock = () => {
     const [initialDraft] = useState(() => readManageFlockDraft());
+    const [activeWorkspace] = useState(() => readInitialWorkspace());
     const [show, setShow] = useState(false);
     let [loading, setLoading] = useState(false);
     const navigate = useNavigate();
     const location = useLocation();
     const routeFarmId = String(location.state?.farmPublicId || "0");
     const routeFlockId = String(location.state?.flockPublicId || "0");
-    const startingFarmId = routeFarmId !== "0" ? routeFarmId : initialDraft.selectedFarmId;
-    const startingFlockId = routeFlockId !== "0" ? routeFlockId : initialDraft.selectedFlockId;
+    const draftFarmId = initialDraft.selectedFarmId !== "0" ? initialDraft.selectedFarmId : activeWorkspace.farmPublicId;
+    const draftFlockId = initialDraft.selectedFlockId !== "0" ? initialDraft.selectedFlockId : activeWorkspace.flockPublicId;
+    const startingFarmId = routeFarmId !== "0" ? routeFarmId : draftFarmId;
+    const startingFlockId = routeFlockId !== "0" ? routeFlockId : draftFlockId;
     let [err, setErr] = useState('');
     let [farms, setFarms] = useState([]);
     let [showFlocks, setShowFlocks] = useState(startingFarmId !== "0" ? 1 : 0);
@@ -103,8 +112,8 @@ const ManageFlock = () => {
                 setFarms([{ public_id: 0, name: 'No farm available' }]);
             } else {
                 const farmResults = res.data.results;
-                const requestedFarmId = routeFarmId !== "0" ? routeFarmId : initialDraft.selectedFarmId;
-                const activeFarm = farmResults.find((item) => String(item.public_id) === String(requestedFarmId)) || farmResults[farmResults.length - 1];
+                const requestedFarmId = routeFarmId !== "0" ? routeFarmId : initialDraft.selectedFarmId !== "0" ? initialDraft.selectedFarmId : activeWorkspace.farmPublicId;
+                const activeFarm = resolveWorkspaceFarm(farmResults, requestedFarmId);
                 const activeFarmId = String(activeFarm.public_id);
                 setFarms(farmResults);
                 setSelectedFarmId(activeFarmId);
@@ -117,8 +126,8 @@ const ManageFlock = () => {
                         setFlockStep(0);
                     } else {
                         const flockResults = flockRes.data.results.flock_list || [];
-                        const requestedFlockId = routeFlockId !== "0" ? routeFlockId : initialDraft.selectedFlockId;
-                        const activeFlock = flockResults.find((item) => String(item.flock_public_id) === String(requestedFlockId)) || flockResults[flockResults.length - 1];
+                        const requestedFlockId = routeFlockId !== "0" ? routeFlockId : initialDraft.selectedFlockId !== "0" ? initialDraft.selectedFlockId : activeWorkspace.flockPublicId;
+                        const activeFlock = resolveWorkspaceFlock(flockResults, requestedFlockId);
                         setFlocks(flockResults);
                         loadFlockForEdit(activeFlock.flock_public_id, initialDraft.flockStep > 0 ? initialDraft.flockStep : 0);
                     }
@@ -131,7 +140,7 @@ const ManageFlock = () => {
             setFarms([{ public_id: 0, name: 'No farm available' }]);
             handleUnauthorized(err, navigate);
         });
-    }, [initialDraft.selectedFarmId, initialDraft.selectedFlockId, initialDraft.flockStep, navigate, routeFarmId, routeFlockId])
+    }, [activeWorkspace.farmPublicId, activeWorkspace.flockPublicId, initialDraft.selectedFarmId, initialDraft.selectedFlockId, initialDraft.flockStep, navigate, routeFarmId, routeFlockId])
     useEffect(() => {
         let url = `${apiPath}breeds/`;
         axios.get(url, getAuthConfig()).then((res) => {
@@ -402,6 +411,7 @@ const ManageFlock = () => {
                 setFlocks((currentFlocks) => currentFlocks.map((item) => (
                     String(item.flock_public_id) === String(addData.flock_public_id) ? { ...item, ...addData, flock_name: addData.flock_name } : item
                 )));
+                writeCurrentWorkspace({ farmPublicId: selectedFarmId, flockPublicId: addData.flock_public_id, source: "manage_flock_save" });
                 //setErr('Flock updated successfully');
                 //setShowFlocks(0);
                 //setShowForm(0);
@@ -435,6 +445,7 @@ const ManageFlock = () => {
             setSelectedFarmId("0");
             setSelectedFlockId("0");
             setFlockStep(0);
+            writeCurrentWorkspace({ farmPublicId: "0", flockPublicId: "0", source: "manage_flock_manual_farm" });
         } else {
             //setFarm_public_iderr('');
             setSelectedFarmId(e.target.value);
@@ -450,11 +461,13 @@ const ManageFlock = () => {
                     setFlocks([{ flock_public_id: 0, flock_name: 'No flock available' }]);
                     setSelectedFlockId("0");
                     setShowForm(0);
+                    writeCurrentWorkspace({ farmPublicId: e.target.value, flockPublicId: "0", source: "manage_flock_manual_farm" });
                 } else {
                     const flockResults = res.data.results.flock_list || [];
                     const latestFlock = flockResults[flockResults.length - 1];
                     setFlocks(flockResults);
                     loadFlockForEdit(latestFlock.flock_public_id, 0);
+                    writeCurrentWorkspace({ farmPublicId: e.target.value, flockPublicId: latestFlock.flock_public_id, source: "manage_flock_manual_farm" });
                 }
             }).catch((err) => {
                 //setFlocks(err.data.results);
@@ -463,6 +476,7 @@ const ManageFlock = () => {
         }
     }
     let changeFlocks = (e) => {
+        writeCurrentWorkspace({ farmPublicId: selectedFarmId, flockPublicId: e.target.value, source: "manage_flock_manual_flock" });
         loadFlockForEdit(e.target.value, 0);
     }
     let changeBreed = (e) => {

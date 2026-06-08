@@ -6,19 +6,15 @@ import { useState, useEffect } from "react";
 import axios from 'axios';
 // import '../ui/custom.css'
 import { useLocation, useNavigate } from "react-router-dom";
-
-const DAILY_SELECTOR_DRAFT_KEY = "chikooza-daily-selector-draft";
-
-const readSelectorDraft = () => {
-    try {
-        return JSON.parse(localStorage.getItem(DAILY_SELECTOR_DRAFT_KEY) || "{}");
-    } catch {
-        return {};
-    }
-};
+import {
+    readInitialWorkspace,
+    resolveWorkspaceFarm,
+    resolveWorkspaceFlock,
+    writeCurrentWorkspace,
+} from "../../utils/currentWorkspace";
 
 const ViewSale = () => {
-    const [activeSelectorDraft] = useState(() => readSelectorDraft());
+    const [activeWorkspace] = useState(() => readInitialWorkspace());
     const [showFlock, setShowFlock] = useState(false);
     const [showForm, setShowForm] = useState(false);
     let [flocks, setFlocks] = useState([]);
@@ -50,23 +46,31 @@ const ViewSale = () => {
             })
     }
 
-    function selectFlockForSales(selectedFlock) {
+    function selectFlockForSales(selectedFlock, { persistCurrent = false, source = "view_sale_manual_flock" } = {}) {
         if (!selectedFlock || String(selectedFlock.flock_public_id) === "0") {
             setShowForm(false);
             setSaleList([]);
             setSelectedFlockId("0");
             setSelectedFlockName("");
+            if (persistCurrent) {
+                writeCurrentWorkspace({ farmPublicId: selectedFarmId, flockPublicId: "0", source });
+            }
             return;
         }
 
-        setSelectedFarmId(String(selectedFlock.farm_public_id || selectedFarmId));
-        setSelectedFlockId(String(selectedFlock.flock_public_id));
+        const farmId = String(selectedFlock.farm_public_id || selectedFarmId);
+        const flockId = String(selectedFlock.flock_public_id);
+        setSelectedFarmId(farmId);
+        setSelectedFlockId(flockId);
         setSelectedFlockName(selectedFlock.flock_name || "Selected flock");
+        if (persistCurrent) {
+            writeCurrentWorkspace({ farmPublicId: farmId, flockPublicId: flockId, source });
+        }
         setShowForm(true);
         getSalesList(selectedFlock.flock_public_id);
     }
 
-    function loadFlocksForFarm(farmId, preferredFlockId = "0") {
+    function loadFlocksForFarm(farmId, preferredFlockId = "0", { persistCurrent = false, source = "view_sale_manual_farm" } = {}) {
         if (!farmId || String(farmId) === "0") {
             setShowFlock(false);
             setShowForm(false);
@@ -74,6 +78,9 @@ const ViewSale = () => {
             setSaleList([]);
             setSelectedFlockId("0");
             setSelectedFlockName("");
+            if (persistCurrent) {
+                writeCurrentWorkspace({ farmPublicId: "0", flockPublicId: "0", source });
+            }
             return;
         }
 
@@ -86,13 +93,16 @@ const ViewSale = () => {
                 setSaleList([]);
                 setSelectedFlockId("0");
                 setSelectedFlockName("");
+                if (persistCurrent) {
+                    writeCurrentWorkspace({ farmPublicId: farmId, flockPublicId: "0", source });
+                }
                 return;
             }
 
             const flockList = flockRes.data.results.flock_list || [];
-            const selected = flockList.find((item) => String(item.flock_public_id) === String(preferredFlockId)) || flockList[flockList.length - 1];
+            const selected = resolveWorkspaceFlock(flockList, preferredFlockId);
             setFlocks(flockList);
-            selectFlockForSales(selected);
+            selectFlockForSales(selected, { persistCurrent, source });
         }).catch((err) => {
             setFlocks([]);
             setShowFlock(false);
@@ -112,12 +122,9 @@ const ViewSale = () => {
             } else {
                 const farmList = res.data.results;
                 setFarms(farmList);
-                const selectorFarmId = String(activeSelectorDraft.selectedFarmId || "0");
-                const selectorFlockId = String(activeSelectorDraft.selectedFlockId || "0");
-                const latestFarm = farmList[farmList.length - 1];
-                const requestedFarmId = prefillFarmId !== "0" ? prefillFarmId : selectorFarmId !== "0" ? selectorFarmId : latestFarm?.public_id;
-                const selectedFarm = farmList.find((item) => String(item.public_id) === String(requestedFarmId)) || latestFarm;
-                const targetFlockId = prefillFlockId !== "0" ? prefillFlockId : selectorFlockId;
+                const requestedFarmId = prefillFarmId !== "0" ? prefillFarmId : activeWorkspace.farmPublicId;
+                const selectedFarm = resolveWorkspaceFarm(farmList, requestedFarmId);
+                const targetFlockId = prefillFlockId !== "0" ? prefillFlockId : activeWorkspace.flockPublicId;
                 if (selectedFarm) {
                     loadFlocksForFarm(selectedFarm.public_id, targetFlockId);
                 }
@@ -126,7 +133,7 @@ const ViewSale = () => {
             setFarms([{ public_id: 0, name: 'No farm available' }]);
             handleUnauthorized(err, navigate);
         });
-    }, [activeSelectorDraft.selectedFarmId, activeSelectorDraft.selectedFlockId, navigate, prefillFarmId, prefillFlockId])
+    }, [activeWorkspace.farmPublicId, activeWorkspace.flockPublicId, navigate, prefillFarmId, prefillFlockId])
     let changeFarm = (e) => {
         setSelectedFarmId(e.target.value);
         setSelectedFlockId("0");
@@ -136,8 +143,9 @@ const ViewSale = () => {
         if (e.target.value === "0") {
             setShowFlock(false)
             setFlocks([]);
+            writeCurrentWorkspace({ farmPublicId: "0", flockPublicId: "0", source: "view_sale_manual_farm" });
         } else {
-            loadFlocksForFarm(e.target.value);
+            loadFlocksForFarm(e.target.value, "0", { persistCurrent: true, source: "view_sale_manual_farm" });
         }
     }
     let changeFlock = (e) => {
@@ -147,6 +155,7 @@ const ViewSale = () => {
             setSaleList([]);
             setSelectedFlockId("0");
             setSelectedFlockName("");
+            writeCurrentWorkspace({ farmPublicId: selectedFarmId, flockPublicId: "0", source: "view_sale_manual_flock" });
         } else {
             const user = flocks.find(u => String(u.flock_public_id) === flockPublicId);
             if (!user) {
@@ -156,7 +165,7 @@ const ViewSale = () => {
                 setSelectedFlockName("");
                 return;
             }
-            selectFlockForSales(user);
+            selectFlockForSales(user, { persistCurrent: true, source: "view_sale_manual_flock" });
         }
     }
     return (
@@ -239,7 +248,7 @@ const ViewSale = () => {
                                                                                 <td>{saleTypeLabel(item.sales_type)}</td>
                                                                                 <td>{item.lifting_count}</td>
                                                                                 <td className="sales-review-table__action">
-                                                                                    <Button className="table-action-button table-action-button--compact" color="danger" outline size="sm" type="button" onClick={() => navigate('/editsale', { state: { item } })}>
+                                                                                    <Button className="table-action-button table-action-button--compact" color="danger" outline size="sm" type="button" onClick={() => navigate('/editsale', { state: { item, farmPublicId: selectedFarmId, flockPublicId: selectedFlockId } })}>
                                                                                         View
                                                                                     </Button>
                                                                                 </td>

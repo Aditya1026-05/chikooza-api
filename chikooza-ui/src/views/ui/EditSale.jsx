@@ -8,6 +8,7 @@ import axios from "axios";
 import Modal from 'react-bootstrap/Modal';
 import Spinner from 'react-bootstrap/Spinner';
 import { useNavigate } from "react-router-dom";
+import { writeCurrentWorkspace } from "../../utils/currentWorkspace";
 
 
 
@@ -103,6 +104,11 @@ const EditSale = () => {
                 other_taxes: data.ot,
             };
             axios.patch(url, saleData, getAuthConfig()).then((res) => {
+                writeCurrentWorkspace({
+                    farmPublicId: location.state?.farmPublicId || location.state?.item?.farm_public_id,
+                    flockPublicId: location.state?.flockPublicId || location.state?.item?.flock_public_id,
+                    source: "edit_sale_save",
+                });
                 setLoading(false); setShow(true);
                 setTimeout(successMsg, 3000);
                 setData({ ...data, })

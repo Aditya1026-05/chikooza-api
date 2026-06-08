@@ -6,6 +6,7 @@ import axios from 'axios';
 import Modal from 'react-bootstrap/Modal';
 import { Link, useNavigate } from 'react-router-dom';
 import moment from "moment";
+import { readInitialWorkspace, resolveWorkspaceFarm, writeCurrentWorkspace } from "../../utils/currentWorkspace";
 
 const FLOCK_DRAFT_KEY = "chikooza-add-flock-draft";
 
@@ -65,7 +66,10 @@ const AddFlock = () => {
             } else {
                 const farmResults = res.data.results;
                 const draftHasSelectedFarm = addData.farm_public_id && String(addData.farm_public_id) !== "0";
-                const activeFarm = farmResults.find((item) => String(item.public_id) === String(addData.farm_public_id)) || farmResults[farmResults.length - 1];
+                const workspace = readInitialWorkspace();
+                const activeFarm =
+                    farmResults.find((item) => String(item.public_id) === String(addData.farm_public_id)) ||
+                    resolveWorkspaceFarm(farmResults, workspace.farmPublicId);
                 setFarms(farmResults);
                 if (activeFarm && !draftHasSelectedFarm) {
                     setAddData((current) => ({ ...current, farm_public_id: activeFarm.public_id }));
@@ -176,7 +180,15 @@ const AddFlock = () => {
             }
             let url = `${apiPath}flocks/`;
             // U: OLD: config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
-            axios.post(url, flock, getAuthConfig()).then(() => {
+            axios.post(url, flock, getAuthConfig()).then((res) => {
+                const createdFlockId = res.data?.results?.public_id;
+                if (createdFlockId) {
+                    writeCurrentWorkspace({
+                        farmPublicId: addData.farm_public_id,
+                        flockPublicId: createdFlockId,
+                        source: "add_flock_save",
+                    });
+                }
                 localStorage.removeItem(FLOCK_DRAFT_KEY);
                 //setErr('Form created successfully');
                 setShow(true);
@@ -190,6 +202,7 @@ const AddFlock = () => {
     }
     let changeFarm = (e) => {
         setAddData({ ...addData, farm_public_id: e.target.value });
+        writeCurrentWorkspace({ farmPublicId: e.target.value, flockPublicId: "0", source: "add_flock_manual_farm" });
         // U: OLD: e.target.value === 0 compared a string to a number.
         e.target.value === "0" ? setFarm_public_iderr('Please select farm') : setFarm_public_iderr('');
     }

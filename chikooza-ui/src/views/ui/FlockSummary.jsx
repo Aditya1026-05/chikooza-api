@@ -33,21 +33,17 @@ import {
   todayIso,
   toNumber,
 } from "../../utils/reporting";
-
-const DAILY_SELECTOR_DRAFT_KEY = "chikooza-daily-selector-draft";
-
-const readSelectorDraft = () => {
-  try {
-    return JSON.parse(localStorage.getItem(DAILY_SELECTOR_DRAFT_KEY) || "{}");
-  } catch {
-    return {};
-  }
-};
+import {
+  readInitialWorkspace,
+  resolveWorkspaceFarm,
+  resolveWorkspaceFlock,
+  writeCurrentWorkspace,
+} from "../../utils/currentWorkspace";
 
 // U: OLD: this report exported a DOM screenshot and showed only all-time backend totals.
 // U: NEW: the screen and PDF use one filtered calculation path for purchases, sales, and daily rows.
 const FlockSummary = () => {
-  const [activeSelectorDraft] = useState(() => readSelectorDraft());
+  const [activeWorkspace] = useState(() => readInitialWorkspace());
   const [farms, setFarms] = useState([]);
   const [flocks, setFlocks] = useState([]);
   const [selectedFarmId, setSelectedFarmId] = useState("0");
@@ -90,7 +86,7 @@ const FlockSummary = () => {
   const hasAnyDailyData = dailyDataList.length > 0;
   const hasFilteredRows = filteredDailyRows.length || filteredPurchases.length || filteredSales.length;
 
-  const selectFlockForReport = (nextFlock) => {
+  const selectFlockForReport = (nextFlock, { persistCurrent = false, source = "flock_summary_manual_flock" } = {}) => {
     if (!nextFlock || String(nextFlock.flock_public_id) === "0") {
       setSelectedFlockId("0");
       setCurrentFlock(null);
@@ -98,16 +94,24 @@ const FlockSummary = () => {
       setPurchaseList([]);
       setSalesList([]);
       setDailyDataList([]);
+      if (persistCurrent) {
+        writeCurrentWorkspace({ farmPublicId: selectedFarmId, flockPublicId: "0", source });
+      }
       return;
     }
 
-    setSelectedFarmId(String(nextFlock.farm_public_id || selectedFarmId));
-    setSelectedFlockId(String(nextFlock.flock_public_id));
+    const farmId = String(nextFlock.farm_public_id || selectedFarmId);
+    const flockId = String(nextFlock.flock_public_id);
+    setSelectedFarmId(farmId);
+    setSelectedFlockId(flockId);
     setCurrentFlock(nextFlock);
+    if (persistCurrent) {
+      writeCurrentWorkspace({ farmPublicId: farmId, flockPublicId: flockId, source });
+    }
     loadReportData(nextFlock.flock_public_id);
   };
 
-  const loadFlocksForFarm = (farmPublicId, preferredFlockId = "0") => {
+  const loadFlocksForFarm = (farmPublicId, preferredFlockId = "0", { persistCurrent = false, source = "flock_summary_manual_farm" } = {}) => {
     if (!farmPublicId || String(farmPublicId) === "0") {
       setSelectedFarmId("0");
       setSelectedFlockId("0");
@@ -117,6 +121,9 @@ const FlockSummary = () => {
       setSalesList([]);
       setDailyDataList([]);
       setFlocks([]);
+      if (persistCurrent) {
+        writeCurrentWorkspace({ farmPublicId: "0", flockPublicId: "0", source });
+      }
       return;
     }
 
@@ -134,13 +141,16 @@ const FlockSummary = () => {
       .then((res) => {
         if (!res.data.results.total_records) {
           setFlocks([]);
+          if (persistCurrent) {
+            writeCurrentWorkspace({ farmPublicId, flockPublicId: "0", source });
+          }
           return;
         }
 
         const flockList = res.data.results.flock_list || [];
-        const nextFlock = flockList.find((item) => String(item.flock_public_id) === String(preferredFlockId)) || flockList[flockList.length - 1];
+        const nextFlock = resolveWorkspaceFlock(flockList, preferredFlockId);
         setFlocks(flockList);
-        selectFlockForReport(nextFlock);
+        selectFlockForReport(nextFlock, { persistCurrent, source });
       })
       .catch((err) => {
         setFlocks([]);
@@ -160,12 +170,9 @@ const FlockSummary = () => {
           return;
         }
 
-        const selectorFarmId = String(activeSelectorDraft.selectedFarmId || "0");
-        const selectorFlockId = String(activeSelectorDraft.selectedFlockId || "0");
-        const latestFarm = farmList[farmList.length - 1];
-        const requestedFarmId = prefillFarmId !== "0" ? prefillFarmId : selectorFarmId !== "0" ? selectorFarmId : latestFarm?.public_id;
-        const selectedFarm = farmList.find((item) => String(item.public_id) === String(requestedFarmId)) || latestFarm;
-        const targetFlockId = prefillFlockId !== "0" ? prefillFlockId : selectorFlockId;
+        const requestedFarmId = prefillFarmId !== "0" ? prefillFarmId : activeWorkspace.farmPublicId;
+        const selectedFarm = resolveWorkspaceFarm(farmList, requestedFarmId);
+        const targetFlockId = prefillFlockId !== "0" ? prefillFlockId : activeWorkspace.flockPublicId;
 
         if (selectedFarm) {
           loadFlocksForFarm(selectedFarm.public_id, targetFlockId);
@@ -175,10 +182,10 @@ const FlockSummary = () => {
         setFarms([]);
         handleUnauthorized(err, navigate);
       });
-  }, [activeSelectorDraft.selectedFarmId, activeSelectorDraft.selectedFlockId, navigate, prefillFarmId, prefillFlockId]);
+  }, [activeWorkspace.farmPublicId, activeWorkspace.flockPublicId, navigate, prefillFarmId, prefillFlockId]);
 
   const changeFarm = (event) => {
-    loadFlocksForFarm(event.target.value);
+    loadFlocksForFarm(event.target.value, "0", { persistCurrent: true, source: "flock_summary_manual_farm" });
   };
 
   const changeFlock = (event) => {
@@ -192,11 +199,12 @@ const FlockSummary = () => {
       setPurchaseList([]);
       setSalesList([]);
       setDailyDataList([]);
+      writeCurrentWorkspace({ farmPublicId: selectedFarmId, flockPublicId: "0", source: "flock_summary_manual_flock" });
       return;
     }
 
     const nextFlock = flocks.find((item) => String(item.flock_public_id) === flockPublicId);
-    selectFlockForReport(nextFlock);
+    selectFlockForReport(nextFlock, { persistCurrent: true, source: "flock_summary_manual_flock" });
   };
 
   const loadReportData = (flockPublicId) => {

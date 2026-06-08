@@ -1317,6 +1317,7 @@ input[type=number]::-webkit-inner-spin-button,
 }
 
 .member-dashboard-hero span,
+.member-dashboard-summary label,
 .member-dashboard-summary span,
 .member-card-heading span,
 .member-workflow-steps article h2,
@@ -1371,6 +1372,32 @@ input[type=number]::-webkit-inner-spin-button,
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.member-dashboard-select-card label {
+  margin: 0;
+}
+
+.member-dashboard-select-card .form-select,
+.member-dashboard-select-card select {
+  background-color: transparent;
+  border: 0;
+  box-shadow: none;
+  color: #231615;
+  cursor: pointer;
+  font-size: clamp(1rem, 1.5vw, 1.2rem);
+  font-weight: 900;
+  line-height: 1.2;
+  margin-top: 0.25rem;
+  min-height: 2rem;
+  padding: 0 1.25rem 0 0;
+  width: 100%;
+}
+
+.member-dashboard-select-card .form-select:focus,
+.member-dashboard-select-card select:focus {
+  box-shadow: 0 0 0 3px rgba(180, 35, 24, 0.12);
+  outline: 0;
 }
 
 .member-continue-card {
