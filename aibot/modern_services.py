@@ -61,6 +61,8 @@ COMMON_QUERY_TYPO_REPLACEMENTS = (
     (r"\bpurchaes\b", "purchase"),
     (r"\bmortilty\b", "mortality"),
     (r"\bmortaltiy\b", "mortality"),
+    (r"\bbuggest\b", "biggest"),
+    (r"\bimporve\b", "improve"),
 )
 
 

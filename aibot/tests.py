@@ -1474,14 +1474,6 @@ class ChikoozaLLMSQLServiceTests(SimpleTestCase):
     def test_llm_service_uses_last_flock_context_for_daily_data_followup(self):
         client = FakeGroqClient(
             [
-                (
-                    '{"sql": "SELECT record_date, flock_id, flock_name, birds_died, '
-                    'birds_current, feed_consumed_kg, average_bird_weight, fcr '
-                    'FROM ai_dailydata_data_view WHERE owner_id = %s AND flock_id = %s '
-                    'AND daily_data_id IS NOT NULL ORDER BY record_date DESC LIMIT 100", '
-                    f'"params": ["{OWNER_PARAM}", 77], '
-                    '"metric": "daily_data_by_flock", "result_type": "table"}'
-                ),
                 "Alpha Batch daily data: 3 birds died, 622 current birds, 127 kg feed, FCR 0.96.",
             ]
         )
@@ -1533,9 +1525,193 @@ class ChikoozaLLMSQLServiceTests(SimpleTestCase):
         self.assertEqual(result["params"], [7, 77])
         self.assertEqual(result["resolved_flock_id"], 77)
         self.assertIn("Alpha Batch daily data", result["answer"])
-        prompt = client.requests[0]["messages"][1]["content"]
+        self.assertEqual(len(client.requests), 1)
+        prompt = client.requests[0]["messages"][-1]["content"]
         self.assertIn("Last referenced flock", prompt)
-        self.assertIn("resolved_flock_id=77", prompt)
+
+    def test_llm_service_safe_plan_remembers_active_workspace(self):
+        client = FakeGroqClient(
+            ["Your current farm is Red Farm and your current flock is Alpha Batch."]
+        )
+        service = ChikoozaLLMTextToSQLService(
+            user=self.user,
+            groq_client=client,
+            entity_resolver=FakeEntityResolver(
+                EntityResolution(
+                    context=(
+                        "Active app farm context: farm_id=42, farm_public_id=9001, farm_name=Red Farm.\n"
+                        "Active app flock context: flock_id=77, flock_public_id=5001, flock_name=Alpha Batch, farm_id=42, farm_name=Red Farm."
+                    )
+                )
+            ),
+        )
+
+        def execute(plan):
+            self.assertEqual(plan.metric, "current_workspace")
+            self.assertEqual(plan.params, [7, 77])
+            return [
+                {
+                    "farm_id": 42,
+                    "current_farm": "Red Farm",
+                    "flock_id": 77,
+                    "current_flock": "Alpha Batch",
+                    "breed_name": "Hubbard",
+                }
+            ]
+
+        service.executor = SimpleNamespace(execute=execute)
+
+        result = service.answer("which is my selected/current farm and flock")
+
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(result["metric"], "current_workspace")
+        self.assertEqual(result["resolved_farm_id"], 42)
+        self.assertEqual(result["resolved_flock_id"], 77)
+        self.assertEqual(len(client.requests), 1)
+        self.assertEqual(client.requests[0]["kwargs"]["model"], AIBOT_SQL_DEFAULT_MODEL)
+
+    def test_llm_service_safe_plan_uses_current_flock_for_its_details(self):
+        client = FakeGroqClient(["Alpha Batch has full flock, daily, sales, and purchase details."])
+        service = ChikoozaLLMTextToSQLService(
+            user=self.user,
+            groq_client=client,
+            entity_resolver=FakeEntityResolver(
+                EntityResolution(
+                    context=(
+                        "Last referenced flock from recent chat: flock_id=77, "
+                        "flock_public_id=5001, flock_name=Alpha Batch, farm_id=42, farm_name=Red Farm."
+                    )
+                )
+            ),
+        )
+
+        def execute(plan):
+            self.assertEqual(plan.metric, "complete_flock_report")
+            self.assertIn(77, plan.params)
+            return [{"flock_id": 77, "flock_name": "Alpha Batch", "farm_name": "Red Farm"}]
+
+        service.executor = SimpleNamespace(execute=execute)
+
+        result = service.answer("okay then give me all its details and every data about it")
+
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(result["metric"], "complete_flock_report")
+        self.assertEqual(result["resolved_flock_id"], 77)
+
+    def test_llm_service_safe_plan_handles_profit_rankings_and_loss_typos(self):
+        client = FakeGroqClient(
+            [
+                "The most profitable flock is Small Batch, but its costs are missing.",
+                "The biggest loss is Alpha Batch with Rs. 59,196 loss.",
+            ]
+        )
+        service = ChikoozaLLMTextToSQLService(
+            user=self.user,
+            groq_client=client,
+            entity_resolver=FakeEntityResolver(),
+        )
+
+        seen_metrics = []
+
+        def execute(plan):
+            seen_metrics.append(plan.metric)
+            if plan.metric == "most_profitable_flock":
+                self.assertIn(
+                    "ORDER BY ranked.data_ready DESC, ranked.result DESC",
+                    plan.sql,
+                )
+                self.assertIn("COALESCE(sales.total_sales, 0) > 0", plan.sql)
+                self.assertIn("COALESCE(purchases.total_purchases, 0) > 0", plan.sql)
+                return [
+                    {
+                        "flock_name": "Small Batch",
+                        "farm_name": "Red Farm",
+                        "total_sales": 14,
+                        "total_purchases": 0,
+                        "flock_cost": 0,
+                        "result": 14,
+                        "data_note": "Purchase and flock-cost records are zero or missing.",
+                        "data_ready": 0,
+                    }
+                ]
+            self.assertEqual(plan.metric, "biggest_loss_flock")
+            self.assertIn("WHERE ranked.result < 0", plan.sql)
+            self.assertIn("ORDER BY ranked.result ASC", plan.sql)
+            return [
+                {
+                    "flock_name": "Alpha Batch",
+                    "farm_name": "Red Farm",
+                    "total_sales": 7560,
+                    "total_purchases": 43006,
+                    "flock_cost": 23750,
+                    "result": -59196,
+                    "data_note": "",
+                }
+            ]
+
+        service.executor = SimpleNamespace(execute=execute)
+
+        profitable = service.answer("so show me the most profitable flock")
+        loss = service.answer("what is my buggest loss")
+
+        self.assertEqual(profitable["metric"], "most_profitable_flock")
+        self.assertEqual(loss["metric"], "biggest_loss_flock")
+        self.assertEqual(seen_metrics, ["most_profitable_flock", "biggest_loss_flock"])
+
+    def test_llm_service_safe_plan_handles_breed_sales_and_improvement_queries(self):
+        client = FakeGroqClient(
+            [
+                "Hubbard is your most used breed with 4 flocks.",
+                "Complete has the highest sales amount.",
+                "Focus on the flocks with the biggest losses and missing records.",
+            ]
+        )
+        service = ChikoozaLLMTextToSQLService(
+            user=self.user,
+            groq_client=client,
+            entity_resolver=FakeEntityResolver(),
+        )
+
+        def execute(plan):
+            if plan.metric == "most_used_breed":
+                self.assertIn("GROUP BY breed_name", plan.sql)
+                return [{"breed_name": "Hubbard", "flock_count": 4}]
+            if plan.metric == "sales_amount_leader":
+                self.assertIn("ORDER BY total_sales DESC", plan.sql)
+                return [
+                    {
+                        "flock_name": "Complete",
+                        "farm_name": "Complete Farm",
+                        "sale_count": 2,
+                        "total_sales": 507870.04,
+                    }
+                ]
+            self.assertEqual(plan.metric, "improvement_advice")
+            self.assertIn("ORDER BY ranked.profit_loss ASC", plan.sql)
+            return [
+                {
+                    "flock_name": "Alpha Batch",
+                    "farm_name": "Red Farm",
+                    "profit_loss": -59196,
+                    "total_mortality": 3,
+                    "average_fcr": 0.96,
+                    "current_birds": 622,
+                }
+            ]
+
+        service.executor = SimpleNamespace(execute=execute)
+
+        breed = service.answer("show the most used breed")
+        sales = service.answer(
+            "show the flock with the most amount done",
+            history=[{"role": "assistant", "content": "The flock with most sales is Complete."}],
+        )
+        advice = service.answer("which can i do to imporve more kindly tell by seeing my records")
+
+        self.assertEqual(breed["metric"], "most_used_breed")
+        self.assertEqual(sales["metric"], "sales_amount_leader")
+        self.assertEqual(advice["metric"], "improvement_advice")
+        self.assertIsNone(advice.get("display"))
 
     def test_llm_service_supports_flock_count_in_each_farm(self):
         client = FakeGroqClient(

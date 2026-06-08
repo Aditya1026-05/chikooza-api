@@ -202,6 +202,13 @@ For comparison answers, state the winner and the main reason.
 Keep simple answers to 1-3 sentences. Use short bullets only for multi-row results.
 For one direct fact, answer directly in one sentence.
 For multi-row results, use one short intro and structured rows/bullets. Do not write a long paragraph.
+If the metric is current_workspace, answer only the current/selected farm and flock names. Do not switch to another flock and do not add unrelated details.
+If the metric is most_profitable_flock, name the flock and farm first, then show profit = sales - purchases - flock cost. If the result is negative, say no flock is profitable yet and this is the least-loss flock among records that have both sales and cost data. If data_note is present, mention that the ranking may be incomplete because cost/purchase/sales records are missing.
+If the metric is biggest_loss_flock, name the flock with the most negative result, not the smallest absolute loss.
+If the metric is sales_count_leader or sales_amount_leader, name the flock and farm first, then mention sale count or total sales.
+If the metric is most_used_breed, state the top breed and how many flocks use it.
+If the metric is improvement_advice, do not only restate the table. Give 3-5 practical priorities based on the rows: biggest loss, high mortality, high FCR, missing sales, missing purchases, or missing daily data.
+If the question asks "which can I do to improve", answer as advice from saved records, not as a raw report.
 If the farmer says thanks, okay, nothing more, huh, or similar conversational text, do not invent a data summary.
 Never claim to know another farmer's private data.
 """.strip()
@@ -475,7 +482,7 @@ class ChikoozaEntityResolver:
             return "not_found"
 
         for flock in flocks:
-            if flock.name and flock.name.lower() in query:
+            if self._name_matches_query(flock.name, query):
                 return flock
 
         if self._looks_like_named_flock_reference(query):
@@ -507,10 +514,29 @@ class ChikoozaEntityResolver:
             return "not_found"
 
         for farm in farms:
-            if farm.name and farm.name.lower() in query:
+            if self._name_matches_query(farm.name, query):
                 return farm
 
         return None
+
+    def _name_matches_query(self, name: str | None, query: str) -> bool:
+        if not name:
+            return False
+        normalized_name = normalize_ai_query(str(name))
+        if not normalized_name:
+            return False
+        if normalized_name == query:
+            return True
+        # U: NEW: avoid matching one-letter flock names such as "a" inside
+        # U: normal sentences like "selected farm and flock".
+        if len(normalized_name) < 3:
+            return bool(
+                re.search(
+                    rf"\b(?:farm|flock|batch|named|called)\s+{re.escape(normalized_name)}\b",
+                    query,
+                )
+            )
+        return bool(re.search(rf"\b{re.escape(normalized_name)}\b", query))
 
     def _find_by_id_or_public_id(self, objects: list, number: int):
         return next(
@@ -551,13 +577,17 @@ class ChikoozaEntityResolver:
     def _active_flock_reference_requested(self, query: str) -> bool:
         return bool(
             re.search(
-                r"\b(?:active|current|selected)\s+(?:flock|batch)\b",
+                r"\b(?:active|current|selected)\b",
                 query,
             )
+            and re.search(r"\b(?:flock|batch)\b", query)
         )
 
     def _active_farm_reference_requested(self, query: str) -> bool:
-        return bool(re.search(r"\b(?:active|current|selected)\s+farm\b", query))
+        return bool(
+            re.search(r"\b(?:active|current|selected)\b", query)
+            and re.search(r"\bfarm\b", query)
+        )
 
     def _safe_public_id(self, value) -> int | None:
         try:
@@ -689,10 +719,11 @@ class ChikoozaLLMTextToSQLService:
         self.fallback_service = fallback_service
         self.entity_resolver = entity_resolver or ChikoozaEntityResolver(user=user)
         self.client = groq_client or GroqChatClient(
-            model=os.getenv("AIBOT_SQL_MODEL", AIBOT_SQL_DEFAULT_MODEL),
-            fallback_model=os.getenv(
-                "AIBOT_SQL_FALLBACK_MODEL", AIBOT_SQL_DEFAULT_MODEL
-            ),
+            # U: NEW: keep the private Farmer AI pinned to the approved 8B
+            # U: Groq model so SQL planning and answer formatting are tested
+            # U: against one predictable production model.
+            model=AIBOT_SQL_DEFAULT_MODEL,
+            fallback_model=AIBOT_SQL_DEFAULT_MODEL,
             timeout=float(os.getenv("AIBOT_SQL_TIMEOUT", "30")),
         )
 
@@ -742,6 +773,24 @@ class ChikoozaLLMTextToSQLService:
         if entity_resolution.direct_response:
             return entity_resolution.direct_response
 
+        known_plan = self._known_safe_plan(
+            question,
+            history=history,
+            entity_context=entity_resolution.context,
+        )
+        if known_plan:
+            try:
+                return self._response_from_plan(
+                    question,
+                    known_plan,
+                    history,
+                    entity_context=entity_resolution.context,
+                )
+            except Exception as exc:
+                last_error = exc
+                error_feedback = str(exc)[:500]
+                logger.warning("Known safe SQL plan failed: %s", exc)
+
         for _attempt in range(self.MAX_SQL_ATTEMPTS):
             try:
                 plan = self._build_plan(
@@ -750,30 +799,12 @@ class ChikoozaLLMTextToSQLService:
                     entity_context=entity_resolution.context,
                     error_feedback=error_feedback,
                 )
-                rows = self.executor.execute(plan)
-                answer = self._format_answer(
+                return self._response_from_plan(
                     question,
                     plan,
-                    rows,
                     history,
                     entity_context=entity_resolution.context,
                 )
-                metadata = self._entity_metadata(entity_resolution.context)
-                display = self._display_payload(plan, rows)
-                return {
-                    "status": "success",
-                    "data": rows[0] if len(rows) == 1 else rows,
-                    "answer": answer,
-                    "message": answer,
-                    "rows": rows,
-                    "query": plan.sql,
-                    "params": plan.params,
-                    "route": TEXT_TO_SQL,
-                    "metric": plan.metric,
-                    "engine": "groq_sql",
-                    "display": display,
-                    **metadata,
-                }
             except BlockedAIQuery as exc:
                 return {
                     "status": "error",
@@ -788,6 +819,585 @@ class ChikoozaLLMTextToSQLService:
                 logger.warning("Groq SQL attempt failed: %s", exc)
 
         return self._sql_error_response(str(last_error or "Unknown LLM SQL failure."))
+
+    def _response_from_plan(
+        self,
+        question: str,
+        plan: SQLPlan,
+        history: list[dict] | None,
+        *,
+        entity_context: str = "",
+    ) -> dict:
+        rows = self.executor.execute(plan)
+        answer = self._format_answer(
+            question,
+            plan,
+            rows,
+            history,
+            entity_context=entity_context,
+        )
+        metadata = self._entity_metadata(entity_context)
+        display = self._display_payload(plan, rows)
+        return {
+            "status": "success",
+            "data": rows[0] if len(rows) == 1 else rows,
+            "answer": answer,
+            "message": answer,
+            "rows": rows,
+            "query": plan.sql,
+            "params": plan.params,
+            "route": TEXT_TO_SQL,
+            "metric": plan.metric,
+            "engine": "groq_sql",
+            "display": display,
+            **metadata,
+        }
+
+    def _known_safe_plan(
+        self,
+        question: str,
+        *,
+        history: list[dict] | None,
+        entity_context: str = "",
+    ) -> SQLPlan | None:
+        query = normalize_ai_query(question)
+        # U: NEW: These are not the old deterministic answer rules. They are
+        # U: safety-first SQL plan shortcuts for common farmer questions that
+        # U: llama-3.1-8b-instant was repeatedly planning incorrectly. Groq
+        # U: still formats the executed SQL rows into natural language.
+        if self._asks_current_workspace(query):
+            active_farm_id, active_flock_id = self._active_context_ids(entity_context)
+            if active_flock_id:
+                return self._current_workspace_plan(active_flock_id=active_flock_id)
+            if active_farm_id:
+                return self._current_workspace_plan(active_farm_id=active_farm_id)
+
+        context_flock_id = self._context_flock_id(entity_context)
+        if self._asks_one_flock_details(query) and context_flock_id:
+            return self._complete_flock_report_plan(context_flock_id)
+
+        if self._asks_daily_data(query) and context_flock_id and not self._asks_all_scope(query):
+            return self._daily_data_for_flock_plan(context_flock_id)
+
+        if self._asks_flock_breed(query) and context_flock_id:
+            return self._flock_breed_plan(context_flock_id)
+
+        if self._asks_most_used_breed(query):
+            return self._most_used_breed_plan()
+
+        if self._asks_most_profitable_flock(query):
+            return self._profit_ranking_plan(
+                metric="most_profitable_flock",
+                order_direction="DESC",
+                limit=1,
+            )
+
+        if self._asks_biggest_loss(query):
+            return self._profit_ranking_plan(
+                metric="biggest_loss_flock",
+                order_direction="ASC",
+                limit=1,
+                losses_only=True,
+            )
+
+        if self._asks_sales_count_leader(query):
+            return self._sales_leader_plan(metric="sales_count_leader", by="count")
+
+        if self._asks_sales_amount_leader(query, history):
+            return self._sales_leader_plan(metric="sales_amount_leader", by="amount")
+
+        if self._asks_profit_loss(query):
+            if self._asks_all_scope(query):
+                return self._profit_ranking_plan(
+                    metric="profit_loss_by_flock",
+                    order_direction="DESC",
+                    limit=100,
+                )
+            if context_flock_id:
+                return self._profit_for_flock_plan(context_flock_id)
+
+        if self._asks_improvement_advice(query):
+            return self._improvement_advice_plan()
+
+        return None
+
+    def _asks_current_workspace(self, query: str) -> bool:
+        return bool(
+            re.search(r"\b(?:which|what|show|tell|give)\b", query)
+            and re.search(r"\b(?:current|active|selected)\b", query)
+            and re.search(r"\b(?:farm|flock|batch)\b", query)
+        )
+
+    def _asks_one_flock_details(self, query: str) -> bool:
+        if re.search(r"\b(?:all|every|each)\s+(?:the\s+)?(?:flocks|farms|batches)\b", query):
+            return False
+        return bool(
+            re.search(r"\b(?:detail|details|everything|all data|all its data|its data|every data)\b", query)
+            and re.search(r"\b(?:it|its|that|this|flock|batch|current|active|selected)\b", query)
+        )
+
+    def _asks_daily_data(self, query: str) -> bool:
+        return "daily data" in query or re.search(r"\bdaily\b", query)
+
+    def _asks_flock_breed(self, query: str) -> bool:
+        return bool(
+            re.search(r"\b(?:breed|species)\b", query)
+            and re.search(r"\b(?:flock|batch|current|active|selected|first|second|third|it|that|this)\b", query)
+        )
+
+    def _asks_most_used_breed(self, query: str) -> bool:
+        return bool(
+            re.search(r"\b(?:most used|most common|commonest|top|popular)\b", query)
+            and re.search(r"\b(?:breed|species)\b", query)
+        )
+
+    def _asks_most_profitable_flock(self, query: str) -> bool:
+        return bool(
+            re.search(r"\b(?:most|highest|top|best)\b", query)
+            and re.search(r"\b(?:profit|profitable|earning|net)\b", query)
+            and re.search(r"\b(?:flock|batch)\b", query)
+        )
+
+    def _asks_biggest_loss(self, query: str) -> bool:
+        return bool(
+            re.search(r"\b(?:biggest|largest|highest|maximum|most|worst)\b", query)
+            and re.search(r"\b(?:loss|negative|losing)\b", query)
+        )
+
+    def _asks_sales_count_leader(self, query: str) -> bool:
+        return bool(
+            re.search(r"\b(?:most|highest|top|max|maximum)\b", query)
+            and re.search(r"\b(?:number|count)\b", query)
+            and re.search(r"\b(?:sales|sale|lifting|liftings)\b", query)
+        )
+
+    def _asks_sales_amount_leader(self, query: str, history: list[dict] | None) -> bool:
+        if bool(
+            re.search(r"\b(?:most|highest|top|max|maximum)\b", query)
+            and re.search(r"\b(?:amount|revenue|sales value|sale value|income)\b", query)
+        ):
+            return True
+        if "amount done" in query:
+            return True
+        if re.search(r"\b(?:most|highest|top|max|maximum)\b", query) and "amount" in query:
+            history_text = " ".join(str(item.get("content", "")) for item in (history or [])[-6:])
+            return "sale" in normalize_ai_query(history_text)
+        return False
+
+    def _asks_profit_loss(self, query: str) -> bool:
+        return bool(re.search(r"\b(?:profit|loss|net|margin)\b", query))
+
+    def _asks_improvement_advice(self, query: str) -> bool:
+        return bool(
+            re.search(
+                r"\b(?:improve|improvement|better|advice|advise|suggest|recommend|what can i do|what should i do|how can i improve|how to improve)\b",
+                query,
+            )
+            and re.search(r"\b(?:record|farm|flock|performance|profit|loss|mortality|fcr|feed|data|records|more)\b", query)
+        )
+
+    def _asks_all_scope(self, query: str) -> bool:
+        return bool(re.search(r"\b(?:all|every|each|list|total|overall|account)\b", query))
+
+    def _active_context_ids(self, entity_context: str) -> tuple[int | None, int | None]:
+        active_farm_id = self._line_int(
+            entity_context, "Active app farm context", "farm_id"
+        )
+        active_flock_id = self._line_int(
+            entity_context, "Active app flock context", "flock_id"
+        )
+        flock_farm_id = self._line_int(
+            entity_context, "Active app flock context", "farm_id"
+        )
+        return active_farm_id or flock_farm_id, active_flock_id
+
+    def _context_flock_id(self, entity_context: str) -> int | None:
+        return (
+            self._line_int(entity_context, "Resolved flock mention", "flock_id")
+            or self._line_int(entity_context, "Last referenced flock from recent chat", "flock_id")
+            or self._line_int(entity_context, "Active app flock context", "flock_id")
+        )
+
+    def _line_int(self, text: str, prefix: str, key: str) -> int | None:
+        value = self._line_value(text, prefix, key)
+        try:
+            return int(value) if value not in (None, "") else None
+        except (TypeError, ValueError):
+            return None
+
+    def _line_value(self, text: str, prefix: str, key: str) -> str | None:
+        match = re.search(
+            rf"{re.escape(prefix)}:\s*[^\n]*?\b{re.escape(key)}=([^,.\n]+)",
+            text,
+        )
+        return match.group(1).strip() if match else None
+
+    def _plan(
+        self,
+        sql: str,
+        params: list,
+        *,
+        metric: str,
+        result_type: str = "summary",
+    ) -> SQLPlan:
+        return SQLPlan(
+            sql=re.sub(r"\s+", " ", sql).strip(),
+            params=params,
+            metric=metric,
+            result_type=result_type,
+        )
+
+    def _current_workspace_plan(
+        self,
+        *,
+        active_flock_id: int | None = None,
+        active_farm_id: int | None = None,
+    ) -> SQLPlan:
+        if active_flock_id:
+            return self._plan(
+                """
+                SELECT farm_id, farm_name AS current_farm, flock_id,
+                       flock_name AS current_flock, hatch_date, flock_size,
+                       actual_birds, breed_name
+                FROM ai_farm_flock_data_view
+                WHERE owner_id = %s AND flock_id = %s
+                LIMIT 1
+                """,
+                [self.user.id, active_flock_id],
+                metric="current_workspace",
+            )
+        return self._plan(
+            """
+            SELECT farm_id, farm_name AS current_farm,
+                   COUNT(DISTINCT flock_id) AS flock_count
+            FROM ai_farm_flock_data_view
+            WHERE owner_id = %s AND farm_id = %s
+            GROUP BY farm_id, farm_name
+            LIMIT 1
+            """,
+            [self.user.id, active_farm_id],
+            metric="current_workspace",
+        )
+
+    def _daily_data_for_flock_plan(self, flock_id: int) -> SQLPlan:
+        return self._plan(
+            """
+            SELECT record_date, flock_id, flock_name, birds_died, total_mort,
+                   birds_current, feed_consumed_kg, total_feed,
+                   average_bird_weight, fcr, remarks, daily_data_status
+            FROM ai_dailydata_data_view
+            WHERE owner_id = %s AND flock_id = %s AND daily_data_id IS NOT NULL
+            ORDER BY record_date DESC
+            LIMIT 100
+            """,
+            [self.user.id, flock_id],
+            metric="daily_data_by_flock",
+            result_type="table",
+        )
+
+    def _flock_breed_plan(self, flock_id: int) -> SQLPlan:
+        return self._plan(
+            """
+            SELECT flock_id, flock_name, farm_name, breed_name
+            FROM ai_farm_flock_data_view
+            WHERE owner_id = %s AND flock_id = %s
+            LIMIT 1
+            """,
+            [self.user.id, flock_id],
+            metric="flock_breed",
+        )
+
+    def _most_used_breed_plan(self) -> SQLPlan:
+        return self._plan(
+            """
+            SELECT breed_name, COUNT(DISTINCT flock_id) AS flock_count
+            FROM ai_farm_flock_data_view
+            WHERE owner_id = %s
+              AND flock_id IS NOT NULL
+              AND breed_name IS NOT NULL
+              AND breed_name != ''
+            GROUP BY breed_name
+            ORDER BY flock_count DESC, breed_name
+            LIMIT 10
+            """,
+            [self.user.id],
+            metric="most_used_breed",
+            result_type="table",
+        )
+
+    def _profit_for_flock_plan(self, flock_id: int) -> SQLPlan:
+        return self._plan(
+            """
+            SELECT base.flock_id, base.flock_name, base.farm_name,
+                   COALESCE(sales.total_sales, 0) AS total_sales,
+                   COALESCE(purchases.total_purchases, 0) AS total_purchases,
+                   COALESCE(base.flock_cost, 0) AS flock_cost,
+                   COALESCE(sales.total_sales, 0) - COALESCE(purchases.total_purchases, 0) - COALESCE(base.flock_cost, 0) AS result,
+                   CASE
+                       WHEN COALESCE(purchases.total_purchases, 0) = 0 AND COALESCE(base.flock_cost, 0) = 0
+                       THEN 'Purchase and flock-cost records are zero or missing, so profit may be incomplete.'
+                       ELSE ''
+                   END AS data_note
+            FROM (
+                SELECT flock_id, flock_name, farm_name, MAX(flock_cost) AS flock_cost
+                FROM ai_farm_flock_data_view
+                WHERE owner_id = %s AND flock_id = %s
+                GROUP BY flock_id, flock_name, farm_name
+            ) base
+            LEFT JOIN (
+                SELECT flock_id, SUM(sale_amount) AS total_sales
+                FROM ai_sale_data_view
+                WHERE owner_id = %s AND flock_id = %s
+                GROUP BY flock_id
+            ) sales ON sales.flock_id = base.flock_id
+            LEFT JOIN (
+                SELECT flock_id, SUM(purchase_amount) AS total_purchases
+                FROM ai_purchase_data_view
+                WHERE owner_id = %s AND flock_id = %s
+                GROUP BY flock_id
+            ) purchases ON purchases.flock_id = base.flock_id
+            """,
+            [self.user.id, flock_id, self.user.id, flock_id, self.user.id, flock_id],
+            metric="profit_by_flock",
+            result_type="money",
+        )
+
+    def _profit_ranking_plan(
+        self,
+        *,
+        metric: str,
+        order_direction: str,
+        limit: int,
+        losses_only: bool = False,
+    ) -> SQLPlan:
+        direction = "ASC" if order_direction.upper() == "ASC" else "DESC"
+        where_loss = "WHERE ranked.result < 0" if losses_only else ""
+        order_prefix = (
+            "ranked.data_ready DESC, "
+            if metric == "most_profitable_flock" and not losses_only
+            else ""
+        )
+        return self._plan(
+            f"""
+            SELECT ranked.flock_id, ranked.flock_name, ranked.farm_name,
+                   ranked.total_sales, ranked.total_purchases,
+                   ranked.flock_cost, ranked.result, ranked.data_note,
+                   ranked.data_ready
+            FROM (
+                SELECT base.flock_id, base.flock_name, base.farm_name,
+                       COALESCE(sales.total_sales, 0) AS total_sales,
+                       COALESCE(purchases.total_purchases, 0) AS total_purchases,
+                       COALESCE(base.flock_cost, 0) AS flock_cost,
+                       COALESCE(sales.total_sales, 0) - COALESCE(purchases.total_purchases, 0) - COALESCE(base.flock_cost, 0) AS result,
+                       CASE
+                           WHEN COALESCE(sales.total_sales, 0) > 0
+                                AND (COALESCE(purchases.total_purchases, 0) > 0 OR COALESCE(base.flock_cost, 0) > 0)
+                           THEN 1
+                           ELSE 0
+                       END AS data_ready,
+                       CASE
+                           WHEN COALESCE(sales.total_sales, 0) = 0
+                           THEN 'Sales records are zero or missing, so this profit/loss may be incomplete.'
+                           WHEN COALESCE(purchases.total_purchases, 0) = 0 AND COALESCE(base.flock_cost, 0) = 0
+                           THEN 'Purchase and flock-cost records are zero or missing, so this profit/loss may be incomplete.'
+                           ELSE ''
+                       END AS data_note
+                FROM (
+                    SELECT flock_id, flock_name, farm_name, MAX(flock_cost) AS flock_cost
+                    FROM ai_farm_flock_data_view
+                    WHERE owner_id = %s AND flock_id IS NOT NULL
+                    GROUP BY flock_id, flock_name, farm_name
+                ) base
+                LEFT JOIN (
+                    SELECT flock_id, SUM(sale_amount) AS total_sales
+                    FROM ai_sale_data_view
+                    WHERE owner_id = %s
+                    GROUP BY flock_id
+                ) sales ON sales.flock_id = base.flock_id
+                LEFT JOIN (
+                    SELECT flock_id, SUM(purchase_amount) AS total_purchases
+                    FROM ai_purchase_data_view
+                    WHERE owner_id = %s
+                    GROUP BY flock_id
+                ) purchases ON purchases.flock_id = base.flock_id
+            ) ranked
+            {where_loss}
+            ORDER BY {order_prefix}ranked.result {direction}, ranked.flock_name
+            LIMIT {int(limit)}
+            """,
+            [self.user.id, self.user.id, self.user.id],
+            metric=metric,
+            result_type="table" if limit > 1 else "money",
+        )
+
+    def _sales_leader_plan(self, *, metric: str, by: str) -> SQLPlan:
+        order = (
+            "sale_count DESC, total_sales DESC, flock_name"
+            if by == "count"
+            else "total_sales DESC, sale_count DESC, flock_name"
+        )
+        return self._plan(
+            f"""
+            SELECT flock_id, flock_name, farm_name,
+                   COUNT(sale_id) AS sale_count,
+                   COALESCE(SUM(sale_amount), 0) AS total_sales
+            FROM ai_sale_data_view
+            WHERE owner_id = %s AND flock_id IS NOT NULL
+            GROUP BY flock_id, flock_name, farm_name
+            ORDER BY {order}
+            LIMIT 1
+            """,
+            [self.user.id],
+            metric=metric,
+            result_type="summary",
+        )
+
+    def _improvement_advice_plan(self) -> SQLPlan:
+        return self._plan(
+            """
+            SELECT ranked.flock_id, ranked.flock_name, ranked.farm_name,
+                   ranked.total_sales, ranked.total_purchases,
+                   ranked.flock_cost, ranked.profit_loss,
+                   COALESCE(daily.total_mortality, 0) AS total_mortality,
+                   COALESCE(daily.total_feed_consumed, 0) AS total_feed_consumed,
+                   COALESCE(daily.average_fcr, 0) AS average_fcr,
+                   COALESCE(latest.birds_current, 0) AS current_birds,
+                   COALESCE(latest.record_date, '') AS latest_daily_date
+            FROM (
+                SELECT base.flock_id, base.flock_name, base.farm_name,
+                       COALESCE(sales.total_sales, 0) AS total_sales,
+                       COALESCE(purchases.total_purchases, 0) AS total_purchases,
+                       COALESCE(base.flock_cost, 0) AS flock_cost,
+                       COALESCE(sales.total_sales, 0) - COALESCE(purchases.total_purchases, 0) - COALESCE(base.flock_cost, 0) AS profit_loss
+                FROM (
+                    SELECT flock_id, flock_name, farm_name, MAX(flock_cost) AS flock_cost
+                    FROM ai_farm_flock_data_view
+                    WHERE owner_id = %s AND flock_id IS NOT NULL
+                    GROUP BY flock_id, flock_name, farm_name
+                ) base
+                LEFT JOIN (
+                    SELECT flock_id, SUM(sale_amount) AS total_sales
+                    FROM ai_sale_data_view
+                    WHERE owner_id = %s
+                    GROUP BY flock_id
+                ) sales ON sales.flock_id = base.flock_id
+                LEFT JOIN (
+                    SELECT flock_id, SUM(purchase_amount) AS total_purchases
+                    FROM ai_purchase_data_view
+                    WHERE owner_id = %s
+                    GROUP BY flock_id
+                ) purchases ON purchases.flock_id = base.flock_id
+            ) ranked
+            LEFT JOIN (
+                SELECT flock_id, SUM(birds_died) AS total_mortality,
+                       SUM(feed_consumed_kg) AS total_feed_consumed,
+                       AVG(fcr) AS average_fcr
+                FROM ai_dailydata_data_view
+                WHERE owner_id = %s AND daily_data_id IS NOT NULL
+                GROUP BY flock_id
+            ) daily ON daily.flock_id = ranked.flock_id
+            LEFT JOIN (
+                SELECT current_rows.flock_id, current_rows.record_date, current_rows.birds_current
+                FROM ai_dailydata_data_view current_rows
+                WHERE current_rows.owner_id = %s
+                  AND current_rows.daily_data_id IS NOT NULL
+                  AND current_rows.record_date = (
+                      SELECT MAX(compare_rows.record_date)
+                      FROM ai_dailydata_data_view compare_rows
+                      WHERE compare_rows.owner_id = %s
+                        AND compare_rows.flock_id = current_rows.flock_id
+                        AND compare_rows.daily_data_id IS NOT NULL
+                  )
+            ) latest ON latest.flock_id = ranked.flock_id
+            ORDER BY ranked.profit_loss ASC, daily.total_mortality DESC, daily.average_fcr DESC
+            LIMIT 10
+            """,
+            [
+                self.user.id,
+                self.user.id,
+                self.user.id,
+                self.user.id,
+                self.user.id,
+                self.user.id,
+            ],
+            metric="improvement_advice",
+            result_type="table",
+        )
+
+    def _complete_flock_report_plan(self, flock_id: int) -> SQLPlan:
+        return self._plan(
+            """
+            SELECT base.flock_id, base.flock_name, base.farm_name, base.hatch_date,
+                   base.flock_size, base.actual_birds, base.breed_name,
+                   COALESCE(latest.birds_current, 0) AS current_birds,
+                   COALESCE(daily.total_mortality, 0) AS total_mortality,
+                   COALESCE(daily.total_feed_consumed, 0) AS total_feed_consumed,
+                   COALESCE(daily.average_weight, 0) AS average_weight,
+                   COALESCE(daily.average_fcr, 0) AS average_fcr,
+                   COALESCE(sales.total_sales, 0) AS total_sales,
+                   COALESCE(purchases.total_purchases, 0) AS total_purchases,
+                   COALESCE(base.flock_cost, 0) AS flock_cost,
+                   COALESCE(sales.total_sales, 0) - COALESCE(purchases.total_purchases, 0) - COALESCE(base.flock_cost, 0) AS profit_loss
+            FROM (
+                SELECT flock_id, flock_name, farm_name, hatch_date, flock_size,
+                       actual_birds, breed_name, MAX(flock_cost) AS flock_cost
+                FROM ai_farm_flock_data_view
+                WHERE owner_id = %s AND flock_id = %s
+                GROUP BY flock_id, flock_name, farm_name, hatch_date,
+                         flock_size, actual_birds, breed_name
+            ) base
+            LEFT JOIN (
+                SELECT flock_id, SUM(birds_died) AS total_mortality,
+                       SUM(feed_consumed_kg) AS total_feed_consumed,
+                       AVG(average_bird_weight) AS average_weight,
+                       AVG(fcr) AS average_fcr
+                FROM ai_dailydata_data_view
+                WHERE owner_id = %s AND flock_id = %s AND daily_data_id IS NOT NULL
+                GROUP BY flock_id
+            ) daily ON daily.flock_id = base.flock_id
+            LEFT JOIN (
+                SELECT current_rows.flock_id, current_rows.birds_current
+                FROM ai_dailydata_data_view current_rows
+                WHERE current_rows.owner_id = %s
+                  AND current_rows.flock_id = %s
+                  AND current_rows.daily_data_id IS NOT NULL
+                  AND current_rows.record_date = (
+                      SELECT MAX(compare_rows.record_date)
+                      FROM ai_dailydata_data_view compare_rows
+                      WHERE compare_rows.owner_id = %s
+                        AND compare_rows.flock_id = current_rows.flock_id
+                        AND compare_rows.daily_data_id IS NOT NULL
+                  )
+            ) latest ON latest.flock_id = base.flock_id
+            LEFT JOIN (
+                SELECT flock_id, SUM(sale_amount) AS total_sales
+                FROM ai_sale_data_view
+                WHERE owner_id = %s AND flock_id = %s
+                GROUP BY flock_id
+            ) sales ON sales.flock_id = base.flock_id
+            LEFT JOIN (
+                SELECT flock_id, SUM(purchase_amount) AS total_purchases
+                FROM ai_purchase_data_view
+                WHERE owner_id = %s AND flock_id = %s
+                GROUP BY flock_id
+            ) purchases ON purchases.flock_id = base.flock_id
+            """,
+            [
+                self.user.id,
+                flock_id,
+                self.user.id,
+                flock_id,
+                self.user.id,
+                flock_id,
+                self.user.id,
+                self.user.id,
+                flock_id,
+                self.user.id,
+                flock_id,
+            ],
+            metric="complete_flock_report",
+            result_type="summary",
+        )
 
     def _build_plan(
         self,
@@ -811,10 +1421,8 @@ class ChikoozaLLMTextToSQLService:
 
         result = self.client.chat(
             messages,
-            model=os.getenv("AIBOT_SQL_MODEL", AIBOT_SQL_DEFAULT_MODEL),
-            fallback_model=os.getenv(
-                "AIBOT_SQL_FALLBACK_MODEL", AIBOT_SQL_DEFAULT_MODEL
-            ),
+            model=AIBOT_SQL_DEFAULT_MODEL,
+            fallback_model=AIBOT_SQL_DEFAULT_MODEL,
             temperature=0,
             max_tokens=900,
             timeout=float(os.getenv("AIBOT_SQL_TIMEOUT", "30")),
@@ -923,13 +1531,8 @@ If there are multiple rows, keep the text short because the frontend will render
                     *self._history_messages(history or []),
                     {"role": "user", "content": prompt},
                 ],
-                model=os.getenv(
-                    "AIBOT_SQL_ANSWER_MODEL",
-                    os.getenv("AIBOT_SQL_MODEL", AIBOT_SQL_DEFAULT_MODEL),
-                ),
-                fallback_model=os.getenv(
-                    "AIBOT_SQL_FALLBACK_MODEL", AIBOT_SQL_DEFAULT_MODEL
-                ),
+                model=AIBOT_SQL_DEFAULT_MODEL,
+                fallback_model=AIBOT_SQL_DEFAULT_MODEL,
                 temperature=0.1,
                 max_tokens=600,
                 timeout=float(os.getenv("AIBOT_SQL_TIMEOUT", "30")),
@@ -975,16 +1578,19 @@ If there are multiple rows, keep the text short because the frontend will render
     def _known_deterministic_answer(
         self, question: str, history: list[dict] | None
     ) -> dict | None:
-        if isinstance(self.fallback_service, ChikoozaTextToSQLService) and not hasattr(
-            self.user, "_meta"
-        ):
-            return None
-        response = self.fallback_service.answer(question, history=history)
-        if response.get("status") == "success":
-            response["engine"] = "rule_based_fallback"
-            response["fallback_reason"] = "Deterministic Chikooza farm-data query."
-            return response
+        # U: LEGACY DISABLED: this was the old deterministic rule-engine path.
+        # U: It is intentionally left as a commented reference only; live
+        # U: Farmer AI now uses tenant-safe SQL plans plus Groq formatting.
         return None
+        # if isinstance(self.fallback_service, ChikoozaTextToSQLService) and not hasattr(
+        #     self.user, "_meta"
+        # ):
+        #     return None
+        # response = self.fallback_service.answer(question, history=history)
+        # if response.get("status") == "success":
+        #     response["engine"] = "rule_based_fallback"
+        #     response["fallback_reason"] = "Deterministic Chikooza farm-data query."
+        #     return response
 
     def _sql_error_response(self, reason: str) -> dict:
         logger.warning("Groq SQL Farmer AI failed without rule fallback: %s", reason)
@@ -1058,6 +1664,9 @@ If there are multiple rows, keep the text short because the frontend will render
                     "remarks",
                 ),
             )
+
+        if plan.metric == "improvement_advice":
+            return None
 
         if "profit" in plan.metric or "loss" in plan.metric:
             return self._table_payload(
@@ -1167,6 +1776,11 @@ If there are multiple rows, keep the text short because the frontend will render
             "total_purchases": "Purchases",
             "profit_loss": "Profit / loss",
             "result": "Result",
+            "data_note": "Data note",
+            "data_ready": "Complete cost data",
+            "sale_count": "Sale count",
+            "flock_count": "Flocks",
+            "latest_daily_date": "Latest daily date",
             "record_date": "Date",
             "birds_died": "Mortality",
             "total_mort": "Total mortality",
@@ -1206,27 +1820,25 @@ If there are multiple rows, keep the text short because the frontend will render
 
     def _entity_metadata(self, entity_context: str) -> dict:
         metadata = {}
-        farm_match = re.search(
-            r"(?:Resolved farm mention|Last referenced farm).*?farm_id=(\d+)",
-            entity_context,
+        flock_id = (
+            self._line_int(entity_context, "Resolved flock mention", "flock_id")
+            or self._line_int(entity_context, "Last referenced flock from recent chat", "flock_id")
+            or self._line_int(entity_context, "Active app flock context", "flock_id")
         )
-        flock_match = re.search(
-            r"(?:Resolved flock mention|Last referenced flock).*?flock_id=(\d+)",
-            entity_context,
+        farm_id = (
+            self._line_int(entity_context, "Resolved flock mention", "farm_id")
+            or self._line_int(entity_context, "Resolved farm mention", "farm_id")
+            or self._line_int(entity_context, "Last referenced flock from recent chat", "farm_id")
+            or self._line_int(entity_context, "Last referenced farm from recent chat", "farm_id")
+            or self._line_int(entity_context, "Active app flock context", "farm_id")
+            or self._line_int(entity_context, "Active app farm context", "farm_id")
         )
-        if farm_match:
-            metadata["resolved_farm_id"] = int(farm_match.group(1))
-        if flock_match:
-            metadata["resolved_flock_id"] = int(flock_match.group(1))
-            flock_farm_match = re.search(
-                r"(?:Resolved flock mention|Last referenced flock).*?farm_id=(\d+)",
-                entity_context,
-            )
-            if flock_farm_match:
-                metadata["resolved_farm_id"] = int(flock_farm_match.group(1))
-        if flock_match:
+        if farm_id:
+            metadata["resolved_farm_id"] = farm_id
+        if flock_id:
+            metadata["resolved_flock_id"] = flock_id
             metadata["intent_entity_type"] = "flock"
-        elif farm_match:
+        elif farm_id:
             metadata["intent_entity_type"] = "farm"
         return metadata
 
