@@ -9,6 +9,12 @@ from django.db import connection
 
 logger = logging.getLogger(__name__)
 
+# U: NOTE: this module still contains legacy deterministic AI services kept for
+# U: rollback/reference tests. The live authenticated Farmer AI endpoint is:
+# U: aibot.views.AIChatViewSet -> ChikoozaModernAgentService ->
+# U: aibot.llm_sql.ChikoozaLLMTextToSQLService. New private AI behavior should
+# U: be added in llm_sql.py, not in the legacy deterministic mapper below.
+
 
 TEXT_TO_SQL = "TEXT_TO_SQL"
 RAG = "RAG"
@@ -2237,13 +2243,7 @@ class ChikoozaModernAgentService:
         try:
             from .llm_sql import ChikoozaLLMTextToSQLService
 
-            service = ChikoozaLLMTextToSQLService(
-                user=self.user,
-                # U: OLD: fallback_service=ChikoozaTextToSQLService(...) kept
-                # U: silently returning the old deterministic answers. The live
-                # U: path now fails clearly if Groq SQL cannot run.
-                fallback_service=None,
-            )
+            service = ChikoozaLLMTextToSQLService(user=self.user)
             return service
         except Exception:
             logger.exception("Could not initialize Groq-backed Farmer AI SQL service.")

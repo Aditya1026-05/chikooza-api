@@ -16,9 +16,7 @@ from common.groq_client import GroqAllKeysFailed, GroqChatClient
 from .modern_services import (
     SQLPlan,
     TEXT_TO_SQL,
-    ChikoozaTextToSQLService,
     TenantSafeSQLExecutor,
-    is_broad_summary_query,
     normalize_ai_query,
 )
 
@@ -207,6 +205,7 @@ If the metric is most_profitable_flock, name the flock and farm first, then show
 If the metric is biggest_loss_flock, name the flock with the most negative result, not the smallest absolute loss.
 If the metric is sales_count_leader or sales_amount_leader, name the flock and farm first, then mention sale count or total sales.
 If the metric is most_used_breed, state the top breed and how many flocks use it.
+If the metric is flock_breeds_by_flock, list each flock with its farm and breed. Do not collapse the answer to only unique breed names.
 If the metric is improvement_advice, do not only restate the table. Give 3-5 practical priorities based on the rows: biggest loss, high mortality, high FCR, missing sales, missing purchases, or missing daily data.
 If the question asks "which can I do to improve", answer as advice from saved records, not as a raw report.
 If the farmer says thanks, okay, nothing more, huh, or similar conversational text, do not invent a data summary.
@@ -598,6 +597,11 @@ class ChikoozaEntityResolver:
             return None
 
     def _looks_like_named_flock_reference(self, query: str) -> bool:
+        if re.search(
+            r"\b(?:all|every|each|which|what|list|others|other|rest|remaining|flocks|batches)\b",
+            query,
+        ):
+            return False
         return bool(
             re.search(r"\b(?:for|of|in|about)\s+[a-z0-9 ]*(?:batch|flock)\b", query)
         )
@@ -694,10 +698,10 @@ class ChikoozaEntityResolver:
 class ChikoozaLLMTextToSQLService:
     """
     U: Groq-backed Farmer AI SQL service adapted from the separate chatbot repo.
-    U: The old deterministic ChikoozaTextToSQLService remains in the repo for
-    U: reference/tests, but the live class does not silently fall back to it.
-    U: This class adds natural-language SQL planning, conversation context, and
-    U: key-rotated LLM calls while still executing only tenant-safe SQL plans.
+    U: The live class has no old deterministic answer fallback. Common,
+    U: high-volume farmer questions can still use tenant-safe SQL templates to
+    U: reduce Groq planning calls, but answers are built from executed SQL rows
+    U: plus Groq formatting, not the old rule-answer engine.
     """
 
     MAX_SQL_ATTEMPTS = 2
@@ -707,16 +711,11 @@ class ChikoozaLLMTextToSQLService:
         user,
         *,
         groq_client: GroqChatClient | None = None,
-        fallback_service: ChikoozaTextToSQLService | None = None,
         entity_resolver: ChikoozaEntityResolver | None = None,
     ):
         self.user = user
         self.executor = TenantSafeSQLExecutor()
         self.prompt_builder = ChikoozaSQLPromptBuilder()
-        # U: OLD: fallback_service defaulted to ChikoozaTextToSQLService, so
-        # U: Groq SQL failures silently returned rule-engine answers.
-        # self.fallback_service = fallback_service or ChikoozaTextToSQLService(user=user)
-        self.fallback_service = fallback_service
         self.entity_resolver = entity_resolver or ChikoozaEntityResolver(user=user)
         self.client = groq_client or GroqChatClient(
             # U: NEW: keep the private Farmer AI pinned to the approved 8B
@@ -737,14 +736,6 @@ class ChikoozaLLMTextToSQLService:
         history: list[dict] | None = None,
         active_context: dict | None = None,
     ) -> dict:
-        # U: OLD: broad and known farm-data queries were short-circuited into
-        # U: the rule/intent service before Groq could plan SQL.
-        # if is_broad_summary_query(question):
-        #     return self._fallback_answer(question, history, reason="Broad account summary query.")
-        # deterministic = self._known_deterministic_answer(question, history)
-        # if deterministic:
-        #     return deterministic
-
         if not self.is_available:
             return self._sql_error_response("Groq is not configured.")
 
@@ -873,6 +864,16 @@ class ChikoozaLLMTextToSQLService:
                 return self._current_workspace_plan(active_farm_id=active_farm_id)
 
         context_flock_id = self._context_flock_id(entity_context)
+
+        if self._asks_improvement_advice(query):
+            return self._improvement_advice_plan()
+
+        if self._asks_all_flock_breeds(query, history):
+            return self._all_flock_breeds_plan()
+
+        if self._asks_other_flock_breeds(query, history):
+            return self._all_flock_breeds_plan(exclude_flock_id=context_flock_id)
+
         if self._asks_one_flock_details(query) and context_flock_id:
             return self._complete_flock_report_plan(context_flock_id)
 
@@ -916,9 +917,6 @@ class ChikoozaLLMTextToSQLService:
             if context_flock_id:
                 return self._profit_for_flock_plan(context_flock_id)
 
-        if self._asks_improvement_advice(query):
-            return self._improvement_advice_plan()
-
         return None
 
     def _asks_current_workspace(self, query: str) -> bool:
@@ -943,6 +941,29 @@ class ChikoozaLLMTextToSQLService:
         return bool(
             re.search(r"\b(?:breed|species)\b", query)
             and re.search(r"\b(?:flock|batch|current|active|selected|first|second|third|it|that|this)\b", query)
+        )
+
+    def _asks_all_flock_breeds(self, query: str, history: list[dict] | None) -> bool:
+        has_breed = bool(re.search(r"\b(?:breed|species)\b", query))
+        has_collection = bool(
+            re.search(r"\b(?:all|every|each|list|which|flocks|batches)\b", query)
+            or re.search(r"\b(?:which\s+breed\s+is\s+for\s+which\s+flock|breed\s+in\s+all\s+(?:the\s+)?flocks)\b", query)
+        )
+        if has_breed and has_collection:
+            return True
+        history_metric = self._last_history_metric(history)
+        followup_to_breed = history_metric in {"most_used_breed", "flock_breeds_by_flock", "flock_breed"}
+        return bool(
+            followup_to_breed
+            and re.search(r"\b(?:specify|properly|which|which\s+flock|for\s+which\s+flock)\b", query)
+            and re.search(r"\b(?:breed|species|flock|batch)\b", query)
+        )
+
+    def _asks_other_flock_breeds(self, query: str, history: list[dict] | None) -> bool:
+        history_metric = self._last_history_metric(history)
+        return bool(
+            history_metric in {"flock_breed", "flock_breeds_by_flock", "most_used_breed"}
+            and re.search(r"\b(?:other|others|rest|remaining|and\s+for\s+others|what\s+about\s+others)\b", query)
         )
 
     def _asks_most_used_breed(self, query: str) -> bool:
@@ -988,16 +1009,35 @@ class ChikoozaLLMTextToSQLService:
         return bool(re.search(r"\b(?:profit|loss|net|margin)\b", query))
 
     def _asks_improvement_advice(self, query: str) -> bool:
-        return bool(
+        improvement = bool(
             re.search(
                 r"\b(?:improve|improvement|better|advice|advise|suggest|recommend|what can i do|what should i do|how can i improve|how to improve)\b",
                 query,
             )
-            and re.search(r"\b(?:record|farm|flock|performance|profit|loss|mortality|fcr|feed|data|records|more)\b", query)
         )
+        diagnostic = bool(
+            re.search(
+                r"\b(?:went wrong|wrong|issue|problem|problems|weak|poor|bad|mistake|mistakes|fix|correct)\b",
+                query,
+            )
+        )
+        domain = bool(
+            re.search(
+                r"\b(?:record|farm|flock|performance|profit|loss|mortality|fcr|feed|data|records|sales|sale|purchase|purchases|bird|birds)\b",
+                query,
+            )
+        )
+        return bool((improvement and (domain or diagnostic)) or (diagnostic and domain))
 
     def _asks_all_scope(self, query: str) -> bool:
         return bool(re.search(r"\b(?:all|every|each|list|total|overall|account)\b", query))
+
+    def _last_history_metric(self, history: list[dict] | None) -> str:
+        for item in reversed((history or [])[-12:]):
+            metric = item.get("metric")
+            if metric:
+                return str(metric)
+        return ""
 
     def _active_context_ids(self, entity_context: str) -> tuple[int | None, int | None]:
         active_farm_id = self._line_int(
@@ -1105,6 +1145,27 @@ class ChikoozaLLMTextToSQLService:
             """,
             [self.user.id, flock_id],
             metric="flock_breed",
+        )
+
+    def _all_flock_breeds_plan(self, exclude_flock_id: int | None = None) -> SQLPlan:
+        exclude_sql = "AND flock_id != %s" if exclude_flock_id else ""
+        params = [self.user.id]
+        if exclude_flock_id:
+            params.append(exclude_flock_id)
+        return self._plan(
+            f"""
+            SELECT flock_id, flock_name, farm_name, COALESCE(NULLIF(breed_name, ''), 'Not available') AS breed_name
+            FROM ai_farm_flock_data_view
+            WHERE owner_id = %s
+              AND flock_id IS NOT NULL
+              {exclude_sql}
+            GROUP BY flock_id, flock_name, farm_name, breed_name
+            ORDER BY farm_name, flock_name
+            LIMIT 100
+            """,
+            params,
+            metric="flock_breeds_by_flock",
+            result_type="table",
         )
 
     def _most_used_breed_plan(self) -> SQLPlan:
@@ -1498,13 +1559,6 @@ class ChikoozaLLMTextToSQLService:
         history: list[dict] | None,
         entity_context: str = "",
     ) -> str:
-        # U: OLD: some metric rows skipped Groq answer formatting and returned
-        # U: a rule-formatted sentence. The active path now always sends the
-        # U: tenant-safe SQL result to Groq for farmer-friendly wording.
-        # deterministic = self._deterministic_metric_answer(rows, entity_context)
-        # if deterministic:
-        #     return deterministic
-
         compact_rows = self._json_safe_rows(rows[:25])
         prompt = f"""
 Farmer question:
@@ -1543,7 +1597,6 @@ If there are multiple rows, keep the text short because the frontend will render
                 "Groq answer formatting failed; returning safe unformatted result.",
                 exc_info=True,
             )
-            # U: OLD: return self._deterministic_answer(plan, rows)
             # U: NEW: do not silently fall back to the old deterministic answer
             # U: formatter. The response still includes rows/display payload, so
             # U: the frontend can render the data without mixing approaches.
@@ -1563,34 +1616,6 @@ If there are multiple rows, keep the text short because the frontend will render
             if content:
                 messages.append({"role": role, "content": content})
         return messages
-
-    def _fallback_answer(
-        self, question: str, history: list[dict] | None, *, reason: str
-    ) -> dict:
-        if self.fallback_service is None:
-            return self._sql_error_response(reason)
-        logger.info("Using deterministic Farmer AI fallback: %s", reason)
-        response = self.fallback_service.answer(question, history=history)
-        response["engine"] = "rule_based_fallback"
-        response["fallback_reason"] = reason
-        return response
-
-    def _known_deterministic_answer(
-        self, question: str, history: list[dict] | None
-    ) -> dict | None:
-        # U: LEGACY DISABLED: this was the old deterministic rule-engine path.
-        # U: It is intentionally left as a commented reference only; live
-        # U: Farmer AI now uses tenant-safe SQL plans plus Groq formatting.
-        return None
-        # if isinstance(self.fallback_service, ChikoozaTextToSQLService) and not hasattr(
-        #     self.user, "_meta"
-        # ):
-        #     return None
-        # response = self.fallback_service.answer(question, history=history)
-        # if response.get("status") == "success":
-        #     response["engine"] = "rule_based_fallback"
-        #     response["fallback_reason"] = "Deterministic Chikooza farm-data query."
-        #     return response
 
     def _sql_error_response(self, reason: str) -> dict:
         logger.warning("Groq SQL Farmer AI failed without rule fallback: %s", reason)
@@ -1646,6 +1671,14 @@ If there are multiple rows, keep the text short because the frontend will render
                     "total_purchases",
                     "profit_loss",
                 ),
+            )
+
+        if plan.metric == "flock_breeds_by_flock":
+            return self._cards_payload(
+                title="Flock breeds",
+                rows=safe_rows,
+                title_keys=("flock_name",),
+                field_keys=("farm_name", "breed_name"),
             )
 
         if plan.metric in {"daily_data_by_flock", "latest_flock_status"}:
@@ -1842,99 +1875,6 @@ If there are multiple rows, keep the text short because the frontend will render
             metadata["intent_entity_type"] = "farm"
         return metadata
 
-    def _deterministic_answer(self, plan: SQLPlan, rows: list[dict]) -> str:
-        # U: LEGACY / NOT LIVE: retained for older tests/reference only. The
-        # U: live Farmer AI path uses Groq to format SQL results and does not
-        # U: call this deterministic formatter as a fallback.
-        if not rows:
-            return (
-                "I could not find matching records in your farm data for that question."
-            )
-
-        if len(rows) == 1:
-            readable = ", ".join(
-                f"{key.replace('_', ' ')}: {self._format_value(value)}"
-                for key, value in rows[0].items()
-                if value not in (None, "")
-            )
-            return (
-                readable
-                or "I found one matching record, but it has no filled values yet."
-            )
-
-        return f"I found {len(rows)} matching records. The first record is: {self._deterministic_answer(plan, [rows[0]])}"
-
-    def _deterministic_metric_answer(
-        self, rows: list[dict], entity_context: str = ""
-    ) -> str | None:
-        # U: LEGACY / NOT LIVE: retained for older tests/reference only.
-        if not rows:
-            return None
-
-        row = rows[0]
-        keys = set(row.keys())
-        summary_keys = {
-            "farm_count",
-            "flock_count",
-            "total_sales",
-            "total_purchases",
-            "total_feed_consumed",
-            "total_mortality",
-            "average_fcr",
-        }
-        if summary_keys.issubset(keys):
-            return (
-                "Your account summary: "
-                f"{row.get('farm_count') or 0} farms, "
-                f"{row.get('flock_count') or 0} flocks, "
-                f"{row.get('current_birds') or 0} current birds, "
-                f"Rs. {float(row.get('total_sales') or 0):,.2f} sales, "
-                f"Rs. {float(row.get('total_purchases') or 0):,.2f} purchases, "
-                f"{float(row.get('total_feed_consumed') or 0):,.2f} kg feed consumed, "
-                f"{row.get('total_mortality') or 0} total mortality, and "
-                f"{float(row.get('average_fcr') or 0):,.2f} average FCR."
-            )
-
-        if {"total_sales", "total_purchases", "flock_cost", "result"}.issubset(keys):
-            flock_name = row.get("flock_name") or "this flock"
-            net = float(row.get("result") or 0)
-            status = "profit" if net > 0 else "loss" if net < 0 else "break-even"
-            return (
-                f"{flock_name} has Rs. {abs(net):,.2f} {status}. "
-                f"Sales are Rs. {float(row.get('total_sales') or 0):,.2f}, "
-                f"purchases are Rs. {float(row.get('total_purchases') or 0):,.2f}, "
-                f"and flock cost is Rs. {float(row.get('flock_cost') or 0):,.2f}."
-            )
-
-        if {"record_date", "birds_died", "total_mort", "birds_current"}.issubset(keys):
-            flock_name = row.get("flock_name") or "this flock"
-            if not row.get("record_date"):
-                return (
-                    f"I found {flock_name}, but there is no daily data record for it yet. "
-                    "Enter daily mortality, current birds, feed, weight, and FCR data to answer this accurately."
-                )
-            return (
-                f"For {flock_name}, the latest record is {row.get('record_date')}. "
-                f"Birds died that day: {row.get('birds_died') or 0}. "
-                f"Total mortality: {row.get('total_mort') or 0}. "
-                f"Current birds: {row.get('birds_current') or 0}."
-            )
-
-        if "total_feed_consumed" in keys and len(rows) == 1:
-            flock_name = row.get("flock_name") or self._resolved_flock_name(
-                entity_context
-            )
-            prefix = f"{flock_name} consumed" if flock_name else "Total feed consumed"
-            return f"{prefix}: {float(row.get('total_feed_consumed') or 0):,.2f} kg."
-
-        return None
-
-    def _resolved_flock_name(self, entity_context: str) -> str:
-        match = re.search(
-            r"Resolved flock mention: .*?flock_name=([^.\n]+)", entity_context
-        )
-        return match.group(1).strip() if match else ""
-
     def _blocked_message(self, reason: str) -> str:
         if "cross_tenant" in reason:
             return "I can only answer questions about your own Chikooza farm data."
@@ -1979,13 +1919,6 @@ If there are multiple rows, keep the text short because the frontend will render
             return float(value)
         if isinstance(value, (date, datetime)):
             return value.isoformat()
-        return value
-
-    def _format_value(self, value):
-        if isinstance(value, Decimal):
-            return f"{float(value):,.2f}"
-        if isinstance(value, float):
-            return f"{value:,.2f}"
         return value
 
     def _strip_code_fences(self, content: str) -> str:

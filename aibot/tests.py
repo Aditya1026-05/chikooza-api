@@ -1308,54 +1308,6 @@ class ChikoozaLLMSQLServiceTests(SimpleTestCase):
         self.assertEqual(result["answer"], "Your flocks:\n- Alpha Batch")
         self.assertEqual(len(client.requests), 2)
 
-    def test_llm_deterministic_formatter_handles_summary_rows(self):
-        service = ChikoozaLLMTextToSQLService(
-            user=self.user,
-            groq_client=FakeGroqClient([]),
-            entity_resolver=FakeEntityResolver(),
-        )
-
-        answer = service._deterministic_metric_answer(
-            [
-                {
-                    "farm_count": 1,
-                    "flock_count": 2,
-                    "current_birds": 95,
-                    "total_sales": 10000,
-                    "total_purchases": 2500,
-                    "total_feed_consumed": 120.5,
-                    "total_mortality": 5,
-                    "average_fcr": 1.65,
-                }
-            ]
-        )
-
-        self.assertIn("Your account summary", answer)
-        self.assertIn("95 current birds", answer)
-        self.assertNotEqual(answer, "Total feed consumed: 120.50 kg.")
-
-    def test_llm_deterministic_formatter_handles_missing_daily_rows(self):
-        service = ChikoozaLLMTextToSQLService(
-            user=self.user,
-            groq_client=FakeGroqClient([]),
-            entity_resolver=FakeEntityResolver(),
-        )
-
-        answer = service._deterministic_metric_answer(
-            [
-                {
-                    "record_date": None,
-                    "flock_name": "Test Flock",
-                    "birds_died": None,
-                    "total_mort": None,
-                    "birds_current": None,
-                }
-            ]
-        )
-
-        self.assertIn("no daily data record", answer)
-        self.assertNotIn("None", answer)
-
     def test_llm_service_returns_entity_clarification_before_llm(self):
         direct_response = {
             "status": "success",
@@ -1712,6 +1664,143 @@ class ChikoozaLLMSQLServiceTests(SimpleTestCase):
         self.assertEqual(sales["metric"], "sales_amount_leader")
         self.assertEqual(advice["metric"], "improvement_advice")
         self.assertIsNone(advice.get("display"))
+
+    def test_llm_service_lists_breed_for_each_flock(self):
+        client = FakeGroqClient(
+            [
+                "Each flock is listed with its farm and breed.",
+                "Each flock is listed with its farm and breed.",
+            ]
+        )
+        service = ChikoozaLLMTextToSQLService(
+            user=self.user,
+            groq_client=client,
+            entity_resolver=FakeEntityResolver(),
+        )
+
+        def execute(plan):
+            self.assertEqual(plan.metric, "flock_breeds_by_flock")
+            self.assertIn("flock_name", plan.sql)
+            self.assertIn("breed_name", plan.sql)
+            return [
+                {"flock_id": 77, "flock_name": "Alpha Batch", "farm_name": "Red Farm", "breed_name": "Hubbard"},
+                {"flock_id": 88, "flock_name": "Beta Batch", "farm_name": "Blue Farm", "breed_name": "BV300"},
+            ]
+
+        service.executor = SimpleNamespace(execute=execute)
+
+        result = service.answer("tell the breed in all the flocks")
+        followup = service.answer(
+            "specify properly on which breed is for which flock",
+            history=[
+                {"role": "user", "content": "tell the breed in all the flocks"},
+                {
+                    "role": "assistant",
+                    "content": "Hubbard and BV300.",
+                    "metric": "flock_breeds_by_flock",
+                },
+            ],
+        )
+
+        self.assertEqual(result["metric"], "flock_breeds_by_flock")
+        self.assertEqual(result["display"]["title"], "Flock breeds")
+        self.assertEqual(followup["metric"], "flock_breeds_by_flock")
+        self.assertEqual(len(client.requests), 2)
+
+    def test_llm_service_other_breeds_followup_excludes_last_flock(self):
+        client = FakeGroqClient(["The other flock breeds are listed."])
+        service = ChikoozaLLMTextToSQLService(
+            user=self.user,
+            groq_client=client,
+            entity_resolver=FakeEntityResolver(
+                EntityResolution(
+                    context=(
+                        "Last referenced flock from recent chat: flock_id=77, "
+                        "flock_public_id=5001, flock_name=Alpha Batch, farm_id=42, farm_name=Red Farm."
+                    )
+                )
+            ),
+        )
+
+        def execute(plan):
+            self.assertEqual(plan.metric, "flock_breeds_by_flock")
+            self.assertIn("flock_id != %s", plan.sql)
+            self.assertEqual(plan.params, [7, 77])
+            return [
+                {"flock_id": 88, "flock_name": "Beta Batch", "farm_name": "Blue Farm", "breed_name": "BV300"}
+            ]
+
+        service.executor = SimpleNamespace(execute=execute)
+
+        result = service.answer(
+            "and for others?",
+            history=[
+                {"role": "user", "content": "okay then tell me the breed of complete flock"},
+                {
+                    "role": "assistant",
+                    "content": "Alpha Batch is Hubbard.",
+                    "metric": "flock_breed",
+                    "resolved_flock_id": 77,
+                },
+            ],
+        )
+
+        self.assertEqual(result["metric"], "flock_breeds_by_flock")
+
+    def test_llm_service_prioritizes_improvement_over_stale_breed_context(self):
+        client = FakeGroqClient(["Focus on losses, missing cost records, mortality, feed, and FCR."])
+        service = ChikoozaLLMTextToSQLService(
+            user=self.user,
+            groq_client=client,
+            entity_resolver=FakeEntityResolver(
+                EntityResolution(
+                    context=(
+                        "Last referenced flock from recent chat: flock_id=77, "
+                        "flock_public_id=5001, flock_name=Alpha Batch, farm_id=42, farm_name=Red Farm."
+                    )
+                )
+            ),
+        )
+
+        def execute(plan):
+            self.assertEqual(plan.metric, "improvement_advice")
+            self.assertIn("ORDER BY ranked.profit_loss ASC", plan.sql)
+            return [
+                {
+                    "flock_name": "Alpha Batch",
+                    "farm_name": "Red Farm",
+                    "profit_loss": -59196,
+                    "total_mortality": 3,
+                    "average_fcr": 0.96,
+                    "current_birds": 622,
+                    "latest_daily_date": "2026-05-31",
+                }
+            ]
+
+        service.executor = SimpleNamespace(execute=execute)
+
+        result = service.answer(
+            "now tell me how to improve and what went wrong",
+            history=[
+                {"role": "user", "content": "tell the breed in all the flocks"},
+                {"role": "assistant", "content": "Hubbard and BV300.", "metric": "flock_breeds_by_flock"},
+            ],
+        )
+
+        self.assertEqual(result["metric"], "improvement_advice")
+        self.assertIsNone(result.get("display"))
+
+    def test_entity_resolver_does_not_treat_broad_breed_questions_as_missing_flock(self):
+        resolver = ChikoozaEntityResolver(user=self.user)
+
+        self.assertFalse(
+            resolver._looks_like_named_flock_reference(
+                "specify properly on which breed is for which flock"
+            )
+        )
+        self.assertFalse(
+            resolver._looks_like_named_flock_reference("tell the breed in all the flocks")
+        )
 
     def test_llm_service_supports_flock_count_in_each_farm(self):
         client = FakeGroqClient(
