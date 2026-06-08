@@ -25,6 +25,7 @@ from .modern_services import (
 logger = logging.getLogger(__name__)
 
 OWNER_PARAM = "__OWNER_ID__"
+AIBOT_SQL_DEFAULT_MODEL = "llama-3.1-8b-instant"
 
 
 CHIKOOZA_SQL_SCHEMA = """
@@ -85,6 +86,7 @@ Hard rules:
 {CHIKOOZA_SQL_SCHEMA}
 2. Every referenced view must be tenant-filtered with owner_id = %s.
 3. Never put the numeric farmer/user id in SQL or params. For each owner_id = %s placeholder, put "{OWNER_PARAM}" at the same position in params. The backend replaces it with the authenticated farmer id.
+3a. Params count must exactly match SQL placeholder count. If the SQL has 5 "%s" placeholders, return exactly 5 params. If all 5 are owner_id filters, return "{OWNER_PARAM}" five times.
 4. Use %s placeholders for every dynamic value. Do not inline names, dates, ids, or text values.
 5. Do not use SELECT *. Select only useful columns.
 6. Generate exactly one SELECT statement. No INSERT, UPDATE, DELETE, DROP, ALTER, CREATE, TRUNCATE, PRAGMA, ATTACH, DETACH, GRANT, REVOKE, or semicolon-separated statements.
@@ -101,6 +103,10 @@ Hard rules:
 17. If the user asks "total flocks in each farm", group by farm_id/farm_name and count DISTINCT flock_id. Do not ask the user to choose one farm.
 18. "active farm", "current farm", "selected farm", "active flock", "current flock", and "selected flock" mean the Active app farm/flock from Entity Context. Use those resolved ids when present.
 19. Do not restrict broad/list/count questions to the active app context. If the user says all/every/each/list/count, answer across the authenticated farmer's full account unless they explicitly name a farm/flock.
+20. Prefer simple, explicit SQL over clever SQL. The production model is llama-3.1-8b-instant, so copy the exact SQL patterns below whenever the question matches them.
+21. For one-field questions like "breed of active flock", "hatch date of first flock", or "farm city", return only that row/column plus the identifying farm/flock name.
+22. For conversational text like "thanks", "okay", "nothing more", "huh", or "what do you mean", return {{"blocked": true, "reason": "conversation_only"}} unless the text clearly asks for farm data.
+23. For spelling mistakes, infer the intended farm term when safe: "glock" means "flock", "poltry" means poultry only in the public bot, "sails" means sales.
 
 Common Chikooza mappings:
 - revenue/sales/income -> SUM(sale_amount) from ai_sale_data_view.
@@ -171,6 +177,13 @@ Exact SQL patterns to copy when relevant:
   "metric": "complete_flock_report",
   "result_type": "summary"
 }}
+8. One direct field for a resolved/active flock:
+{{
+  "sql": "SELECT flock_id, flock_name, farm_name, breed_name FROM ai_farm_flock_data_view WHERE owner_id = %s AND flock_id = %s LIMIT 1",
+  "params": ["{OWNER_PARAM}", 4],
+  "metric": "active_flock_breed",
+  "result_type": "summary"
+}}
 
 Do not mix aggregate functions like SUM/AVG with plain row columns unless you also GROUP BY those row columns. For latest/current questions, prefer latest row fields over SUM. Do not use CTE/WITH because the validator accepts one SELECT statement over approved views only.
 """.strip()
@@ -180,6 +193,8 @@ ANSWER_SYSTEM = """
 You are Chikooza Farmer AI.
 Explain the SQL result in simple farmer-friendly English.
 Do not mention SQL, database tables, JSON, prompts, or implementation details.
+Do not mention internal numeric ids such as farm_id, flock_id, sale_id, purchase_id, daily_data_id, owner_id, or public_id unless the farmer explicitly asks for ids.
+When id columns are present in result rows, use them only to keep records separate internally; show farm/flock names to the farmer.
 Be precise with numbers and units. Use Rs. for money.
 If a result column is feed_consumed_kg, call it kg of feed, not generic units.
 If records are missing, say what data is missing and what the farmer should enter.
@@ -674,9 +689,9 @@ class ChikoozaLLMTextToSQLService:
         self.fallback_service = fallback_service
         self.entity_resolver = entity_resolver or ChikoozaEntityResolver(user=user)
         self.client = groq_client or GroqChatClient(
-            model=os.getenv("AIBOT_SQL_MODEL", "llama-3.3-70b-versatile"),
+            model=os.getenv("AIBOT_SQL_MODEL", AIBOT_SQL_DEFAULT_MODEL),
             fallback_model=os.getenv(
-                "AIBOT_SQL_FALLBACK_MODEL", "llama-3.1-8b-instant"
+                "AIBOT_SQL_FALLBACK_MODEL", AIBOT_SQL_DEFAULT_MODEL
             ),
             timeout=float(os.getenv("AIBOT_SQL_TIMEOUT", "30")),
         )
@@ -701,6 +716,21 @@ class ChikoozaLLMTextToSQLService:
 
         if not self.is_available:
             return self._sql_error_response("Groq is not configured.")
+
+        conversation_answer = self._conversation_only_answer(question)
+        if conversation_answer:
+            return {
+                "status": "success",
+                "data": None,
+                "answer": conversation_answer,
+                "message": conversation_answer,
+                "rows": [],
+                "query": None,
+                "params": [],
+                "route": TEXT_TO_SQL,
+                "metric": "conversation_only",
+                "engine": "groq_sql_conversation_guard",
+            }
 
         last_error: Exception | None = None
         error_feedback = ""
@@ -781,9 +811,9 @@ class ChikoozaLLMTextToSQLService:
 
         result = self.client.chat(
             messages,
-            model=os.getenv("AIBOT_SQL_MODEL", "llama-3.3-70b-versatile"),
+            model=os.getenv("AIBOT_SQL_MODEL", AIBOT_SQL_DEFAULT_MODEL),
             fallback_model=os.getenv(
-                "AIBOT_SQL_FALLBACK_MODEL", "llama-3.1-8b-instant"
+                "AIBOT_SQL_FALLBACK_MODEL", AIBOT_SQL_DEFAULT_MODEL
             ),
             temperature=0,
             max_tokens=900,
@@ -822,7 +852,21 @@ class ChikoozaLLMTextToSQLService:
         owner_param_count = sum(1 for param in payload.params if param == OWNER_PARAM)
 
         if placeholder_count != len(payload.params):
-            raise ValueError("SQL placeholder count does not match params.")
+            # U: llama-3.1-8b sometimes copies an owner-only aggregate SQL
+            # U: pattern correctly but forgets to repeat OWNER_PARAM for every
+            # U: owner_id placeholder. This repair is intentionally narrow:
+            # U: it only applies when every placeholder is an owner filter, so
+            # U: it cannot invent missing farm/flock/name/date parameters.
+            if placeholder_count == owner_filter_count and owner_filter_count > 0:
+                payload = LLMPlanPayload(
+                    sql=payload.sql,
+                    params=[OWNER_PARAM] * placeholder_count,
+                    metric=payload.metric,
+                    result_type=payload.result_type,
+                )
+                owner_param_count = placeholder_count
+            else:
+                raise ValueError("SQL placeholder count does not match params.")
         if owner_filter_count == 0:
             raise ValueError("SQL is missing the tenant owner filter.")
         if owner_param_count != owner_filter_count:
@@ -881,10 +925,10 @@ If there are multiple rows, keep the text short because the frontend will render
                 ],
                 model=os.getenv(
                     "AIBOT_SQL_ANSWER_MODEL",
-                    os.getenv("AIBOT_SQL_MODEL", "llama-3.3-70b-versatile"),
+                    os.getenv("AIBOT_SQL_MODEL", AIBOT_SQL_DEFAULT_MODEL),
                 ),
                 fallback_model=os.getenv(
-                    "AIBOT_SQL_FALLBACK_MODEL", "llama-3.1-8b-instant"
+                    "AIBOT_SQL_FALLBACK_MODEL", AIBOT_SQL_DEFAULT_MODEL
                 ),
                 temperature=0.1,
                 max_tokens=600,
@@ -979,7 +1023,7 @@ If there are multiple rows, keep the text short because the frontend will render
                 ),
             )
 
-        if plan.metric in {"flock_list", "complete_flock_report"}:
+        if plan.metric in {"flock_list", "all_flocks", "complete_flock_report"}:
             return self._cards_payload(
                 title="Flock records",
                 rows=safe_rows,
@@ -1282,6 +1326,8 @@ If there are multiple rows, keep the text short because the frontend will render
     def _blocked_message(self, reason: str) -> str:
         if "cross_tenant" in reason:
             return "I can only answer questions about your own Chikooza farm data."
+        if "conversation_only" in reason:
+            return "Okay. Ask me whenever you need farm records."
         return (
             "I could not connect that question to a safe farm-record query. "
             "I can answer about your farms, flocks, sales, purchases, daily data, "
@@ -1291,7 +1337,24 @@ If there are multiple rows, keep the text short because the frontend will render
     def _blocked_suggestion(self, reason: str) -> str:
         if "cross_tenant" in reason:
             return "Ask only about the farm records in your own logged-in account."
+        if "conversation_only" in reason:
+            return "Ask about farms, flocks, sales, purchases, daily data, FCR, or profit when needed."
         return "Try: 'show my farm summary', 'total sales', 'current birds', 'average FCR', or 'profit or loss'."
+
+    def _conversation_only_answer(self, question: str) -> str:
+        query = normalize_ai_query(question)
+        if re.match(r"^(thanks|thank you|okay thanks|ok thanks|thanks okay)[!. ]*$", query):
+            return "You're welcome. Ask me whenever you need farm records."
+        if re.match(r"^(ok|okay)[!. ]*$", query):
+            return "Okay. Ask your next farm question whenever you want."
+        if re.match(r"^(nothing more|no more|that's all|thats all|all good|done|stop|enough)[!. ]*$", query):
+            return "Okay, I will stop here. Ask me whenever you need farm records."
+        if re.match(r"^(huh|what do you mean|what meaning|what)[?!. ]*$", query):
+            return (
+                "I can answer questions from your saved farm records: farms, flocks, "
+                "sales, purchases, daily data, mortality, feed, weight, FCR, and profit."
+            )
+        return ""
 
     def _json_safe_rows(self, rows: list[dict]) -> list[dict]:
         return [

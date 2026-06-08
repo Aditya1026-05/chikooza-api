@@ -10,6 +10,7 @@ from .intent_agent import ChikoozaIntentAgentService
 from .intent_classifier import ChikoozaIntent, ChikoozaIntentClassifier
 from .insight_service import ChikoozaFarmInsightService
 from .llm_sql import (
+    AIBOT_SQL_DEFAULT_MODEL,
     ChikoozaEntityResolver,
     ChikoozaLLMTextToSQLService,
     ChikoozaSQLPromptBuilder,
@@ -1143,6 +1144,89 @@ class ChikoozaLLMSQLServiceTests(SimpleTestCase):
         self.assertEqual(result["status"], "success")
         self.assertEqual(result["params"], [7])
         self.assertEqual(result["answer"], "Your total sales are Rs. 12,500.")
+
+    def test_llm_service_uses_8b_model_for_sql_and_answer_formatting(self):
+        client = FakeGroqClient(
+            [
+                (
+                    '{"sql": "SELECT COALESCE(SUM(sale_amount), 0) AS result '
+                    'FROM ai_sale_data_view WHERE owner_id = %s", '
+                    f'"params": ["{OWNER_PARAM}"], "metric": "total_sales", '
+                    '"result_type": "money"}'
+                ),
+                "Your total sales are Rs. 12,500.",
+            ]
+        )
+        service = ChikoozaLLMTextToSQLService(
+            user=self.user,
+            groq_client=client,
+            entity_resolver=FakeEntityResolver(),
+        )
+        service.executor = SimpleNamespace(execute=lambda plan: [{"result": 12500}])
+
+        with patch.dict(
+            "os.environ",
+            {
+                "AIBOT_SQL_MODEL": AIBOT_SQL_DEFAULT_MODEL,
+                "AIBOT_SQL_FALLBACK_MODEL": AIBOT_SQL_DEFAULT_MODEL,
+                "AIBOT_SQL_ANSWER_MODEL": AIBOT_SQL_DEFAULT_MODEL,
+            },
+            clear=False,
+        ):
+            result = service.answer("what are my total sales?")
+
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(len(client.requests), 2)
+        self.assertEqual(client.requests[0]["kwargs"]["model"], "llama-3.1-8b-instant")
+        self.assertEqual(client.requests[1]["kwargs"]["model"], "llama-3.1-8b-instant")
+        self.assertEqual(
+            client.requests[0]["kwargs"]["fallback_model"],
+            "llama-3.1-8b-instant",
+        )
+
+    def test_llm_service_repairs_owner_only_missing_params_from_8b(self):
+        client = FakeGroqClient(
+            [
+                (
+                    '{"sql": "SELECT '
+                    '(SELECT COUNT(DISTINCT farm_id) FROM ai_farm_flock_data_view WHERE owner_id = %s) AS farm_count, '
+                    '(SELECT COUNT(DISTINCT flock_id) FROM ai_farm_flock_data_view WHERE owner_id = %s) AS flock_count", '
+                    f'"params": ["{OWNER_PARAM}"], '
+                    '"metric": "farm_record_summary", "result_type": "summary"}'
+                ),
+                "You have 1 farm and 2 flocks.",
+            ]
+        )
+        service = ChikoozaLLMTextToSQLService(
+            user=self.user,
+            groq_client=client,
+            entity_resolver=FakeEntityResolver(),
+        )
+
+        def execute(plan):
+            self.assertEqual(plan.params, [7, 7])
+            return [{"farm_count": 1, "flock_count": 2}]
+
+        service.executor = SimpleNamespace(execute=execute)
+
+        result = service.answer("show my farm summary")
+
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(result["metric"], "farm_record_summary")
+
+    def test_llm_service_handles_conversation_without_sql_planning(self):
+        client = FakeGroqClient([])
+        service = ChikoozaLLMTextToSQLService(
+            user=self.user,
+            groq_client=client,
+            entity_resolver=FakeEntityResolver(),
+        )
+
+        result = service.answer("nothing more")
+
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(result["metric"], "conversation_only")
+        self.assertEqual(client.requests, [])
 
     def test_llm_service_returns_error_when_sql_is_unsafe_without_rule_fallback(self):
         client = FakeGroqClient(
