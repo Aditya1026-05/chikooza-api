@@ -94,17 +94,18 @@ Hard rules:
 10. If the user asks for another farmer/user/customer's private data, return {{"blocked": true, "reason": "cross_tenant_request"}}.
 11. If the question is not answerable from these views, return {{"blocked": true, "reason": "not_answerable_from_farm_data"}}.
 12. If the user asks a follow-up like "what about that flock", "i meant daily data", "now in detail", "same farm", or "compare it", use Entity Context plus the recent conversation to resolve the farm/flock/metric context.
-13. If Entity Context resolves a farm/flock mention, use the resolved internal farm_id/flock_id exactly. For example, if the farmer says "flock 1" and Entity Context says it means flock_id 4, use flock_id = %s with param 4.
+13. If Entity Context resolves a farm/flock mention, use the resolved internal farm_id/flock_id exactly in the WHERE clause (e.g. `farm_id = %s` or `flock_id = %s`). HOWEVER, if the question is comparative, ranking, or asks if 'this' entity is the best/worst/least among others (e.g. 'is this the one with least data in all farms?'), do NOT filter by the resolved entity ID in the SQL WHERE clause. Instead, generate a query that ranks/lists all entities so the AI can see where 'this' entity stands and answer the question correctly. Do NOT just return a different random entity.
 14. Entity priority is: current explicit farm/flock mention first, then current resolved Entity Context, then the last referenced farm/flock from recent chat for unresolved follow-ups.
 15. If the user asks "daily data only", query ai_dailydata_data_view only. Do not answer with only flock master data.
 16. If the user asks "daily data and everything" after a selected flock, answer for that selected flock unless the user clearly asks for the whole account.
 17. If the user asks "total flocks in each farm", group by farm_id/farm_name and count DISTINCT flock_id. Do not ask the user to choose one farm.
 18. "active farm", "current farm", "selected farm", "active flock", "current flock", and "selected flock" mean the Active app farm/flock from Entity Context. Use those resolved ids when present.
-19. Do not restrict broad/list/count questions to the active app context. If the user says all/every/each/list/count, answer across the authenticated farmer's full account unless they explicitly name a farm/flock.
+19. Do not restrict broad, list, count, comparative, ranking, or extremum questions (e.g., best, worst, least, most, highest, lowest, top, bottom, compare, all, every, each, list, count) to the active or resolved app context. Answer across the authenticated farmer's full account (all farms and flocks) and do NOT filter by resolved farm_id or flock_id in the SQL WHERE clause, unless they explicitly name a specific farm or flock in their current question.
 20. Prefer simple, explicit SQL over clever SQL. The production model is llama-3.1-8b-instant, so copy the exact SQL patterns below whenever the question matches them.
 21. For one-field questions like "breed of active flock", "hatch date of first flock", or "farm city", return only that row/column plus the identifying farm/flock name.
 22. For conversational text like "thanks", "okay", "nothing more", "huh", or "what do you mean", return {{"blocked": true, "reason": "conversation_only"}} unless the text clearly asks for farm data.
 23. For spelling mistakes, infer the intended farm term when safe: "glock" means "flock", "poltry" means poultry only in the public bot, "sails" means sales.
+24. If the user asks 'which days', 'when', 'what dates', 'on which date', or 'on which day' for any daily metric (e.g., mortality/deaths, feed, weight, FCR), select `record_date` and the metric columns from `ai_dailydata_data_view`. Do NOT use aggregate functions like SUM() or AVG() to squash the days into a single row unless they explicitly ask for a total or average. Order the individual days by the metric (ASC for lowest/best, DESC for highest/worst) to find the target days.
 
 Common Chikooza mappings:
 - revenue/sales/income -> SUM(sale_amount) from ai_sale_data_view.
@@ -182,8 +183,31 @@ Exact SQL patterns to copy when relevant:
   "metric": "active_flock_breed",
   "result_type": "summary"
 }}
+9. Performance / health summary for all flocks:
+{{
+  "sql": "SELECT base.flock_id, base.flock_name, base.farm_name, COALESCE(daily.total_feed_consumed, 0) AS total_feed, COALESCE(daily.total_mortality, 0) AS total_mortality, COALESCE(daily.average_weight, 0) AS avg_weight, COALESCE(daily.average_fcr, 0) AS avg_fcr, COALESCE(sales.total_sales, 0) AS total_sales, COALESCE(purchases.total_purchases, 0) AS total_purchases, COALESCE(base.flock_cost, 0) AS flock_cost, COALESCE(sales.total_sales, 0) - COALESCE(purchases.total_purchases, 0) - COALESCE(base.flock_cost, 0) AS profit_loss, COALESCE(daily.daily_data_status, 0) AS daily_data_status FROM (SELECT flock_id, flock_name, farm_name, MAX(flock_cost) AS flock_cost FROM ai_farm_flock_data_view WHERE owner_id = %s AND flock_id IS NOT NULL GROUP BY flock_id, flock_name, farm_name) base LEFT JOIN (SELECT flock_id, SUM(feed_consumed_kg) AS total_feed_consumed, SUM(birds_died) AS total_mortality, AVG(average_bird_weight) AS average_weight, AVG(fcr) AS average_fcr, MAX(daily_data_status) AS daily_data_status FROM ai_dailydata_data_view WHERE owner_id = %s AND daily_data_id IS NOT NULL GROUP BY flock_id) daily ON daily.flock_id = base.flock_id LEFT JOIN (SELECT flock_id, SUM(sale_amount) AS total_sales FROM ai_sale_data_view WHERE owner_id = %s GROUP BY flock_id) sales ON sales.flock_id = base.flock_id LEFT JOIN (SELECT flock_id, SUM(purchase_amount) AS total_purchases FROM ai_purchase_data_view WHERE owner_id = %s GROUP BY flock_id) purchases ON purchases.flock_id = base.flock_id ORDER BY base.farm_name, base.flock_name LIMIT 100",
+  "params": ["{OWNER_PARAM}", "{OWNER_PARAM}", "{OWNER_PARAM}", "{OWNER_PARAM}"],
+  "metric": "flock_performance",
+  "result_type": "table"
+}}
+10. List all flocks (master data):
+{{
+  "sql": "SELECT flock_id, flock_name, farm_name, hatch_date, flock_size, actual_birds, breed_name, flock_status FROM ai_farm_flock_data_view WHERE owner_id = %s AND flock_id IS NOT NULL GROUP BY flock_id, flock_name, farm_name, hatch_date, flock_size, actual_birds, breed_name, flock_status ORDER BY farm_name, flock_name LIMIT 100",
+  "params": ["{OWNER_PARAM}"],
+  "metric": "flock_list",
+  "result_type": "table"
+}}
 
-Do not mix aggregate functions like SUM/AVG with plain row columns unless you also GROUP BY those row columns. For latest/current questions, prefer latest row fields over SUM. Do not use CTE/WITH because the validator accepts one SELECT statement over approved views only.
+11. Days with lowest/highest mortality, feed, weight, or FCR for a flock:
+{{
+  "sql": "SELECT record_date, flock_name, farm_name, birds_died FROM ai_dailydata_data_view WHERE owner_id = %s AND flock_id = %s AND daily_data_id IS NOT NULL ORDER BY birds_died ASC LIMIT 10",
+  "params": ["{OWNER_PARAM}", 4],
+  "metric": "lowest_mortality_days",
+  "result_type": "table"
+}}
+
+Do not mix aggregate functions like SUM/AVG with plain row columns unless you also GROUP BY those row columns. For latest/current questions, prefer latest row fields over SUM. Do not use CTE/WITH because the validator accepts one SELECT statement over approved views only. If the query asks for 'which days', 'when', 'what dates', 'on which date', or 'on which day' for daily metrics (like mortality, FCR, weight, feed, etc.), select `record_date` and the metric columns from `ai_dailydata_data_view`. Order by the metric (ASC for lowest/best, DESC for highest/worst) and do NOT use aggregate functions like SUM() or AVG().
+24. "performance", "how are my flocks doing", "how is my farm doing", "flock health", "farm performance", or "flock stats" always map to pattern 9 (flock_performance) for the full account, or pattern 7 (complete_flock_report) for a single resolved flock. Never block these.
 """.strip()
 
 
@@ -191,18 +215,18 @@ ANSWER_SYSTEM = """
 You are Chikooza Farmer AI.
 Explain the SQL result in simple farmer-friendly English.
 Do not mention SQL, database tables, JSON, prompts, or implementation details.
-Do not mention internal numeric ids such as farm_id, flock_id, sale_id, purchase_id, daily_data_id, owner_id, or public_id unless the farmer explicitly asks for ids.
+Do not mention internal numeric ids such as farm_id, flock_id, sale_id, purchase_id, daily_data_id, owner_id, or public_id unless the farmer explicitly asks for ids. CRITICAL ID BAN: Never, under any circumstances, output raw database ID values (like farm_id=9, flock_id=4, owner_id=1, etc.) in your conversational response. Strip them entirely from the final text. Refer to farms and flocks only by their names (e.g., 'Demo Farm 1').
 When id columns are present in result rows, use them only to keep records separate internally; show farm/flock names to the farmer.
 Be precise with numbers and units. Use Rs. for money.
 If a result column is feed_consumed_kg, call it kg of feed, not generic units.
 If records are missing, say what data is missing and what the farmer should enter.
-For comparison answers, state the winner and the main reason.
+For comparison answers, state the winner and the main reason. If the question asks to compare, rank, or identify specific flocks (such as the best, worst, highest, lowest, or middle zone), you MUST analyze the rows, name the winning/losing/middle flocks, and explain your reasoning in the text answer. Do not leave the comparison to the table/cards. When discussing financial results, you MUST use the term 'net profit' if the value is positive or zero, and 'net loss' if the value is negative. NEVER use the combined phrases 'profit loss', 'profit/loss', or similar when referring to actual numeric figures (e.g., say 'net loss of Rs. 15,330', NOT 'profit loss of Rs. 15,330' or 'profit/loss of Rs. -15,330' or 'profit loss of Rs. -15,330').
 Keep simple answers to 1-3 sentences. Use short bullets only for multi-row results.
 For one direct fact, answer directly in one sentence.
 For multi-row results, use one short intro and structured rows/bullets. Do not write a long paragraph.
 If the metric is current_workspace, answer only the current/selected farm and flock names. Do not switch to another flock and do not add unrelated details.
-If the metric is most_profitable_flock, name the flock and farm first, then show profit = sales - purchases - flock cost. If the result is negative, say no flock is profitable yet and this is the least-loss flock among records that have both sales and cost data. If data_note is present, mention that the ranking may be incomplete because cost/purchase/sales records are missing.
-If the metric is biggest_loss_flock, name the flock with the most negative result, not the smallest absolute loss.
+If the metric is most_profitable_flock, name the flock and farm first, then show net profit = sales - purchases - flock cost. If the result is negative, say no flock is profitable yet and this is the least-loss flock among records that have both sales and cost data. If data_note is present, mention that the ranking may be incomplete because cost/purchase/sales records are missing.
+If the metric is biggest_loss_flock, name the flock and farm first, then show net loss (the absolute/positive value of the negative result, e.g., 'net loss of Rs. 15,330' instead of a negative number or 'profit loss').
 If the metric is sales_count_leader or sales_amount_leader, name the flock and farm first, then mention sale count or total sales.
 If the metric is most_used_breed, state the top breed and how many flocks use it.
 If the metric is flock_breeds_by_flock, list each flock with its farm and breed. Do not collapse the answer to only unique breed names.
@@ -252,7 +276,7 @@ Return the JSON SQL plan now.
         parts = []
         # U: OLD: only eight messages were sent, which dropped part of a
         # U: six-turn chat. Keep six user turns + six assistant turns.
-        for item in history[-12:]:
+        for item in history[-16:]:
             role = item.get("role", "user")
             content = str(item.get("content", "")).strip()
             if content:
@@ -420,7 +444,7 @@ class ChikoozaEntityResolver:
         farms: list,
         flocks: list,
     ) -> str:
-        for item in reversed(history[-12:]):
+        for item in reversed(history[-16:]):
             if item.get("role") != "assistant":
                 continue
             flock_id = item.get("resolved_flock_id")
@@ -739,6 +763,17 @@ class ChikoozaLLMTextToSQLService:
         if not self.is_available:
             return self._sql_error_response("Groq is not configured.")
 
+        query_norm = normalize_ai_query(question)
+        if re.search(r"\b(?:farm|flock|user|owner|sale|purchase|dailydata|record|lifting|buyer|data)\s*ids?\b", query_norm) or re.search(r"\b(?:what|show|give|tell|display|get)\b.*\bids?\b", query_norm):
+            if not re.search(r"\b(?:how\s+many|count|number\s+of)\b", query_norm):
+                return {
+                    "status": "error",
+                    "message": "I cannot display internal database IDs. Please ask about your farm names, flocks, sales, purchases, daily data, mortality, feed, FCR, or profit.",
+                    "suggestion": "Try asking for your farm names, flock details, sales, or profit.",
+                    "route": TEXT_TO_SQL,
+                    "engine": "groq_sql",
+                }
+
         conversation_answer = self._conversation_only_answer(question)
         if conversation_answer:
             return {
@@ -828,7 +863,27 @@ class ChikoozaLLMTextToSQLService:
             entity_context=entity_context,
         )
         metadata = self._entity_metadata(entity_context)
+        if rows and isinstance(rows, list) and len(rows) > 0:
+            first_row = rows[0]
+            if isinstance(first_row, dict):
+                sql_flock_id = first_row.get("flock_id")
+                sql_farm_id = first_row.get("farm_id")
+                if sql_flock_id is not None and "resolved_flock_id" not in metadata:
+                    try:
+                        metadata["resolved_flock_id"] = int(sql_flock_id)
+                        metadata["intent_entity_type"] = "flock"
+                    except (TypeError, ValueError):
+                        pass
+                if sql_farm_id is not None and "resolved_farm_id" not in metadata:
+                    try:
+                        metadata["resolved_farm_id"] = int(sql_farm_id)
+                        if "intent_entity_type" not in metadata:
+                            metadata["intent_entity_type"] = "farm"
+                    except (TypeError, ValueError):
+                        pass
         display = self._display_payload(plan, rows)
+        if display and self._is_comparative_query(question):
+            display = None
         return {
             "status": "success",
             "data": rows[0] if len(rows) == 1 else rows,
@@ -852,6 +907,10 @@ class ChikoozaLLMTextToSQLService:
         entity_context: str = "",
     ) -> SQLPlan | None:
         query = normalize_ai_query(question)
+        # --- Priority -1: Compound / Jumbled queries fall through to LLM ---
+        if self._is_compound_query(query):
+            return None
+
         # U: NEW: These are not the old deterministic answer rules. They are
         # U: safety-first SQL plan shortcuts for common farmer questions that
         # U: llama-3.1-8b-instant was repeatedly planning incorrectly. Groq
@@ -863,21 +922,79 @@ class ChikoozaLLMTextToSQLService:
             if active_farm_id:
                 return self._current_workspace_plan(active_farm_id=active_farm_id)
 
+        # --- Priority 0: Generic follow-up scope inheritance ---
+        if self._is_generic_flock_followup(query):
+            generic_plan = self._generic_flock_followup_plan(
+                query,
+                history=history,
+                context_flock_id=self._context_flock_id(entity_context),
+            )
+            if generic_plan:
+                return generic_plan
+
         context_flock_id = self._context_flock_id(entity_context)
 
+        # --- Priority 1: Advice / diagnostic (must beat performance) ---
         if self._asks_improvement_advice(query):
             return self._improvement_advice_plan()
 
+        # --- Priority 2: Performance / health / stats ---
+        # Must come BEFORE flock_list so "performance of my flocks" doesn't
+        # accidentally match the flock-list detector.
+        if self._asks_performance(query):
+            is_plural_or_general = bool(
+                re.search(r"\b(?:flocks|batches)\b", query)
+                or (re.search(r"\bflock\s+performance\b", query) and not re.search(r"\b(?:my|this|current|active|selected|its)\b", query))
+            )
+            if context_flock_id and not self._asks_all_scope(query, history) and not is_plural_or_general:
+                return self._complete_flock_report_plan(context_flock_id)
+            return self._all_flocks_performance_plan()
+
+        # --- Priority 3: FCR and Weight (before flock_list which also matches 'my flocks') ---
+        # U: Skip aggregate plans when the user asks for specific days/dates.
+        if self._asks_avg_fcr(query) and not self._asks_daily_time_series(query):
+            return self._avg_fcr_plan(flock_id=context_flock_id if not self._asks_all_scope(query, history) else None)
+
+        if self._asks_avg_weight(query) and not self._asks_daily_time_series(query):
+            return self._avg_weight_plan(flock_id=context_flock_id if not self._asks_all_scope(query, history) else None)
+
+        # --- Priority 4: Single-flock detail (before account summary: 'all details of this flock') ---
+        if self._asks_one_flock_details(query) and context_flock_id:
+            return self._complete_flock_report_plan(context_flock_id)
+
+        # --- Priority 5: Account summary ---
+        if self._asks_account_summary(query):
+            return self._account_summary_plan()
+
+        # --- Priority 5.5: Single active farm/flock details ---
+        context_farm_id = self._context_farm_id(entity_context)
+        if context_farm_id and self._asks_single_farm_query(query):
+            return self._single_farm_plan(context_farm_id)
+
+        if context_flock_id and self._asks_single_flock_query(query):
+            return self._complete_flock_report_plan(context_flock_id)
+
+        # --- Priority 6: Farm / flock list and count ---
+        if self._asks_farm_list(query, entity_context):
+            return self._farm_list_plan_llm()
+
+        if self._asks_flock_list(query, entity_context) and not self._asks_flock_breed(query, broad=True):
+            return self._flock_list_plan_llm()
+
+        if self._asks_farm_count(query):
+            return self._farm_count_plan()
+
+        if self._asks_flock_count(query):
+            return self._flock_count_plan()
+
+        # --- Priority 7: Breed questions ---
         if self._asks_all_flock_breeds(query, history):
             return self._all_flock_breeds_plan()
 
         if self._asks_other_flock_breeds(query, history):
             return self._all_flock_breeds_plan(exclude_flock_id=context_flock_id)
 
-        if self._asks_one_flock_details(query) and context_flock_id:
-            return self._complete_flock_report_plan(context_flock_id)
-
-        if self._asks_daily_data(query) and context_flock_id and not self._asks_all_scope(query):
+        if self._asks_daily_data(query) and context_flock_id and not self._asks_all_scope(query, history):
             return self._daily_data_for_flock_plan(context_flock_id)
 
         if self._asks_flock_breed(query) and context_flock_id:
@@ -886,6 +1003,14 @@ class ChikoozaLLMTextToSQLService:
         if self._asks_most_used_breed(query):
             return self._most_used_breed_plan()
 
+        # --- Priority 8.5: Least Data / Comparative rankings ---
+        if self._asks_flock_least_data(query) or self._asks_flock_least_data_comparison(query):
+            return self._flock_least_data_plan()
+
+        if self._asks_farm_least_data(query) or self._asks_farm_least_data_comparison(query):
+            return self._farm_least_data_plan()
+
+        # --- Priority 8: Profit rankings ---
         if self._asks_most_profitable_flock(query):
             return self._profit_ranking_plan(
                 metric="most_profitable_flock",
@@ -907,8 +1032,9 @@ class ChikoozaLLMTextToSQLService:
         if self._asks_sales_amount_leader(query, history):
             return self._sales_leader_plan(metric="sales_amount_leader", by="amount")
 
+        # --- Priority 9: Profit/loss (must come BEFORE sales/purchases) ---
         if self._asks_profit_loss(query):
-            if self._asks_all_scope(query):
+            if self._asks_all_scope(query, history):
                 return self._profit_ranking_plan(
                     metric="profit_loss_by_flock",
                     order_direction="DESC",
@@ -916,41 +1042,226 @@ class ChikoozaLLMTextToSQLService:
                 )
             if context_flock_id:
                 return self._profit_for_flock_plan(context_flock_id)
+            # Broad profit question without flock context — return all-flock summary
+            return self._profit_ranking_plan(
+                metric="profit_loss_by_flock",
+                order_direction="DESC",
+                limit=100,
+            )
+
+        # --- Priority 10: Simple aggregate metrics ---
+        # U: Time-series / which-days questions (e.g. "lowest mortality is in which days?",
+        # U: "on which date was FCR highest?") must NOT be routed to aggregate plans
+        # U: because those plans collapse every row into a single number (SUM/AVG).
+        # U: Instead, fall through to the LLM which uses Rule 24 + Pattern 11 to
+        # U: SELECT individual record_date rows ordered by the metric.
+        is_time_series = self._asks_daily_time_series(query)
+
+        if self._asks_current_birds(query):
+            return self._current_birds_plan_llm(flock_id=context_flock_id if not self._asks_all_scope(query, history) else None)
+
+        if self._asks_sales_total(query):
+            return self._sales_total_plan(flock_id=context_flock_id if not self._asks_all_scope(query, history) else None)
+
+        if self._asks_purchases_total(query):
+            return self._purchases_total_plan(flock_id=context_flock_id if not self._asks_all_scope(query, history) else None)
+
+        if self._asks_mortality(query) and not is_time_series:
+            return self._mortality_total_plan(flock_id=context_flock_id if not self._asks_all_scope(query, history) else None)
+
+        if self._asks_feed_total(query) and not is_time_series:
+            return self._feed_total_plan(flock_id=context_flock_id if not self._asks_all_scope(query, history) else None)
 
         return None
 
-    def _asks_current_workspace(self, query: str) -> bool:
-        return bool(
-            re.search(r"\b(?:which|what|show|tell|give)\b", query)
-            and re.search(r"\b(?:current|active|selected)\b", query)
-            and re.search(r"\b(?:farm|flock|batch)\b", query)
+    def _is_generic_flock_followup(self, query: str) -> bool:
+        normalized = query.strip("? .!").lower()
+        # Exclude queries that have specific metric/topic keywords, because those should go to their dedicated plans.
+        # U: "flock"/"flocks"/"batch"/"batches" are also excluded: if the query explicitly names the entity
+        # U: (e.g. "show all flocks", "list all my flocks"), it must route to the flock-list plan,
+        # U: NOT inherit the previous topic (e.g. mortality) via the generic follow-up chain.
+        if re.search(
+            r"\b(?:daily|feed|fcr|weight|mortality|died|dead|death|sale|sales|purchase|purchases|breed|species|farm|farms|flock|flocks|batch|batches|performance|doing|improve|advice)\b",
+            normalized,
+        ):
+            return False
+
+        # Match phrases like:
+        # "and for all of them", "for all of them", "what about others", "and others", "and for others", "and for all", "all of them", "and for other ones"
+        # Must contain at least one pronoun/scope word: all, other, others, rest, remaining, them
+        has_followup_pronoun = bool(
+            re.search(r"\b(?:all|other|others|rest|remaining|them)\b", normalized)
         )
+        # Must have a preposition/conjunction, or be extremely short (1-3 words)
+        has_preposition = bool(
+            re.search(r"\b(?:and|for|what|about|with|how)\b", normalized)
+        )
+        return has_followup_pronoun and (has_preposition or len(normalized.split()) <= 3)
+
+    def _generic_flock_followup_plan(
+        self,
+        query: str,
+        *,
+        history: list[dict] | None,
+        context_flock_id: int | None,
+    ) -> SQLPlan | None:
+        history_metric = self._last_history_metric(history)
+        if not history_metric:
+            return None
+
+        is_all = bool(re.search(r"\ball\b", query))
+        is_other = bool(re.search(r"\b(?:other|others|rest|remaining)\b", query))
+
+        # 1. Breed-related
+        if history_metric in {"flock_breed", "flock_breeds_by_flock", "most_used_breed"}:
+            if is_other and context_flock_id:
+                return self._all_flock_breeds_plan(exclude_flock_id=context_flock_id)
+            return self._all_flock_breeds_plan()
+
+        # 2. FCR
+        if history_metric in {"average_fcr"}:
+            return self._avg_fcr_plan(flock_id=None)
+
+        # 3. Weight
+        if history_metric in {"average_weight"}:
+            return self._avg_weight_plan(flock_id=None)
+
+        # 4. Sales
+        if history_metric in {"total_sales"}:
+            return self._sales_total_plan(flock_id=None)
+
+        # 5. Purchases
+        if history_metric in {"total_purchases"}:
+            return self._purchases_total_plan(flock_id=None)
+
+        # 6. Mortality
+        if history_metric in {"mortality"}:
+            return self._mortality_total_plan(flock_id=None)
+
+        # 7. Feed consumed
+        if history_metric in {"feed_consumed"}:
+            return self._feed_total_plan(flock_id=None)
+
+        # 8. Current birds
+        if history_metric in {"current_birds"}:
+            return self._current_birds_plan_llm(flock_id=None)
+
+        # 9. Profit / Loss
+        if history_metric in {"profit_by_flock", "profit_for_flock", "profit_loss_by_flock"}:
+            return self._profit_ranking_plan(
+                metric="profit_loss_by_flock",
+                order_direction="DESC",
+                limit=100,
+            )
+
+        return None
+
+    def _is_compound_query(self, query: str) -> bool:
+        # A query is compound if it asks for multiple distinct metric categories:
+        # Categories:
+        # 1. sales / revenue
+        # 2. purchases / expenses
+        # 3. fcr / average fcr
+        # 4. weight / average bird weight
+        # 5. mortality / deaths
+        # 6. feed / feed consumed
+        # 7. breed / species
+
+        normalized = query.lower()
+
+        has_sales = bool(re.search(r"\b(?:sale|sales|revenue|income|sold|earning|earnings|lifting|liftings)\b", normalized))
+        has_purchase = bool(re.search(r"\b(?:purchase|purchases|expense|expenses|spent|spend|spending|expenditure|feed cost|labour|labor|equipment)\b", normalized))
+        has_fcr = bool(re.search(r"\b(?:fcr|feed\s+conversion|conversion\s+ratio)\b", normalized))
+        has_weight = bool(re.search(r"\b(?:weight|weights|body\s+weight|bird\s+weight|avg\s+weight|average\s+weight)\b", normalized))
+        has_mortality = bool(re.search(r"\b(?:mortality|mortalities|death|deaths|dead|died)\b", normalized))
+        has_feed = bool(re.search(r"\bfeed\b", normalized) and not re.search(r"\b(?:fcr|feed cost|feed\s+conversion)\b", normalized))
+        has_breed = bool(re.search(r"\b(?:breed|species)\b", normalized))
+
+        categories = 0
+        if has_sales:
+            categories += 1
+        if has_purchase:
+            categories += 1
+        if has_fcr:
+            categories += 1
+        if has_weight:
+            categories += 1
+        if has_mortality:
+            categories += 1
+        if has_feed:
+            categories += 1
+        if has_breed:
+            categories += 1
+
+        # Exception: Map jumbled sales-and-purchases queries directly to _account_summary_plan
+        # (metric "farm_record_summary"), which naturally returns both.
+        if categories == 2 and has_sales and has_purchase:
+            return False
+
+        return categories >= 2
+
+    def _asks_current_workspace(self, query: str) -> bool:
+        has_action = bool(re.search(r"\b(?:which|what|show|tell|give|only|just)\b", query))
+        has_current = bool(re.search(r"\b(?:current|active|selected)\b", query))
+        has_entity = bool(re.search(r"\b(?:farm|flock|batch|one|workspace)\b", query))
+        if has_current and (has_entity or "only" in query or "just" in query) and (has_action or "workspace" in query):
+            has_metric = bool(re.search(r"\b(?:data|record|records|performance|fcr|weight|feed|mortality|sales|purchase|profit|loss)\b", query))
+            if has_metric and "workspace" not in query:
+                return False
+            return True
+        return False
 
     def _asks_one_flock_details(self, query: str) -> bool:
         if re.search(r"\b(?:all|every|each)\s+(?:the\s+)?(?:flocks|farms|batches)\b", query):
             return False
-        return bool(
-            re.search(r"\b(?:detail|details|everything|all data|all its data|its data|every data)\b", query)
-            and re.search(r"\b(?:it|its|that|this|flock|batch|current|active|selected)\b", query)
+        # Pronoun 'it'/'its'/'that'/'this' + data/details = single flock report
+        has_detail_word = bool(
+            re.search(
+                r"\b(?:detail|details|everything|data|all data|all its data|its data|every data|all info|all about|what data|what all data)\b",
+                query,
+            )
         )
+        has_flock_ref = bool(
+            re.search(r"\b(?:it|its|that|this|flock|batch|current|active|selected)\b", query)
+        )
+        has_metric = bool(
+            re.search(
+                r"\b(?:daily|feed|fcr|weight|mortality|died|dead|death|sale|sales|purchase|purchases|breed|species)\b",
+                query,
+            )
+        )
+        return has_detail_word and has_flock_ref and not has_metric
 
     def _asks_daily_data(self, query: str) -> bool:
         return "daily data" in query or re.search(r"\bdaily\b", query)
 
-    def _asks_flock_breed(self, query: str) -> bool:
+    def _asks_flock_breed(self, query: str, broad: bool = False) -> bool:
+        """Detect breed questions. broad=True returns True even without a specific flock reference."""
+        has_breed = bool(re.search(r"\b(?:breed|species)\b", query))
+        if broad:
+            return has_breed
         return bool(
-            re.search(r"\b(?:breed|species)\b", query)
+            has_breed
             and re.search(r"\b(?:flock|batch|current|active|selected|first|second|third|it|that|this)\b", query)
         )
 
     def _asks_all_flock_breeds(self, query: str, history: list[dict] | None) -> bool:
         has_breed = bool(re.search(r"\b(?:breed|species)\b", query))
         has_collection = bool(
-            re.search(r"\b(?:all|every|each|list|which|flocks|batches)\b", query)
-            or re.search(r"\b(?:which\s+breed\s+is\s+for\s+which\s+flock|breed\s+in\s+all\s+(?:the\s+)?flocks)\b", query)
+            re.search(r"\b(?:all|every|each|list)\b", query)
+            and re.search(r"\b(?:flocks?|batches?)\b", query)
         )
-        if has_breed and has_collection:
+        # 'which breed is for which flock' or 'breed in all flocks'
+        has_breed_for_flock_phrasing = bool(
+            re.search(r"\b(?:which\s+breed\s+is\s+for\s+which\s+flock|breed\s+in\s+all\s+(?:the\s+)?flocks)\b", query)
+        )
+        # Do NOT capture 'most used breed' / 'top breed' / 'popular breed'
+        has_most_used = bool(
+            re.search(r"\b(?:most\s+used|most\s+common|commonest|popular|primary|frequent)\b", query)
+        )
+        if has_breed and (has_collection or has_breed_for_flock_phrasing) and not has_most_used:
             return True
+        # Follow-up: 'specify properly which breed for which flock'
         history_metric = self._last_history_metric(history)
         followup_to_breed = history_metric in {"most_used_breed", "flock_breeds_by_flock", "flock_breed"}
         return bool(
@@ -967,9 +1278,15 @@ class ChikoozaLLMTextToSQLService:
         )
 
     def _asks_most_used_breed(self, query: str) -> bool:
+        """Detect 'most used/common/popular breed' questions.
+        NOTE: 'top breed in my flocks' has both 'top' and 'breed', so we must
+        ensure it hits this detector, not _asks_all_flock_breeds.
+        """
         return bool(
-            re.search(r"\b(?:most used|most common|commonest|top|popular)\b", query)
+            re.search(r"\b(?:most\s+used|most\s+common|commonest|popular|top|main|primary|frequent)\b", query)
             and re.search(r"\b(?:breed|species)\b", query)
+            # Must NOT also have a collection word that would indicate _asks_all_flock_breeds
+            and not re.search(r"\b(?:all|every|each|which|list)\s+(?:the\s+)?(?:flocks?|batches?)\b", query)
         )
 
     def _asks_most_profitable_flock(self, query: str) -> bool:
@@ -981,7 +1298,7 @@ class ChikoozaLLMTextToSQLService:
 
     def _asks_biggest_loss(self, query: str) -> bool:
         return bool(
-            re.search(r"\b(?:biggest|largest|highest|maximum|most|worst)\b", query)
+            re.search(r"\b(?:biggest|buggest|largest|highest|maximum|most|worst)\b", query)
             and re.search(r"\b(?:loss|negative|losing)\b", query)
         )
 
@@ -1006,18 +1323,25 @@ class ChikoozaLLMTextToSQLService:
         return False
 
     def _asks_profit_loss(self, query: str) -> bool:
-        return bool(re.search(r"\b(?:profit|loss|net|margin)\b", query))
+        """Detect profit/loss questions broadly."""
+        # Standard financial terms
+        if re.search(r"\b(?:profit|loss|net|margin)\b", query):
+            return True
+        # Colloquial: 'am i making money', 'am i losing', 'money or losing'
+        if re.search(r"\b(?:making\s+money|losing\s+money|am\s+i\s+losing|money\s+or\s+losing|making\s+or\s+losing)\b", query):
+            return True
+        return False
 
     def _asks_improvement_advice(self, query: str) -> bool:
         improvement = bool(
             re.search(
-                r"\b(?:improve|improvement|better|advice|advise|suggest|recommend|what can i do|what should i do|how can i improve|how to improve)\b",
+                r"\b(?:improve|improvement|better|advice|advise|suggest|recommend|how\s+can\s+i\s+improve|how\s+to\s+improve|what\s+can\s+i\s+do|what\s+should\s+i\s+do|how\s+to\s+do\s+better|how\s+can\s+i\s+fix)\b",
                 query,
             )
         )
         diagnostic = bool(
             re.search(
-                r"\b(?:went wrong|wrong|issue|problem|problems|weak|poor|bad|mistake|mistakes|fix|correct)\b",
+                r"\b(?:went\s+wrong|what\s+went\s+wrong|what\s+are\s+the\s+issues|issue|issues|problem|problems|weak|poor|poorly|performing\s+poorly|bad|mistake|mistakes|fix|correct)\b",
                 query,
             )
         )
@@ -1027,13 +1351,322 @@ class ChikoozaLLMTextToSQLService:
                 query,
             )
         )
-        return bool((improvement and (domain or diagnostic)) or (diagnostic and domain))
+        # improvement/advice alone (no domain required for strong advice phrases)
+        strong_advice = bool(
+            re.search(
+                r"\b(?:what\s+can\s+i\s+do|what\s+should\s+i\s+do|what\s+went\s+wrong|what\s+are\s+the\s+issues|performing\s+poorly)\b",
+                query,
+            )
+        )
+        return bool(
+            strong_advice
+            or (improvement and (domain or diagnostic))
+            or (diagnostic and domain)
+        )
 
-    def _asks_all_scope(self, query: str) -> bool:
-        return bool(re.search(r"\b(?:all|every|each|list|total|overall|account)\b", query))
+    def _asks_flock_least_data(self, query: str) -> bool:
+        has_least = bool(re.search(r"\b(?:least|minimum|lowest|fewest|smallest)\b", query))
+        has_data = bool(re.search(r"\b(?:data|records|information|rows|details)\b", query))
+        has_flock = bool(re.search(r"\b(?:flock|flocks|batch|batches)\b", query))
+        return has_least and has_data and has_flock
+
+    def _asks_farm_least_data(self, query: str) -> bool:
+        has_least = bool(re.search(r"\b(?:least|minimum|lowest|fewest|smallest)\b", query))
+        has_data = bool(re.search(r"\b(?:data|records|information|rows|details)\b", query))
+        has_farm = bool(re.search(r"\b(?:farm|farms)\b", query))
+        return has_least and has_data and has_farm
+
+    def _asks_flock_least_data_comparison(self, query: str) -> bool:
+        has_least = bool(re.search(r"\b(?:least|minimum|lowest|fewest|smallest)\b", query))
+        has_data = bool(re.search(r"\b(?:data|records|information|rows|details)\b", query))
+        has_this_flock = bool(re.search(r"\b(?:this|that|it|flock)\b", query))
+        has_all_farms = bool(re.search(r"\b(?:all|every|other|compared|farms)\b", query))
+        return has_least and has_data and has_this_flock and has_all_farms
+
+    def _asks_farm_least_data_comparison(self, query: str) -> bool:
+        has_least = bool(re.search(r"\b(?:least|minimum|lowest|fewest|smallest)\b", query))
+        has_data = bool(re.search(r"\b(?:data|records|information|rows|details)\b", query))
+        has_this_farm = bool(re.search(r"\b(?:this|that|it|farm)\b", query))
+        has_all = bool(re.search(r"\b(?:all|every|other|compared)\b", query))
+        return has_least and has_data and has_this_farm and has_all
+
+    def _asks_single_farm_query(self, query: str) -> bool:
+        if re.search(r"\bfarms\b", query):
+            return False
+        has_disqualifier = bool(
+            re.search(
+                r"\b(?:performance|performing|health|healthy|status|stats|statistics|doing|progress|progressing|fcr|weight|weights|body\s+weight|bird\s+weight|avg\s+weight|average\s+weight|feed|mortality|mortalities|death|deaths|dead|died|sales|sale|revenue|income|sold|earning|earnings|lifting|liftings|purchase|purchases|expense|expenses|spent|spend|spending|expenditure|cost|costs|profit|loss|net|issue|issues|problem|problems|breed|breed_name|species|improve|what\s+are\s+the|hatch|hatch_date|starting_birds|actual_birds|birds|chick|chicks|daily|record|records)\b",
+                query,
+            )
+        )
+        if has_disqualifier:
+            return False
+        has_show = bool(re.search(r"\b(?:show|give|tell|display|details|info|information|about|my|current|active|selected)\b", query))
+        has_farm = bool(re.search(r"\bfarm\b", query))
+        return has_show and has_farm
+
+    def _asks_single_flock_query(self, query: str) -> bool:
+        if re.search(r"\b(?:flocks|batches)\b", query):
+            return False
+        has_disqualifier = bool(
+            re.search(
+                r"\b(?:performance|performing|health|healthy|status|stats|statistics|doing|progress|progressing|fcr|weight|weights|body\s+weight|bird\s+weight|avg\s+weight|average\s+weight|feed|mortality|mortalities|death|deaths|dead|died|sales|sale|revenue|income|sold|earning|earnings|lifting|liftings|purchase|purchases|expense|expenses|spent|spend|spending|expenditure|cost|costs|profit|loss|net|issue|issues|problem|problems|breed|breed_name|species|improve|what\s+are\s+the|hatch|hatch_date|starting_birds|actual_birds|birds|chick|chicks|daily|record|records)\b",
+                query,
+            )
+        )
+        if has_disqualifier:
+            return False
+        has_show = bool(re.search(r"\b(?:show|give|tell|display|details|info|information|about|my|current|active|selected)\b", query))
+        has_flock = bool(re.search(r"\b(?:flock|batch)\b", query))
+        return has_show and has_flock
+
+    def _asks_all_scope(self, query: str, history: list[dict] | None = None) -> bool:
+        if history:
+            pattern = r"\b(?:all|every|each|list|overall|account|best|worst|compare|comparison|ranking|middle|most|least|highest|lowest|top|bottom|better|worse)\b"
+        else:
+            pattern = r"\b(?:all|every|each|list|total|overall|account|best|worst|compare|comparison|ranking|middle|most|least|highest|lowest|top|bottom|better|worse)\b"
+        return bool(re.search(pattern, query))
+
+    def _is_comparative_query(self, question: str) -> bool:
+        query = normalize_ai_query(question)
+        return bool(
+            re.search(
+                r"\b(?:best|worst|compare|comparison|ranking|middle|most|least|highest|lowest|top|bottom|better|worse)\b",
+                query,
+            )
+        )
+
+    # U: NEW detector methods — cover all high-frequency farmer question types
+    # U: so they never reach the LLM when a safe plan already exists.
+
+    def _asks_performance(self, query: str) -> bool:
+        """Detect performance/health/stats questions that are NOT improvement advice."""
+        has_performance = bool(
+            re.search(
+                r"\b(?:performance|performing|health|healthy|status|stats|statistics|doing|progress|progressing)\b",
+                query,
+            )
+            or re.search(
+                r"\bhow\s+(?:are|is)\s+(?:my|the|this|that|it)\b",
+                query,
+            )
+        )
+        has_farm_entity = bool(
+            re.search(r"\b(?:farm|flock|flocks?|batch|batches?|birds?|chickens?|it|this|that)\b", query)
+        )
+        # Exclude improvement-advice questions (those have their own plan)
+        has_advice = bool(
+            re.search(
+                r"\b(?:improve|advice|advise|suggest|recommend|better|fix|issue|problem|wrong|poorly|what\s+to\s+do|how\s+to\s+do)\b",
+                query,
+            )
+        )
+        return has_performance and has_farm_entity and not has_advice
+
+    def _asks_account_summary(self, query: str) -> bool:
+        """Detect broad account summary questions."""
+        # Do not capture if the question is specifically about daily data
+        # e.g. "i meant daily data and everything" should route to daily_data, not summary.
+        if re.search(r"\bdaily\s+data\b", query):
+            return False
+        summary_phrases = (
+            "summary", "overview", "my data", "all data", "my records",
+            "all records", "everything", "what do i have", "what all i have",
+            "total things", "show my stuff", "all my data", "total data",
+            "full data", "complete data", "all details", "all information",
+            "my information", "all things", "all stuff", "my stuff",
+            "my details", "all my info", "my info", "my all things",
+            "i have in my account",
+        )
+        if any(phrase in query for phrase in summary_phrases):
+            return True
+
+        has_sales = bool(re.search(r"\b(?:sale|sales|revenue|income|sold|earning|earnings|lifting|liftings)\b", query))
+        has_purchase = bool(re.search(r"\b(?:purchase|purchases|expense|expenses|spent|spend|spending|expenditure|feed\s+cost|labour|labor|equipment|cost|costs)\b", query))
+        if has_sales and has_purchase:
+            return True
+
+        return bool(
+            re.search(
+                r"\b(?:show|give|tell|display|list)\s+(?:me\s+)?(?:my\s+|our\s+)?(?:all|complete|full)\s+(?:my\s+|our\s+)?(?:data|records|details|information|stuff|things)\b",
+                query,
+            )
+        )
+
+    def _asks_farm_list(self, query: str, entity_context: str = "") -> bool:
+        """Detect 'list/show farms' without a specific farm reference."""
+        if self._is_comparative_query(query):
+            return False
+        
+        has_farm = bool(re.search(r"\bfarms?\b", query))
+        has_farms_plural = bool(re.search(r"\bfarms\b", query))
+        
+        # If singular "farm" is requested and we have a context farm, don't trigger the list.
+        if has_farm and not has_farms_plural:
+            context_farm_id = self._context_farm_id(entity_context)
+            if context_farm_id is not None:
+                return False
+
+        has_list_word = bool(
+            re.search(r"\b(?:list|show|display|give|tell|all|every|my)\b", query)
+        )
+        has_flock = bool(re.search(r"\b(?:flocks?|batches?)\b", query))
+        has_disqualifier = bool(
+            re.search(
+                r"\b(?:performance|performing|health|healthy|status|stats|statistics|doing|progress|progressing|fcr|weight|weights|body\s+weight|bird\s+weight|avg\s+weight|average\s+weight|feed|mortality|mortalities|death|deaths|dead|died|sales|sale|revenue|income|sold|earning|earnings|lifting|liftings|purchase|purchases|expense|expenses|spent|spend|spending|expenditure|cost|costs|profit|loss|net|issue|issues|problem|problems|breed|breed_name|species|improve|what\s+are\s+the|hatch|hatch_date|starting_birds|actual_birds|birds|chick|chicks)\b",
+                query,
+            )
+        )
+        if has_disqualifier:
+            return False
+        if has_list_word and has_farm and not has_flock:
+            return True
+        # "show farms" / "my farms"
+        return bool(re.search(r"\b(?:my\s+farms?|show\s+farms?|list\s+farms?)\b", query))
+
+    def _asks_flock_list(self, query: str, entity_context: str = "") -> bool:
+        """Detect 'list/show flocks' questions."""
+        if self._is_comparative_query(query):
+            return False
+        
+        has_flock = bool(re.search(r"\b(?:flocks?|batches?)\b", query))
+        has_flocks_plural = bool(re.search(r"\b(?:flocks|batches)\b", query))
+        
+        # If singular "flock" is requested and we have a context flock, don't trigger the list.
+        if has_flock and not has_flocks_plural:
+            context_flock_id = self._context_flock_id(entity_context)
+            if context_flock_id is not None:
+                return False
+
+        has_list_word = bool(
+            re.search(r"\b(?:list|show|display|give|tell|all|every|my)\b", query)
+        )
+        has_count = bool(re.search(r"\b(?:how many|count|number of|total)\b", query))
+        has_disqualifier = bool(
+            re.search(
+                r"\b(?:performance|performing|health|healthy|status|stats|statistics|doing|progress|progressing|fcr|weight|weights|body\s+weight|bird\s+weight|avg\s+weight|average\s+weight|feed|mortality|mortalities|death|deaths|dead|died|sales|sale|revenue|income|sold|earning|earnings|lifting|liftings|purchase|purchases|expense|expenses|spent|spend|spending|expenditure|cost|costs|profit|loss|net|issue|issues|problem|problems|breed|breed_name|species|improve|what\s+are\s+the|hatch|hatch_date|starting_birds|actual_birds|birds|chick|chicks)\b",
+                query,
+            )
+        )
+        if has_count:
+            return False  # handled by _asks_flock_count
+        if has_disqualifier:
+            return False  # handled by other detectors
+        return has_list_word and has_flock
+
+    def _asks_farm_count(self, query: str) -> bool:
+        """Detect 'how many farms' questions."""
+        return bool(
+            re.search(r"\b(?:how many|number of|count|total)\b", query)
+            and re.search(r"\bfarms?\b", query)
+            and not re.search(r"\b(?:flocks?|batches?)\b", query)
+        )
+
+    def _asks_flock_count(self, query: str) -> bool:
+        """Detect 'how many flocks' questions (total, not grouped)."""
+        # "total flocks in each farm" / "flocks per farm" / "flocks by farm" need
+        # the LLM to GROUP BY farm, so we do NOT intercept those here.
+        if re.search(r"\b(?:in\s+each|per\s+farm|by\s+farm|each\s+farm|for\s+each)\b", query):
+            return False
+        # Exclude questions about birds/chickens (handled by current_birds)
+        if re.search(r"\b(?:birds?|chickens?|alive|remaining|left|current)\b", query):
+            return False
+        # Exclude sales count leader questions ('most number of sales')
+        if re.search(r"\b(?:sales?|sale)\b", query):
+            return False
+        return bool(
+            re.search(r"\b(?:how many|number of|count|total)\b", query)
+            and re.search(r"\b(?:flocks?|batches?)\b", query)
+        )
+
+    def _asks_sales_total(self, query: str) -> bool:
+        """Detect 'total sales / revenue / income' questions."""
+        has_sales = bool(
+            re.search(r"\b(?:sale|sales|sails|revenue|income|sold|earning|earnings|lifting|liftings)\b", query)
+        )
+        # Exclude superlative (most/highest sales) — handled by sales_amount_leader
+        has_superlative = bool(re.search(r"\b(?:most|highest|top|max|maximum)\b", query))
+        # Exclude profit questions — profit/loss comes first in routing chain,
+        # but guard here too in case of direct detector calls from tests.
+        has_profit = bool(re.search(r"\b(?:profit|loss|net|margin)\b", query))
+        return has_sales and not has_superlative and not has_profit
+
+    def _asks_purchases_total(self, query: str) -> bool:
+        """Detect 'total purchases / expenses / spending' questions."""
+        has_purchase = bool(
+            re.search(
+                r"\b(?:purchase|purchases|expense|expenses|spent|spend|spending|expenditure|medicine|vaccines?|vaccination|feed cost|labour|labor|equipment)\b",
+                query,
+            )
+        )
+        has_profit = bool(re.search(r"\b(?:profit|loss|net|margin)\b", query))
+        return has_purchase and not has_profit
+
+    def _asks_mortality(self, query: str) -> bool:
+        """Detect mortality / death / birds died questions."""
+        return bool(
+            re.search(
+                r"\b(?:mortality|mortalities|mortallity|death|deaths|dead|died|birds?\s+died|birds?\s+dead|dead\s+birds?)\b",
+                query,
+            )
+        )
+
+    def _asks_daily_time_series(self, query: str) -> bool:
+        """Detect time-series 'which days / when / what dates / on which day' questions
+        about daily metrics (mortality, feed, weight, FCR).  These must NOT be routed
+        to aggregate (SUM/AVG) deterministic plans — they need per-row date results."""
+        has_time_ref = bool(
+            re.search(
+                r"\b(?:which\s+days?|what\s+days?|when|what\s+dates?|on\s+which\s+dates?|on\s+which\s+days?|which\s+dates?|what\s+date|in\s+which\s+days?)\b",
+                query,
+            )
+        )
+        has_daily_metric = bool(
+            re.search(
+                r"\b(?:mortality|mortalities|mortallity|death|deaths|dead|die|died|birds?\s+(?:die|died)|birds?\s+dead|dead\s+birds?|feed|feeed|fcr|feed\s+conversion|weight|weights|bird\s+weight|average\s+weight)\b",
+                query,
+            )
+        )
+        return has_time_ref and has_daily_metric
+
+    def _asks_feed_total(self, query: str) -> bool:
+        """Detect 'total/how much feed consumed' questions."""
+        has_feed = bool(re.search(r"\b(?:feed|feeed)\b", query))
+        has_fcr = bool(re.search(r"\b(?:fcr|conversion|ratio)\b", query))
+        has_performance = bool(
+            re.search(r"\b(?:performance|performing|health|stats|progress)\b", query)
+        )
+        return has_feed and not has_fcr and not has_performance
+
+    def _asks_avg_fcr(self, query: str) -> bool:
+        """Detect FCR / feed conversion ratio questions."""
+        return bool(
+            re.search(r"\b(?:fcr|feed\s+conversion|conversion\s+ratio|feed\s+conversion\s+ratio)\b", query)
+        )
+
+    def _asks_avg_weight(self, query: str) -> bool:
+        """Detect average bird weight questions."""
+        has_weight = bool(re.search(r"\b(?:weight|weights|body\s+weight|bird\s+weight|avg\s+weight|average\s+weight)\b", query))
+        # Performance/health questions take priority over weight.
+        has_performance = bool(
+            re.search(r"\b(?:performance|performing|health|stats|progress|how\s+(?:are|is))\b", query)
+            and re.search(r"\b(?:farm|flock|flocks?|batch|batches?|birds?)\b", query)
+        )
+        return has_weight and not has_performance
+
+    def _asks_current_birds(self, query: str) -> bool:
+        """Detect 'current birds / how many birds alive' questions."""
+        has_birds = bool(
+            re.search(
+                r"\b(?:current\s+(?:birds?|chickens?)|(?:birds?|chickens?)\s+alive|(?:birds?|chickens?)\s+left|(?:birds?|chickens?)\s+remaining|(?:birds?|chickens?)\s+now|how\s+many\s+(?:birds?|chickens?)|bird\s+count|live\s+(?:birds?|chickens?)|alive\s+(?:birds?|chickens?)|(?:birds?|chickens?)\s+do\s+i\s+have)\b",
+                query,
+            )
+        )
+        has_mortality = bool(re.search(r"\b(?:mortality|died|dead|death)\b", query))
+        return has_birds and not has_mortality
 
     def _last_history_metric(self, history: list[dict] | None) -> str:
-        for item in reversed((history or [])[-12:]):
+        for item in reversed((history or [])[-16:]):
             metric = item.get("metric")
             if metric:
                 return str(metric)
@@ -1056,6 +1689,16 @@ class ChikoozaLLMTextToSQLService:
             self._line_int(entity_context, "Resolved flock mention", "flock_id")
             or self._line_int(entity_context, "Last referenced flock from recent chat", "flock_id")
             or self._line_int(entity_context, "Active app flock context", "flock_id")
+        )
+
+    def _context_farm_id(self, entity_context: str) -> int | None:
+        return (
+            self._line_int(entity_context, "Resolved flock mention", "farm_id")
+            or self._line_int(entity_context, "Resolved farm mention", "farm_id")
+            or self._line_int(entity_context, "Last referenced flock from recent chat", "farm_id")
+            or self._line_int(entity_context, "Last referenced farm from recent chat", "farm_id")
+            or self._line_int(entity_context, "Active app flock context", "farm_id")
+            or self._line_int(entity_context, "Active app farm context", "farm_id")
         )
 
     def _line_int(self, text: str, prefix: str, key: str) -> int | None:
@@ -1085,6 +1728,54 @@ class ChikoozaLLMTextToSQLService:
             params=params,
             metric=metric,
             result_type=result_type,
+        )
+
+    def _flock_least_data_plan(self) -> SQLPlan:
+        sql = """
+            SELECT base.flock_id, base.flock_name, base.farm_name, COALESCE(daily.daily_rows, 0) AS daily_rows
+            FROM (
+              SELECT flock_id, flock_name, farm_name
+              FROM ai_farm_flock_data_view
+              WHERE owner_id = %s AND flock_id IS NOT NULL
+              GROUP BY flock_id, flock_name, farm_name
+            ) base
+            LEFT JOIN (
+              SELECT flock_id, COUNT(daily_data_id) AS daily_rows
+              FROM ai_dailydata_data_view
+              WHERE owner_id = %s
+              GROUP BY flock_id
+            ) daily ON daily.flock_id = base.flock_id
+            ORDER BY daily_rows ASC, base.flock_id ASC
+        """
+        return self._plan(
+            sql,
+            [self.user.id, self.user.id],
+            metric="flock_least_data",
+            result_type="table",
+        )
+
+    def _farm_least_data_plan(self) -> SQLPlan:
+        sql = """
+            SELECT base.farm_id, base.farm_name, COALESCE(daily.daily_rows, 0) AS daily_rows
+            FROM (
+              SELECT farm_id, farm_name
+              FROM ai_farm_flock_data_view
+              WHERE owner_id = %s AND farm_id IS NOT NULL
+              GROUP BY farm_id, farm_name
+            ) base
+            LEFT JOIN (
+              SELECT farm_id, COUNT(daily_data_id) AS daily_rows
+              FROM ai_dailydata_data_view
+              WHERE owner_id = %s
+              GROUP BY farm_id
+            ) daily ON daily.farm_id = base.farm_id
+            ORDER BY daily_rows ASC, base.farm_id ASC
+        """
+        return self._plan(
+            sql,
+            [self.user.id, self.user.id],
+            metric="farm_least_data",
+            result_type="table",
         )
 
     def _current_workspace_plan(
@@ -1219,7 +1910,7 @@ class ChikoozaLLMTextToSQLService:
             ) purchases ON purchases.flock_id = base.flock_id
             """,
             [self.user.id, flock_id, self.user.id, flock_id, self.user.id, flock_id],
-            metric="profit_by_flock",
+            metric="profit_for_flock",
             result_type="money",
         )
 
@@ -1383,6 +2074,378 @@ class ChikoozaLLMTextToSQLService:
             ],
             metric="improvement_advice",
             result_type="table",
+        )
+
+    # U: NEW: all the deterministic plan builder methods added below.
+    # U: These guarantee correct SQL for common farmer questions.
+
+    def _all_flocks_performance_plan(self) -> SQLPlan:
+        """Performance summary for all farmer's flocks: feed, mortality, weight, FCR, sales, purchases, profit/loss."""
+        return self._plan(
+            """
+            SELECT base.flock_id, base.flock_name, base.farm_name,
+                   COALESCE(daily.total_feed_consumed, 0) AS total_feed,
+                   COALESCE(daily.total_mortality, 0) AS total_mortality,
+                   COALESCE(daily.average_weight, 0) AS avg_weight,
+                   COALESCE(daily.average_fcr, 0) AS avg_fcr,
+                   COALESCE(sales.total_sales, 0) AS total_sales,
+                   COALESCE(purchases.total_purchases, 0) AS total_purchases,
+                   COALESCE(base.flock_cost, 0) AS flock_cost,
+                   COALESCE(sales.total_sales, 0) - COALESCE(purchases.total_purchases, 0) - COALESCE(base.flock_cost, 0) AS profit_loss,
+                   COALESCE(daily.daily_data_status, 0) AS daily_data_status
+            FROM (
+                SELECT flock_id, flock_name, farm_name, MAX(flock_cost) AS flock_cost
+                FROM ai_farm_flock_data_view
+                WHERE owner_id = %s AND flock_id IS NOT NULL
+                GROUP BY flock_id, flock_name, farm_name
+            ) base
+            LEFT JOIN (
+                SELECT flock_id,
+                       SUM(feed_consumed_kg) AS total_feed_consumed,
+                       SUM(birds_died) AS total_mortality,
+                       AVG(average_bird_weight) AS average_weight,
+                       AVG(fcr) AS average_fcr,
+                       MAX(daily_data_status) AS daily_data_status
+                FROM ai_dailydata_data_view
+                WHERE owner_id = %s AND daily_data_id IS NOT NULL
+                GROUP BY flock_id
+            ) daily ON daily.flock_id = base.flock_id
+            LEFT JOIN (
+                SELECT flock_id, SUM(sale_amount) AS total_sales
+                FROM ai_sale_data_view
+                WHERE owner_id = %s
+                GROUP BY flock_id
+            ) sales ON sales.flock_id = base.flock_id
+            LEFT JOIN (
+                SELECT flock_id, SUM(purchase_amount) AS total_purchases
+                FROM ai_purchase_data_view
+                WHERE owner_id = %s
+                GROUP BY flock_id
+            ) purchases ON purchases.flock_id = base.flock_id
+            ORDER BY base.farm_name, base.flock_name
+            LIMIT 100
+            """,
+            [self.user.id, self.user.id, self.user.id, self.user.id],
+            metric="flock_performance",
+            result_type="table",
+        )
+
+    def _farm_list_plan_llm(self) -> SQLPlan:
+        """List all farms for this farmer."""
+        return self._plan(
+            """
+            SELECT DISTINCT farm_id, farm_name, farm_city, farm_pin,
+                   shed_count, farm_status
+            FROM ai_farm_flock_data_view
+            WHERE owner_id = %s AND farm_id IS NOT NULL
+            ORDER BY farm_name
+            LIMIT 100
+            """,
+            [self.user.id],
+            metric="farm_list",
+            result_type="table",
+        )
+
+    def _single_farm_plan(self, farm_id: int) -> SQLPlan:
+        """Get details for a single farm."""
+        return self._plan(
+            """
+            SELECT farm_id, farm_name, farm_address, farm_city, farm_pin,
+                   shed_count, farm_status
+            FROM ai_farm_flock_data_view
+            WHERE owner_id = %s AND farm_id = %s
+            LIMIT 1
+            """,
+            [self.user.id, farm_id],
+            metric="complete_farm_report",
+            result_type="summary",
+        )
+
+    def _flock_list_plan_llm(self) -> SQLPlan:
+        """List all flocks for this farmer."""
+        return self._plan(
+            """
+            SELECT flock_id, flock_name, farm_name, hatch_date,
+                   flock_size, actual_birds, breed_name, flock_status
+            FROM ai_farm_flock_data_view
+            WHERE owner_id = %s AND flock_id IS NOT NULL
+            GROUP BY flock_id, flock_name, farm_name, hatch_date,
+                     flock_size, actual_birds, breed_name, flock_status
+            ORDER BY farm_name, flock_name
+            LIMIT 100
+            """,
+            [self.user.id],
+            metric="flock_list",
+            result_type="table",
+        )
+
+    def _farm_count_plan(self) -> SQLPlan:
+        """Count of farms for this farmer."""
+        return self._plan(
+            """
+            SELECT COUNT(DISTINCT farm_id) AS farm_count
+            FROM ai_farm_flock_data_view
+            WHERE owner_id = %s AND farm_id IS NOT NULL
+            """,
+            [self.user.id],
+            metric="farm_count",
+            result_type="count",
+        )
+
+    def _flock_count_plan(self) -> SQLPlan:
+        """Count of flocks for this farmer."""
+        return self._plan(
+            """
+            SELECT COUNT(DISTINCT flock_id) AS flock_count
+            FROM ai_farm_flock_data_view
+            WHERE owner_id = %s AND flock_id IS NOT NULL
+            """,
+            [self.user.id],
+            metric="flock_count",
+            result_type="count",
+        )
+
+    def _account_summary_plan(self) -> SQLPlan:
+        """Full account summary: farms, flocks, birds, sales, purchases, feed, mortality, FCR."""
+        return self._plan(
+            """
+            SELECT
+              (SELECT COUNT(DISTINCT farm_id)
+               FROM ai_farm_flock_data_view
+               WHERE owner_id = %s AND farm_id IS NOT NULL) AS farm_count,
+              (SELECT COUNT(DISTINCT flock_id)
+               FROM ai_farm_flock_data_view
+               WHERE owner_id = %s AND flock_id IS NOT NULL) AS flock_count,
+              (SELECT COALESCE(SUM(current_rows.birds_current), 0)
+               FROM ai_dailydata_data_view current_rows
+               WHERE current_rows.owner_id = %s
+                 AND current_rows.daily_data_id IS NOT NULL
+                 AND current_rows.record_date = (
+                     SELECT MAX(compare_rows.record_date)
+                     FROM ai_dailydata_data_view compare_rows
+                     WHERE compare_rows.owner_id = %s
+                       AND compare_rows.flock_id = current_rows.flock_id
+                       AND compare_rows.daily_data_id IS NOT NULL
+                 )) AS current_birds,
+              (SELECT COALESCE(SUM(sale_amount), 0)
+               FROM ai_sale_data_view WHERE owner_id = %s) AS total_sales,
+              (SELECT COALESCE(SUM(purchase_amount), 0)
+               FROM ai_purchase_data_view WHERE owner_id = %s) AS total_purchases,
+              (SELECT COALESCE(SUM(feed_consumed_kg), 0)
+               FROM ai_dailydata_data_view WHERE owner_id = %s) AS total_feed_consumed,
+              (SELECT COALESCE(SUM(birds_died), 0)
+               FROM ai_dailydata_data_view WHERE owner_id = %s) AS total_mortality,
+              (SELECT COALESCE(AVG(fcr), 0)
+               FROM ai_dailydata_data_view
+               WHERE owner_id = %s AND fcr IS NOT NULL) AS average_fcr
+            """,
+            [self.user.id] * 9,
+            metric="farm_record_summary",
+            result_type="summary",
+        )
+
+    def _sales_total_plan(self, flock_id: int | None = None) -> SQLPlan:
+        """Total sales amount — optionally filtered to one flock."""
+        if flock_id:
+            return self._plan(
+                """
+                SELECT flock_id, flock_name, COALESCE(SUM(sale_amount), 0) AS total_sales,
+                       COUNT(sale_id) AS sale_count
+                FROM ai_sale_data_view
+                WHERE owner_id = %s AND flock_id = %s AND sale_id IS NOT NULL
+                GROUP BY flock_id, flock_name
+                """,
+                [self.user.id, flock_id],
+                metric="total_sales",
+                result_type="money",
+            )
+        return self._plan(
+            """
+            SELECT COALESCE(SUM(sale_amount), 0) AS total_sales,
+                   COUNT(sale_id) AS sale_count
+            FROM ai_sale_data_view
+            WHERE owner_id = %s AND sale_id IS NOT NULL
+            """,
+            [self.user.id],
+            metric="total_sales",
+            result_type="money",
+        )
+
+    def _purchases_total_plan(self, flock_id: int | None = None) -> SQLPlan:
+        """Total purchase amount — optionally filtered to one flock."""
+        if flock_id:
+            return self._plan(
+                """
+                SELECT flock_id, flock_name, COALESCE(SUM(purchase_amount), 0) AS total_purchases
+                FROM ai_purchase_data_view
+                WHERE owner_id = %s AND flock_id = %s
+                GROUP BY flock_id, flock_name
+                """,
+                [self.user.id, flock_id],
+                metric="total_purchases",
+                result_type="money",
+            )
+        return self._plan(
+            """
+            SELECT COALESCE(SUM(purchase_amount), 0) AS total_purchases
+            FROM ai_purchase_data_view
+            WHERE owner_id = %s
+            """,
+            [self.user.id],
+            metric="total_purchases",
+            result_type="money",
+        )
+
+    def _mortality_total_plan(self, flock_id: int | None = None) -> SQLPlan:
+        """Total mortality count — optionally filtered to one flock."""
+        if flock_id:
+            return self._plan(
+                """
+                SELECT flock_id, flock_name,
+                       COALESCE(SUM(birds_died), 0) AS total_mortality,
+                       MAX(total_mort) AS cumulative_mortality
+                FROM ai_dailydata_data_view
+                WHERE owner_id = %s AND flock_id = %s AND daily_data_id IS NOT NULL
+                GROUP BY flock_id, flock_name
+                """,
+                [self.user.id, flock_id],
+                metric="mortality",
+                result_type="count",
+            )
+        return self._plan(
+            """
+            SELECT COALESCE(SUM(birds_died), 0) AS total_mortality
+            FROM ai_dailydata_data_view
+            WHERE owner_id = %s AND daily_data_id IS NOT NULL
+            """,
+            [self.user.id],
+            metric="mortality",
+            result_type="count",
+        )
+
+    def _feed_total_plan(self, flock_id: int | None = None) -> SQLPlan:
+        """Total feed consumed — optionally filtered to one flock."""
+        if flock_id:
+            return self._plan(
+                """
+                SELECT flock_id, flock_name,
+                       COALESCE(SUM(feed_consumed_kg), 0) AS total_feed_consumed
+                FROM ai_dailydata_data_view
+                WHERE owner_id = %s AND flock_id = %s AND daily_data_id IS NOT NULL
+                GROUP BY flock_id, flock_name
+                """,
+                [self.user.id, flock_id],
+                metric="feed_consumed",
+                result_type="quantity",
+            )
+        return self._plan(
+            """
+            SELECT COALESCE(SUM(feed_consumed_kg), 0) AS total_feed_consumed
+            FROM ai_dailydata_data_view
+            WHERE owner_id = %s AND daily_data_id IS NOT NULL
+            """,
+            [self.user.id],
+            metric="feed_consumed",
+            result_type="quantity",
+        )
+
+    def _avg_fcr_plan(self, flock_id: int | None = None) -> SQLPlan:
+        """Average FCR — optionally filtered to one flock."""
+        if flock_id:
+            return self._plan(
+                """
+                SELECT flock_id, flock_name,
+                       COALESCE(AVG(fcr), 0) AS average_fcr,
+                       MAX(total_fcr) AS cumulative_fcr
+                FROM ai_dailydata_data_view
+                WHERE owner_id = %s AND flock_id = %s
+                  AND daily_data_id IS NOT NULL AND fcr IS NOT NULL
+                GROUP BY flock_id, flock_name
+                """,
+                [self.user.id, flock_id],
+                metric="average_fcr",
+                result_type="decimal",
+            )
+        return self._plan(
+            """
+            SELECT COALESCE(AVG(fcr), 0) AS average_fcr
+            FROM ai_dailydata_data_view
+            WHERE owner_id = %s AND daily_data_id IS NOT NULL AND fcr IS NOT NULL
+            """,
+            [self.user.id],
+            metric="average_fcr",
+            result_type="decimal",
+        )
+
+    def _avg_weight_plan(self, flock_id: int | None = None) -> SQLPlan:
+        """Average bird weight — optionally filtered to one flock."""
+        if flock_id:
+            return self._plan(
+                """
+                SELECT flock_id, flock_name,
+                       COALESCE(AVG(average_bird_weight), 0) AS average_bird_weight
+                FROM ai_dailydata_data_view
+                WHERE owner_id = %s AND flock_id = %s
+                  AND daily_data_id IS NOT NULL AND average_bird_weight IS NOT NULL
+                GROUP BY flock_id, flock_name
+                """,
+                [self.user.id, flock_id],
+                metric="average_weight",
+                result_type="decimal",
+            )
+        return self._plan(
+            """
+            SELECT COALESCE(AVG(average_bird_weight), 0) AS average_bird_weight
+            FROM ai_dailydata_data_view
+            WHERE owner_id = %s AND daily_data_id IS NOT NULL
+              AND average_bird_weight IS NOT NULL
+            """,
+            [self.user.id],
+            metric="average_weight",
+            result_type="decimal",
+        )
+
+    def _current_birds_plan_llm(self, flock_id: int | None = None) -> SQLPlan:
+        """Current birds count using latest daily record per flock."""
+        if flock_id:
+            return self._plan(
+                """
+                SELECT current_rows.flock_id, current_rows.flock_name,
+                       current_rows.birds_current, current_rows.record_date
+                FROM ai_dailydata_data_view current_rows
+                WHERE current_rows.owner_id = %s
+                  AND current_rows.flock_id = %s
+                  AND current_rows.daily_data_id IS NOT NULL
+                  AND current_rows.record_date = (
+                      SELECT MAX(compare_rows.record_date)
+                      FROM ai_dailydata_data_view compare_rows
+                      WHERE compare_rows.owner_id = %s
+                        AND compare_rows.flock_id = current_rows.flock_id
+                        AND compare_rows.daily_data_id IS NOT NULL
+                  )
+                LIMIT 1
+                """,
+                [self.user.id, flock_id, self.user.id],
+                metric="current_birds",
+                result_type="count",
+            )
+        return self._plan(
+            """
+            SELECT COALESCE(SUM(current_rows.birds_current), 0) AS current_birds
+            FROM ai_dailydata_data_view current_rows
+            WHERE current_rows.owner_id = %s
+              AND current_rows.daily_data_id IS NOT NULL
+              AND current_rows.record_date = (
+                  SELECT MAX(compare_rows.record_date)
+                  FROM ai_dailydata_data_view compare_rows
+                  WHERE compare_rows.owner_id = %s
+                    AND compare_rows.flock_id = current_rows.flock_id
+                    AND compare_rows.daily_data_id IS NOT NULL
+              )
+            """,
+            [self.user.id, self.user.id],
+            metric="current_birds",
+            result_type="count",
         )
 
     def _complete_flock_report_plan(self, flock_id: int) -> SQLPlan:
@@ -1576,7 +2639,7 @@ Result rows:
 If there are more than 25 matching rows, only the first 25 are shown here.
 Write the answer for the farmer.
 If the farmer used a rough phrase like "flock 1" but Entity Context resolved it to a real flock, answer for the resolved flock name/id and do not say the rough phrase has no data.
-If there are multiple rows, keep the text short because the frontend will render the rows in structured cards/tables.
+If the question is a comparison or ranking request, write a detailed text analysis identifying the specific flocks requested. Otherwise, if there are multiple rows and no specific ranking is asked, keep the text short because the frontend will render the rows in structured cards/tables.
 """.strip()
         try:
             result = self.client.chat(
@@ -1610,7 +2673,7 @@ If there are multiple rows, keep the text short because the frontend will render
 
     def _history_messages(self, history: list[dict]) -> list[dict[str, str]]:
         messages = []
-        for item in history[-12:]:
+        for item in history[-16:]:
             role = "assistant" if item.get("role") == "assistant" else "user"
             content = str(item.get("content", "")).strip()
             if content:
@@ -1622,9 +2685,9 @@ If there are multiple rows, keep the text short because the frontend will render
         return {
             "status": "error",
             "message": (
-                "I could not safely run the AI SQL planner for that question. "
-                "Please try again, or ask a more specific farm, flock, sales, purchase, "
-                "daily data, mortality, feed, FCR, or profit question."
+                "I couldn't answer that question using your farm records. "
+                "Please try asking a more specific question about your farms, flocks, "
+                "daily data, sales, purchases, mortality, feed, FCR, or profit."
             ),
             "details": reason,
             "suggestion": (
@@ -1681,6 +2744,23 @@ If there are multiple rows, keep the text short because the frontend will render
                 field_keys=("farm_name", "breed_name"),
             )
 
+        # U: NEW: Flock performance table.
+        if plan.metric == "flock_performance":
+            return self._table_payload(
+                title="Flock performance",
+                rows=safe_rows,
+                preferred_keys=(
+                    "flock_name",
+                    "farm_name",
+                    "total_feed",
+                    "total_mortality",
+                    "avg_weight",
+                    "avg_fcr",
+                    "profit_loss",
+                    "daily_data_status",
+                ),
+            )
+
         if plan.metric in {"daily_data_by_flock", "latest_flock_status"}:
             return self._table_payload(
                 title="Daily data",
@@ -1716,10 +2796,50 @@ If there are multiple rows, keep the text short because the frontend will render
                 ),
             )
 
+        # U: NEW: Summary/scalar metrics — show as a simple summary card.
+        if plan.metric in {
+            "farm_record_summary", "total_sales", "total_purchases",
+            "mortality", "feed_consumed", "average_fcr", "average_weight",
+            "current_birds", "farm_count", "flock_count",
+        }:
+            if len(safe_rows) == 1:
+                return self._summary_card_payload(plan.metric, safe_rows[0])
+            # Multi-row (flock-filtered) — use a table.
+            return self._table_payload(title="Records", rows=safe_rows)
+
         if len(safe_rows) > 1 or plan.result_type == "table":
             return self._table_payload(title="Records", rows=safe_rows)
 
         return None
+
+    def _summary_card_payload(self, metric: str, row: dict) -> dict:
+        """Build a simple key-value summary card for scalar metrics."""
+        title_map = {
+            "farm_record_summary": "Account summary",
+            "total_sales": "Total sales",
+            "total_purchases": "Total purchases",
+            "mortality": "Mortality",
+            "feed_consumed": "Feed consumed",
+            "average_fcr": "Average FCR",
+            "average_weight": "Average weight",
+            "current_birds": "Current birds",
+            "farm_count": "Farm count",
+            "flock_count": "Flock count",
+        }
+        title = title_map.get(metric, "Summary")
+        card_rows = [
+            {
+                "label": self._display_label(key),
+                "value": self._format_display_value(key, value),
+            }
+            for key, value in row.items()
+            if key not in {
+                "owner_id", "farm_id", "flock_id", "sale_id",
+                "purchase_id", "daily_data_id",
+            }
+            and value not in (None, "")
+        ]
+        return {"type": "cards", "title": title, "cards": [{"title": title, "rows": card_rows}]}
 
     def _cards_payload(
         self,
@@ -1798,6 +2918,7 @@ If there are multiple rows, keep the text short because the frontend will render
             "shed_count": "Sheds",
             "farm_status": "Status",
             "flock_count": "Flocks",
+            "farm_count": "Farms",
             "flock_name": "Flock",
             "hatch_date": "Hatch date",
             "flock_size": "Starting birds",
@@ -1812,16 +2933,25 @@ If there are multiple rows, keep the text short because the frontend will render
             "data_note": "Data note",
             "data_ready": "Complete cost data",
             "sale_count": "Sale count",
-            "flock_count": "Flocks",
             "latest_daily_date": "Latest daily date",
             "record_date": "Date",
             "birds_died": "Mortality",
             "total_mort": "Total mortality",
+            "total_mortality": "Total mortality",
             "birds_current": "Current birds",
             "feed_consumed_kg": "Feed",
+            "total_feed_consumed": "Total feed",
+            "total_feed": "Feed",
             "average_bird_weight": "Avg. weight",
+            "avg_weight": "Avg. weight",
             "fcr": "FCR",
+            "avg_fcr": "FCR",
+            "average_fcr": "Avg. FCR",
+            "cumulative_fcr": "Cumulative FCR",
+            "cumulative_mortality": "Cumulative mortality",
+            "daily_data_status": "Daily Data Status",
             "remarks": "Remarks",
+            "flock_status": "Flock status",
         }
         return labels.get(key, key.replace("_", " ").title())
 
@@ -1832,7 +2962,10 @@ If there are multiple rows, keep the text short because the frontend will render
             value = float(value)
         if isinstance(value, (date, datetime)):
             return value.isoformat()
-        if key in {"flock_cost", "total_sales", "total_purchases", "profit_loss", "result", "sale_amount", "purchase_amount"}:
+        if key in {
+            "flock_cost", "total_sales", "total_purchases", "profit_loss",
+            "result", "sale_amount", "purchase_amount",
+        }:
             try:
                 return f"Rs. {float(value):,.2f}"
             except (TypeError, ValueError):
@@ -1842,9 +2975,15 @@ If there are multiple rows, keep the text short because the frontend will render
                 return f"{float(value):,.2f} kg"
             except (TypeError, ValueError):
                 return str(value)
-        if key in {"average_bird_weight"}:
+        if key in {"average_bird_weight", "avg_weight"}:
             try:
                 return f"{float(value):,.2f} gm"
+            except (TypeError, ValueError):
+                return str(value)
+        if key in {"fcr", "avg_fcr", "average_fcr", "cumulative_fcr"}:
+            try:
+                v = float(value)
+                return f"{v:,.2f}" if v != 0 else "Not available"
             except (TypeError, ValueError):
                 return str(value)
         if isinstance(value, float):
@@ -1899,6 +3038,12 @@ If there are multiple rows, keep the text short because the frontend will render
             return "You're welcome. Ask me whenever you need farm records."
         if re.match(r"^(ok|okay)[!. ]*$", query):
             return "Okay. Ask your next farm question whenever you want."
+        # U: NEW: catch "okay next" / "okay now" / "okay then" prefixes that are
+        # U: just transition phrases — NOT standalone conversational messages.
+        # U: They should not produce a conversation-only answer; the rest of the
+        # U: question text is the actual query and will be handled by SQL planner.
+        if re.match(r"^(ok|okay)(?:\s+(?:next|now|then|so|well|fine))+[!., ]*$", query):
+            return "Okay. Ask your next farm question whenever you want."
         if re.match(r"^(nothing more|no more|that's all|thats all|all good|done|stop|enough)[!. ]*$", query):
             return "Okay, I will stop here. Ask me whenever you need farm records."
         if re.match(r"^(huh|what do you mean|what meaning|what)[?!. ]*$", query):
@@ -1906,11 +3051,16 @@ If there are multiple rows, keep the text short because the frontend will render
                 "I can answer questions from your saved farm records: farms, flocks, "
                 "sales, purchases, daily data, mortality, feed, weight, FCR, and profit."
             )
+        if re.match(r"^(hello|hi|hey|namaste)[!. ]*$", query):
+            return (
+                "Hello. Ask me about your farms, flocks, sales, purchases, daily data, "
+                "mortality, feed, weight, FCR, or profit."
+            )
         return ""
 
     def _json_safe_rows(self, rows: list[dict]) -> list[dict]:
         return [
-            {key: self._json_safe_value(value) for key, value in row.items()}
+            {key: self._json_safe_value(value) for key, value in row.items() if not key.endswith("_id")}
             for row in rows
         ]
 
