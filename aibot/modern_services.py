@@ -68,6 +68,7 @@ COMMON_QUERY_TYPO_REPLACEMENTS = (
     (r"\bmortilty\b", "mortality"),
     (r"\bmortaltiy\b", "mortality"),
     (r"\bbuggest\b", "biggest"),
+    (r"\bperfoming\b", "performing"),
     (r"\bimporve\b", "improve"),
 )
 

@@ -227,6 +227,9 @@ For multi-row results, use one short intro and structured rows/bullets. Do not w
 If the metric is current_workspace, answer only the current/selected farm and flock names. Do not switch to another flock and do not add unrelated details.
 If the metric is most_profitable_flock, name the flock and farm first, then show net profit = sales - purchases - flock cost. If the result is negative, say no flock is profitable yet and this is the least-loss flock among records that have both sales and cost data. If data_note is present, mention that the ranking may be incomplete because cost/purchase/sales records are missing.
 If the metric is biggest_loss_flock, name the flock and farm first, then show net loss (the absolute/positive value of the negative result, e.g., 'net loss of Rs. 15,330' instead of a negative number or 'profit loss').
+If the metric is best_performing_flock, use the row's result as net result. If result is negative, say this is the least-loss flock among complete financial records, not a profitable flock. Never invent higher sales or profit than the rows show.
+If the metric is worst_performing_flock, use the row with the smallest result as the worst performer. Explain net loss, sales, purchases, flock cost, mortality, feed, FCR, and missing-data notes only from the rows.
+If the metric starts with daily_metric_extreme_, answer only from the provided rows. Mention the exact record_date, flock_name, point_type (highest/lowest), metric_value, and units. Do not invent dates that are not in the rows.
 If the metric is sales_count_leader or sales_amount_leader, name the flock and farm first, then mention sale count or total sales.
 If the metric is most_used_breed, state the top breed and how many flocks use it.
 If the metric is flock_breeds_by_flock, list each flock with its farm and breed. Do not collapse the answer to only unique breed names.
@@ -882,7 +885,11 @@ class ChikoozaLLMTextToSQLService:
                     except (TypeError, ValueError):
                         pass
         display = self._display_payload(plan, rows)
-        if display and self._is_comparative_query(question):
+        if (
+            display
+            and self._is_comparative_query(question)
+            and not plan.metric.startswith("daily_metric_extreme_")
+        ):
             display = None
         return {
             "status": "success",
@@ -933,6 +940,40 @@ class ChikoozaLLMTextToSQLService:
                 return generic_plan
 
         context_flock_id = self._context_flock_id(entity_context)
+
+        # --- Priority 0.5: Daily metric extremes / follow-up date questions ---
+        # U: "when is feed highest", "mortality lowest", "FCR lowest and highest"
+        # U: must use daily rows for the current/resolved flock. Do not let broad
+        # U: "highest/lowest" scope logic turn these into account aggregates.
+        daily_metric_column = self._daily_time_series_metric(query)
+        if self._asks_daily_time_series(query) and daily_metric_column:
+            return self._daily_metric_extremes_plan(
+                metric_column=daily_metric_column,
+                direction=self._daily_extreme_direction(query),
+                flock_id=(
+                    None
+                    if self._asks_all_daily_scope(query)
+                    else context_flock_id
+                ),
+            )
+
+        # --- Priority 0.6: Best/worst performing flock rankings ---
+        # U: These are financial/performance rankings and must not be answered by
+        # U: a generic "flock performance" table, because the LLM has previously
+        # U: hallucinated profit values from that table.
+        performance_extreme = self._performance_extreme_kind(query)
+        if performance_extreme == "best":
+            return self._flock_performance_ranking_plan(
+                metric="best_performing_flock",
+                order_direction="DESC",
+                limit=1,
+            )
+        if performance_extreme == "worst":
+            return self._flock_performance_ranking_plan(
+                metric="worst_performing_flock",
+                order_direction="ASC",
+                limit=1,
+            )
 
         # --- Priority 1: Advice / diagnostic (must beat performance) ---
         if self._asks_improvement_advice(query):
@@ -1050,14 +1091,12 @@ class ChikoozaLLMTextToSQLService:
             )
 
         # --- Priority 10: Simple aggregate metrics ---
-        # U: Time-series / which-days questions (e.g. "lowest mortality is in which days?",
-        # U: "on which date was FCR highest?") must NOT be routed to aggregate plans
-        # U: because those plans collapse every row into a single number (SUM/AVG).
-        # U: Instead, fall through to the LLM which uses Rule 24 + Pattern 11 to
-        # U: SELECT individual record_date rows ordered by the metric.
+        # U: Time-series / which-days questions are handled above by
+        # U: _daily_metric_extremes_plan. Keep this flag only to prevent any
+        # U: remaining aggregate fall-through for unsupported phrasing.
         is_time_series = self._asks_daily_time_series(query)
 
-        if self._asks_current_birds(query):
+        if self._asks_current_birds(query) and not is_time_series:
             return self._current_birds_plan_llm(flock_id=context_flock_id if not self._asks_all_scope(query, history) else None)
 
         if self._asks_sales_total(query):
@@ -1463,6 +1502,29 @@ class ChikoozaLLMTextToSQLService:
         )
         return has_performance and has_farm_entity and not has_advice
 
+    def _performance_extreme_kind(self, query: str) -> str | None:
+        has_flock = bool(re.search(r"\b(?:flock|flocks|batch|batches)\b", query))
+        has_performance = bool(
+            re.search(
+                r"\b(?:performance|performing|performer|performers|doing|progress|progressing|health|healthy|status|stats|statistics)\b",
+                query,
+            )
+        )
+        if not has_flock or not has_performance:
+            return None
+        # U: Multi-part comparison questions need the full performance table so
+        # U: the user can see best/worst/middle together. Single best/worst
+        # U: questions use the exact SQL ranking plan below.
+        has_best = bool(re.search(r"\b(?:best|top|highest|most)\b", query))
+        has_worst = bool(re.search(r"\b(?:worst|poorest|lowest|least|bottom|bad|weakest)\b", query))
+        if (has_best and has_worst) or re.search(r"\b(?:middle|mid|zone|compare|comparison|ranking)\b", query):
+            return None
+        if re.search(r"\b(?:worst|poorest|lowest|least|bottom|bad|weakest)\b", query):
+            return "worst"
+        if re.search(r"\b(?:best|top|highest|most)\b", query):
+            return "best"
+        return None
+
     def _asks_account_summary(self, query: str) -> bool:
         """Detect broad account summary questions."""
         # Do not capture if the question is specifically about daily data
@@ -1613,21 +1675,53 @@ class ChikoozaLLMTextToSQLService:
 
     def _asks_daily_time_series(self, query: str) -> bool:
         """Detect time-series 'which days / when / what dates / on which day' questions
-        about daily metrics (mortality, feed, weight, FCR).  These must NOT be routed
+        about daily metrics (mortality, feed, weight, FCR). These must NOT be routed
         to aggregate (SUM/AVG) deterministic plans — they need per-row date results."""
         has_time_ref = bool(
             re.search(
-                r"\b(?:which\s+days?|what\s+days?|when|what\s+dates?|on\s+which\s+dates?|on\s+which\s+days?|which\s+dates?|what\s+date|in\s+which\s+days?)\b",
+                r"\b(?:which\s+days?|what\s+days?|days?\s+with|dates?\s+with|when|what\s+dates?|on\s+which\s+dates?|on\s+which\s+days?|which\s+dates?|what\s+date|in\s+which\s+days?)\b",
                 query,
             )
+            or bool(re.search(r"\b(?:lowest|highest|minimum|maximum|min|max)\b", query))
         )
         has_daily_metric = bool(
             re.search(
-                r"\b(?:mortality|mortalities|mortallity|death|deaths|dead|die|died|birds?\s+(?:die|died)|birds?\s+dead|dead\s+birds?|feed|feeed|fcr|feed\s+conversion|weight|weights|bird\s+weight|average\s+weight)\b",
+                r"\b(?:mortality|mortalities|mortallity|death|deaths|dead|die|died|birds?\s+(?:die|died)|birds?\s+dead|dead\s+birds?|feed|feeed|fcr|feed\s+conversion|weight|weights|bird\s+weight|average\s+weight|avg\s+weight|current\s+birds?|birds?\s+(?:left|remaining|alive|current|now)|bird\s+count)\b",
                 query,
             )
         )
         return has_time_ref and has_daily_metric
+
+    def _daily_time_series_metric(self, query: str) -> str | None:
+        # U: Order matters: FCR contains the word "feed" conceptually, so detect it first.
+        if re.search(r"\b(?:fcr|feed\s+conversion|conversion\s+ratio|feed\s+conversion\s+ratio)\b", query):
+            return "fcr"
+        if re.search(r"\b(?:avg\s+weight|average\s+weight|bird\s+weight|body\s+weight|weight|weights)\b", query):
+            return "average_bird_weight"
+        if re.search(r"\b(?:current\s+birds?|birds?\s+(?:left|remaining|alive|current|now)|bird\s+count)\b", query):
+            return "birds_current"
+        if re.search(r"\b(?:feed|feeed|feed\s+consumed|feed\s+intake)\b", query):
+            return "feed_consumed_kg"
+        if re.search(r"\b(?:mortality|mortalities|mortallity|death|deaths|dead|die|died|birds?\s+(?:die|died)|birds?\s+dead|dead\s+birds?)\b", query):
+            return "birds_died"
+        return None
+
+    def _daily_extreme_direction(self, query: str) -> str:
+        has_low = bool(re.search(r"\b(?:lowest|least|minimum|min|smallest|low|best)\b", query))
+        has_high = bool(re.search(r"\b(?:highest|maximum|max|most|biggest|largest|high|worst)\b", query))
+        if has_low and has_high:
+            return "both"
+        if has_low:
+            return "lowest"
+        return "highest" if has_high else "highest"
+
+    def _asks_all_daily_scope(self, query: str) -> bool:
+        return bool(
+            re.search(
+                r"\b(?:all|every|each|overall|account|all\s+farms|all\s+flocks|all\s+batches)\b",
+                query,
+            )
+        )
 
     def _asks_feed_total(self, query: str) -> bool:
         """Detect 'total/how much feed consumed' questions."""
@@ -1980,6 +2074,206 @@ class ChikoozaLLMTextToSQLService:
             [self.user.id, self.user.id, self.user.id],
             metric=metric,
             result_type="table" if limit > 1 else "money",
+        )
+
+    def _flock_performance_ranking_plan(
+        self,
+        *,
+        metric: str,
+        order_direction: str,
+        limit: int,
+    ) -> SQLPlan:
+        direction = "ASC" if order_direction.upper() == "ASC" else "DESC"
+        return self._plan(
+            f"""
+            SELECT ranked.flock_id, ranked.flock_name, ranked.farm_name,
+                   ranked.total_sales, ranked.total_purchases,
+                   ranked.flock_cost, ranked.result, ranked.data_ready,
+                   ranked.data_note, ranked.total_mortality,
+                   ranked.total_feed_consumed, ranked.average_fcr,
+                   ranked.average_weight, ranked.current_birds,
+                   ranked.latest_daily_date
+            FROM (
+                SELECT base.flock_id, base.flock_name, base.farm_name,
+                       COALESCE(sales.total_sales, 0) AS total_sales,
+                       COALESCE(purchases.total_purchases, 0) AS total_purchases,
+                       COALESCE(base.flock_cost, 0) AS flock_cost,
+                       COALESCE(sales.total_sales, 0) - COALESCE(purchases.total_purchases, 0) - COALESCE(base.flock_cost, 0) AS result,
+                       CASE
+                           WHEN COALESCE(sales.total_sales, 0) > 0
+                                AND (COALESCE(purchases.total_purchases, 0) > 0 OR COALESCE(base.flock_cost, 0) > 0)
+                           THEN 1
+                           ELSE 0
+                       END AS data_ready,
+                       CASE
+                           WHEN COALESCE(sales.total_sales, 0) = 0
+                           THEN 'Sales records are zero or missing, so this ranking may be incomplete.'
+                           WHEN COALESCE(purchases.total_purchases, 0) = 0 AND COALESCE(base.flock_cost, 0) = 0
+                           THEN 'Purchase and flock-cost records are zero or missing, so this ranking may be incomplete.'
+                           ELSE ''
+                       END AS data_note,
+                       COALESCE(daily.total_mortality, 0) AS total_mortality,
+                       COALESCE(daily.total_feed_consumed, 0) AS total_feed_consumed,
+                       COALESCE(daily.average_fcr, 0) AS average_fcr,
+                       COALESCE(daily.average_weight, 0) AS average_weight,
+                       COALESCE(latest.birds_current, 0) AS current_birds,
+                       COALESCE(latest.record_date, '') AS latest_daily_date
+                FROM (
+                    SELECT flock_id, flock_name, farm_name, MAX(flock_cost) AS flock_cost
+                    FROM ai_farm_flock_data_view
+                    WHERE owner_id = %s AND flock_id IS NOT NULL
+                    GROUP BY flock_id, flock_name, farm_name
+                ) base
+                LEFT JOIN (
+                    SELECT flock_id, SUM(sale_amount) AS total_sales
+                    FROM ai_sale_data_view
+                    WHERE owner_id = %s
+                    GROUP BY flock_id
+                ) sales ON sales.flock_id = base.flock_id
+                LEFT JOIN (
+                    SELECT flock_id, SUM(purchase_amount) AS total_purchases
+                    FROM ai_purchase_data_view
+                    WHERE owner_id = %s
+                    GROUP BY flock_id
+                ) purchases ON purchases.flock_id = base.flock_id
+                LEFT JOIN (
+                    SELECT flock_id,
+                           SUM(birds_died) AS total_mortality,
+                           SUM(feed_consumed_kg) AS total_feed_consumed,
+                           AVG(fcr) AS average_fcr,
+                           AVG(average_bird_weight) AS average_weight
+                    FROM ai_dailydata_data_view
+                    WHERE owner_id = %s AND daily_data_id IS NOT NULL
+                    GROUP BY flock_id
+                ) daily ON daily.flock_id = base.flock_id
+                LEFT JOIN (
+                    SELECT current_rows.flock_id, current_rows.record_date,
+                           current_rows.birds_current
+                    FROM ai_dailydata_data_view current_rows
+                    WHERE current_rows.owner_id = %s
+                      AND current_rows.daily_data_id IS NOT NULL
+                      AND current_rows.record_date = (
+                          SELECT MAX(compare_rows.record_date)
+                          FROM ai_dailydata_data_view compare_rows
+                          WHERE compare_rows.owner_id = %s
+                            AND compare_rows.flock_id = current_rows.flock_id
+                            AND compare_rows.daily_data_id IS NOT NULL
+                      )
+                ) latest ON latest.flock_id = base.flock_id
+            ) ranked
+            ORDER BY ranked.data_ready DESC, ranked.result {direction},
+                     ranked.total_mortality DESC, ranked.average_fcr DESC,
+                     ranked.flock_name
+            LIMIT {int(limit)}
+            """,
+            [
+                self.user.id,
+                self.user.id,
+                self.user.id,
+                self.user.id,
+                self.user.id,
+                self.user.id,
+            ],
+            metric=metric,
+            result_type="summary" if limit == 1 else "table",
+        )
+
+    def _daily_metric_extremes_plan(
+        self,
+        *,
+        metric_column: str,
+        direction: str,
+        flock_id: int | None = None,
+    ) -> SQLPlan:
+        allowed_columns = {
+            "birds_died": "mortality",
+            "feed_consumed_kg": "feed consumed",
+            "fcr": "FCR",
+            "average_bird_weight": "average bird weight",
+            "birds_current": "current birds",
+        }
+        if metric_column not in allowed_columns:
+            metric_column = "birds_died"
+        clean_direction = direction if direction in {"lowest", "highest", "both"} else "highest"
+        scope_sql = "AND flock_id = %s" if flock_id else ""
+        main_params = [self.user.id] + ([flock_id] if flock_id else [])
+        sub_params = [self.user.id] + ([flock_id] if flock_id else [])
+        if clean_direction == "both":
+            sql = f"""
+                SELECT record_date, flock_id, flock_name, farm_name,
+                       CASE
+                           WHEN {metric_column} = (
+                               SELECT MIN(extreme_low.{metric_column})
+                               FROM ai_dailydata_data_view extreme_low
+                               WHERE extreme_low.owner_id = %s {scope_sql.replace('flock_id', 'extreme_low.flock_id')}
+                                 AND extreme_low.daily_data_id IS NOT NULL
+                                 AND extreme_low.{metric_column} IS NOT NULL
+                           ) THEN 'lowest'
+                           WHEN {metric_column} = (
+                               SELECT MAX(extreme_high.{metric_column})
+                               FROM ai_dailydata_data_view extreme_high
+                               WHERE extreme_high.owner_id = %s {scope_sql.replace('flock_id', 'extreme_high.flock_id')}
+                                 AND extreme_high.daily_data_id IS NOT NULL
+                                 AND extreme_high.{metric_column} IS NOT NULL
+                           ) THEN 'highest'
+                           ELSE ''
+                       END AS point_type,
+                       {metric_column} AS metric_value,
+                       birds_died, total_mort, birds_current,
+                       feed_consumed_kg, average_bird_weight, fcr
+                FROM ai_dailydata_data_view
+                WHERE owner_id = %s {scope_sql}
+                  AND daily_data_id IS NOT NULL
+                  AND {metric_column} IS NOT NULL
+                  AND (
+                      {metric_column} = (
+                          SELECT MIN(extreme_low_where.{metric_column})
+                          FROM ai_dailydata_data_view extreme_low_where
+                          WHERE extreme_low_where.owner_id = %s {scope_sql.replace('flock_id', 'extreme_low_where.flock_id')}
+                            AND extreme_low_where.daily_data_id IS NOT NULL
+                            AND extreme_low_where.{metric_column} IS NOT NULL
+                      )
+                      OR {metric_column} = (
+                          SELECT MAX(extreme_high_where.{metric_column})
+                          FROM ai_dailydata_data_view extreme_high_where
+                          WHERE extreme_high_where.owner_id = %s {scope_sql.replace('flock_id', 'extreme_high_where.flock_id')}
+                            AND extreme_high_where.daily_data_id IS NOT NULL
+                            AND extreme_high_where.{metric_column} IS NOT NULL
+                      )
+                  )
+                ORDER BY {metric_column} ASC, record_date ASC
+                LIMIT 20
+            """
+            params = [*sub_params, *sub_params, *main_params, *sub_params, *sub_params]
+        else:
+            aggregate = "MIN" if clean_direction == "lowest" else "MAX"
+            order = "ASC" if clean_direction == "lowest" else "DESC"
+            sql = f"""
+                SELECT record_date, flock_id, flock_name, farm_name,
+                       '{clean_direction}' AS point_type,
+                       {metric_column} AS metric_value,
+                       birds_died, total_mort, birds_current,
+                       feed_consumed_kg, average_bird_weight, fcr
+                FROM ai_dailydata_data_view
+                WHERE owner_id = %s {scope_sql}
+                  AND daily_data_id IS NOT NULL
+                  AND {metric_column} IS NOT NULL
+                  AND {metric_column} = (
+                      SELECT {aggregate}(extreme_rows.{metric_column})
+                      FROM ai_dailydata_data_view extreme_rows
+                      WHERE extreme_rows.owner_id = %s {scope_sql.replace('flock_id', 'extreme_rows.flock_id')}
+                        AND extreme_rows.daily_data_id IS NOT NULL
+                        AND extreme_rows.{metric_column} IS NOT NULL
+                  )
+                ORDER BY {metric_column} {order}, record_date ASC
+                LIMIT 20
+            """
+            params = [*main_params, *sub_params]
+        return self._plan(
+            sql,
+            params,
+            metric=f"daily_metric_extreme_{metric_column}_{clean_direction}",
+            result_type="table",
         )
 
     def _sales_leader_plan(self, *, metric: str, by: str) -> SQLPlan:
@@ -2778,6 +3072,23 @@ If the question is a comparison or ranking request, write a detailed text analys
                 ),
             )
 
+        if plan.metric.startswith("daily_metric_extreme_"):
+            return self._table_payload(
+                title="Daily metric dates",
+                rows=safe_rows,
+                preferred_keys=(
+                    "point_type",
+                    "record_date",
+                    "flock_name",
+                    "metric_value",
+                    "birds_died",
+                    "birds_current",
+                    "feed_consumed_kg",
+                    "average_bird_weight",
+                    "fcr",
+                ),
+            )
+
         if plan.metric == "improvement_advice":
             return None
 
@@ -2935,6 +3246,8 @@ If the question is a comparison or ranking request, write a detailed text analys
             "sale_count": "Sale count",
             "latest_daily_date": "Latest daily date",
             "record_date": "Date",
+            "point_type": "Point",
+            "metric_value": "Value",
             "birds_died": "Mortality",
             "total_mort": "Total mortality",
             "total_mortality": "Total mortality",

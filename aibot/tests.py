@@ -1593,6 +1593,194 @@ class ChikoozaLLMSQLServiceTests(SimpleTestCase):
         self.assertEqual(seen_metrics, ["most_profitable_flock", "biggest_loss_flock"])
 
 
+    def test_llm_service_safe_plan_handles_best_and_worst_performing_flock(self):
+        client = FakeGroqClient(
+            [
+                "No flock is profitable yet. Complete is the least-loss complete flock.",
+                "Alpha Batch is the worst performer with a net loss of Rs. 59,196.",
+            ]
+        )
+        service = ChikoozaLLMTextToSQLService(
+            user=self.user,
+            groq_client=client,
+            entity_resolver=FakeEntityResolver(),
+        )
+        seen_metrics = []
+
+        def execute(plan):
+            seen_metrics.append(plan.metric)
+            self.assertIn("ranked.data_ready DESC", plan.sql)
+            self.assertIn("COALESCE(sales.total_sales, 0) - COALESCE(purchases.total_purchases, 0) - COALESCE(base.flock_cost, 0) AS result", plan.sql)
+            if plan.metric == "best_performing_flock":
+                self.assertIn("ranked.result DESC", plan.sql)
+                return [
+                    {
+                        "flock_name": "Complete",
+                        "farm_name": "Complete Farm",
+                        "total_sales": 507870.04,
+                        "total_purchases": 439200,
+                        "flock_cost": 84000,
+                        "result": -15329.96,
+                        "data_ready": 1,
+                        "total_mortality": 49,
+                        "total_feed_consumed": 6563,
+                        "average_fcr": 1.61,
+                    }
+                ]
+            self.assertEqual(plan.metric, "worst_performing_flock")
+            self.assertIn("ranked.result ASC", plan.sql)
+            return [
+                {
+                    "flock_name": "Alpha Batch",
+                    "farm_name": "Red Farm",
+                    "total_sales": 7560,
+                    "total_purchases": 43006,
+                    "flock_cost": 23750,
+                    "result": -59196,
+                    "data_ready": 1,
+                    "total_mortality": 3,
+                    "total_feed_consumed": 127,
+                    "average_fcr": 0.96,
+                }
+            ]
+
+        service.executor = SimpleNamespace(execute=execute)
+
+        best = service.answer("best performing flock")
+        worst = service.answer("show the worst perfoming flock")
+
+        self.assertEqual(best["metric"], "best_performing_flock")
+        self.assertEqual(worst["metric"], "worst_performing_flock")
+        self.assertEqual(seen_metrics, ["best_performing_flock", "worst_performing_flock"])
+        self.assertEqual(len(client.requests), 2)
+
+    def test_llm_service_safe_plan_handles_daily_metric_extreme_followups(self):
+        client = FakeGroqClient(
+            [
+                "Feed was highest on 2026-05-21 at 302 kg for Alpha Batch.",
+                "Mortality was lowest on 2026-05-24 and 2026-05-25 at 0 birds.",
+                "FCR lowest and highest dates are listed.",
+                "Current birds lowest and highest dates are listed.",
+            ]
+        )
+        service = ChikoozaLLMTextToSQLService(
+            user=self.user,
+            groq_client=client,
+            entity_resolver=FakeEntityResolver(
+                EntityResolution(
+                    context=(
+                        "Last referenced flock from recent chat: flock_id=77, "
+                        "flock_public_id=5001, flock_name=Alpha Batch, farm_id=42, farm_name=Red Farm."
+                    )
+                )
+            ),
+        )
+        seen_metrics = []
+
+        def execute(plan):
+            seen_metrics.append(plan.metric)
+            self.assertIn("ai_dailydata_data_view", plan.sql)
+            self.assertIn("flock_id = %s", plan.sql)
+            self.assertIn(77, plan.params)
+            if plan.metric == "daily_metric_extreme_feed_consumed_kg_highest":
+                self.assertIn("MAX(extreme_rows.feed_consumed_kg)", plan.sql)
+                return [
+                    {
+                        "record_date": "2026-05-21",
+                        "flock_id": 77,
+                        "flock_name": "Alpha Batch",
+                        "point_type": "highest",
+                        "metric_value": 302,
+                        "feed_consumed_kg": 302,
+                    }
+                ]
+            if plan.metric == "daily_metric_extreme_birds_died_lowest":
+                self.assertIn("MIN(extreme_rows.birds_died)", plan.sql)
+                return [
+                    {
+                        "record_date": "2026-05-24",
+                        "flock_id": 77,
+                        "flock_name": "Alpha Batch",
+                        "point_type": "lowest",
+                        "metric_value": 0,
+                        "birds_died": 0,
+                    }
+                ]
+            if plan.metric == "daily_metric_extreme_fcr_both":
+                self.assertIn("MIN(extreme_low.fcr)", plan.sql)
+                self.assertIn("MAX(extreme_high.fcr)", plan.sql)
+                return [
+                    {
+                        "record_date": "2026-04-26",
+                        "flock_id": 77,
+                        "flock_name": "Alpha Batch",
+                        "point_type": "lowest",
+                        "metric_value": 1.07,
+                        "fcr": 1.07,
+                    },
+                    {
+                        "record_date": "2026-05-25",
+                        "flock_id": 77,
+                        "flock_name": "Alpha Batch",
+                        "point_type": "highest",
+                        "metric_value": 1.61,
+                        "fcr": 1.61,
+                    },
+                ]
+            self.assertEqual(plan.metric, "daily_metric_extreme_birds_current_both")
+            self.assertIn("MIN(extreme_low.birds_current)", plan.sql)
+            self.assertIn("MAX(extreme_high.birds_current)", plan.sql)
+            return [
+                {
+                    "record_date": "2026-05-25",
+                    "flock_id": 77,
+                    "flock_name": "Alpha Batch",
+                    "point_type": "lowest",
+                    "metric_value": 0,
+                    "birds_current": 0,
+                },
+                {
+                    "record_date": "2026-04-26",
+                    "flock_id": 77,
+                    "flock_name": "Alpha Batch",
+                    "point_type": "highest",
+                    "metric_value": 1962,
+                    "birds_current": 1962,
+                },
+            ]
+
+        service.executor = SimpleNamespace(execute=execute)
+        history = [
+            {"role": "user", "content": "Daily data for current flock"},
+            {
+                "role": "assistant",
+                "content": "Daily data for Alpha Batch.",
+                "metric": "daily_data_by_flock",
+                "resolved_flock_id": 77,
+            },
+        ]
+
+        feed = service.answer("so when is the feed highest", history=history)
+        mortality = service.answer("when is the Mortality lowest", history=history)
+        fcr = service.answer("when is fcr lowest and highest", history=history)
+        birds = service.answer("when our the current birds lowest and highest", history=history)
+
+        self.assertEqual(feed["metric"], "daily_metric_extreme_feed_consumed_kg_highest")
+        self.assertEqual(mortality["metric"], "daily_metric_extreme_birds_died_lowest")
+        self.assertEqual(fcr["metric"], "daily_metric_extreme_fcr_both")
+        self.assertEqual(birds["metric"], "daily_metric_extreme_birds_current_both")
+        self.assertEqual(
+            seen_metrics,
+            [
+                "daily_metric_extreme_feed_consumed_kg_highest",
+                "daily_metric_extreme_birds_died_lowest",
+                "daily_metric_extreme_fcr_both",
+                "daily_metric_extreme_birds_current_both",
+            ],
+        )
+        self.assertEqual(len(client.requests), 4)
+        self.assertEqual(feed["display"]["title"], "Daily metric dates")
+
     def test_llm_service_safe_plan_handles_breed_sales_and_improvement_queries(self):
         client = FakeGroqClient(
             [
@@ -10118,39 +10306,47 @@ class DailyTimeSeriesDetectorTests(SimpleTestCase):
         self.assertFalse(self._make_svc()._asks_daily_time_series(
             self._norm("show daily data for current flock")))
 
-    # --- Routing: time-series queries must return None from _known_safe_plan ---
+    # --- Routing: daily time-series queries use exact safe SQL plans ---
 
-    def test_mortality_time_series_returns_none(self):
+    def test_mortality_time_series_uses_daily_extreme_plan(self):
         svc = self._make_svc()
         plan = svc._known_safe_plan(
             "lowest mortality is in which days?",
             history=None, entity_context="",
         )
-        self.assertIsNone(plan)
+        self.assertIsNotNone(plan)
+        self.assertEqual(plan.metric, "daily_metric_extreme_birds_died_lowest")
+        self.assertIn("MIN(extreme_rows.birds_died)", plan.sql)
 
-    def test_fcr_time_series_returns_none(self):
+    def test_fcr_time_series_uses_daily_extreme_plan(self):
         svc = self._make_svc()
         plan = svc._known_safe_plan(
             "on which date was FCR highest?",
             history=None, entity_context="",
         )
-        self.assertIsNone(plan)
+        self.assertIsNotNone(plan)
+        self.assertEqual(plan.metric, "daily_metric_extreme_fcr_highest")
+        self.assertIn("MAX(extreme_rows.fcr)", plan.sql)
 
-    def test_weight_time_series_returns_none(self):
+    def test_weight_time_series_uses_daily_extreme_plan(self):
         svc = self._make_svc()
         plan = svc._known_safe_plan(
             "what dates had highest weight?",
             history=None, entity_context="",
         )
-        self.assertIsNone(plan)
+        self.assertIsNotNone(plan)
+        self.assertEqual(plan.metric, "daily_metric_extreme_average_bird_weight_highest")
+        self.assertIn("MAX(extreme_rows.average_bird_weight)", plan.sql)
 
-    def test_feed_time_series_returns_none(self):
+    def test_feed_time_series_uses_daily_extreme_plan(self):
         svc = self._make_svc()
         plan = svc._known_safe_plan(
             "which days had the most feed consumed?",
             history=None, entity_context="",
         )
-        self.assertIsNone(plan)
+        self.assertIsNotNone(plan)
+        self.assertEqual(plan.metric, "daily_metric_extreme_feed_consumed_kg_highest")
+        self.assertIn("MAX(extreme_rows.feed_consumed_kg)", plan.sql)
 
     # --- Routing: normal aggregate queries still use deterministic plans ---
 
