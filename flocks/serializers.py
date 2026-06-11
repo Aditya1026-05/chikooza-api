@@ -107,6 +107,7 @@ class GetFlockSerializer(serializers.ModelSerializer):
     farm_public_id = serializers.IntegerField(source="farm.public_id")
     farm_name = serializers.CharField(source="farm.name", max_length=255)
     age = serializers.SerializerMethodField()
+    status = serializers.SerializerMethodField()
     address = serializers.CharField(max_length=255, source='farm.address')
     mobile_number = serializers.IntegerField(source='user.mobile_number')
 
@@ -132,6 +133,7 @@ class GetFlockSerializer(serializers.ModelSerializer):
             "chick_cost",
             "drinking_sys",
             "age",
+            "status",
             "address",
             "mobile_number",
             "flock_bird"
@@ -141,6 +143,16 @@ class GetFlockSerializer(serializers.ModelSerializer):
         date = datetime.datetime.today().date()
         age = date - obj.hatch_date
         return age.days
+
+    def get_status(self, obj):
+        # U: NEW: expose sold/current status in flock lists so dashboard active
+        # U: counts can ignore fully sold flocks without guessing from bird count.
+        sales = Sales.objects.filter(flock=obj)
+        if sales.filter(sales_type="final_lifting").exists():
+            return "sold"
+        if sales.exists() and obj.actual_birds <= 0:
+            return "sold"
+        return "current"
 
 
 class IntegratorListSerializer(serializers.ModelSerializer):

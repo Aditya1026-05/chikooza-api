@@ -79,6 +79,13 @@ const formatSaleType = (value) => {
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 };
 
+const isActiveFlockRecord = (flock) => {
+  if (String(flock?.flock_public_id) === "0") {
+    return false;
+  }
+  return String(flock?.status || "current").toLowerCase() !== "sold";
+};
+
 const findContinueDraft = (selectedFarm, selectedFlock) => {
   // U: NEW: form autosave is useful only if the dashboard gives farmers a
   // U: direct way to return to meaningful unfinished work.
@@ -277,8 +284,8 @@ const Member = () => {
       return;
     }
 
-    // U: NEW: dashboard header needs the farmer's total flock count across
-    // U: all farms, while the chart selector still loads only the active farm.
+    // U: NEW: dashboard header needs the farmer's active flock count across
+    // U: all farms; sold flocks remain saved but are not counted as current.
     Promise.allSettled(
       validFarms.map((farm) => axios.get(`${apiPath}flocks/${farm.public_id}/`, getAuthConfig()))
     ).then((results) => {
@@ -288,7 +295,8 @@ const Member = () => {
           return count;
         }
         const records = result.value.data?.results;
-        return count + Number(records?.total_records || records?.flock_list?.length || 0);
+        const flockList = records?.flock_list || [];
+        return count + flockList.filter(isActiveFlockRecord).length;
       }, 0);
       setTotalFlockCount(total);
     });
