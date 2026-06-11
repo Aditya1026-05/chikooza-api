@@ -66,6 +66,19 @@ const hasAnyValue = (record, keys) => {
   });
 };
 
+const toChartNumber = (value) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const normalizeDateValue = (value) => String(value || "").slice(0, 10);
+
+const formatSaleType = (value) => {
+  return String(value || "Sale")
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+};
+
 const findContinueDraft = (selectedFarm, selectedFlock) => {
   // U: NEW: form autosave is useful only if the dashboard gives farmers a
   // U: direct way to return to meaningful unfinished work.
@@ -166,6 +179,7 @@ const Member = () => {
   const [week, setWeek] = useState([]);
   const [weight, setWeight] = useState([]);
   const [fcr, setFcr] = useState([]);
+  const [salesEvents, setSalesEvents] = useState([]);
   const [recordStatus, setRecordStatus] = useState(emptyRecordStatus);
   const [totalFlockCount, setTotalFlockCount] = useState(0);
   const [showWorkflow, setShowWorkflow] = useState(false);
@@ -201,6 +215,7 @@ const Member = () => {
   const loadRecordStatus = useCallback((flockId) => {
     if (!flockId || flockId === "0") {
       setRecordStatus(emptyRecordStatus);
+      setSalesEvents([]);
       return;
     }
 
@@ -235,6 +250,7 @@ const Member = () => {
         saleResult.status === "fulfilled"
           ? saleResult.value.data?.results?.sales_list || []
           : [];
+      setSalesEvents(salesList);
       const feedPurchaseCount = purchaseList.filter((item) => item.type === "Feed").length;
       const latestDailyData = dailyList[dailyList.length - 1];
       const failed =
@@ -539,8 +555,81 @@ const Member = () => {
     };
   }, [farmCount, flockCount, hasFeedPurchase, recordStatus.dailyCount, selectedRecordState]);
 
+  const cumulativeMortality = useMemo(() => {
+    let runningMortality = 0;
+    // U: NEW: the dashboard chart should show cumulative mortality trend,
+    // U: not the daily mortality spikes returned by the legacy graph API.
+    return mortality.map((value) => {
+      runningMortality += toChartNumber(value);
+      return Number(runningMortality.toFixed(2));
+    });
+  }, [mortality]);
+
+  const salesByDate = useMemo(() => {
+    return salesEvents.reduce((events, sale) => {
+      const saleDate = normalizeDateValue(sale.date);
+      if (!saleDate) {
+        return events;
+      }
+
+      const existing = events.get(saleDate) || {
+        count: 0,
+        amount: 0,
+        types: new Set(),
+      };
+      existing.count += toChartNumber(sale.lifting_count);
+      existing.amount += toChartNumber(sale.cost);
+      existing.types.add(formatSaleType(sale.sales_type));
+      events.set(saleDate, existing);
+      return events;
+    }, new Map());
+  }, [salesEvents]);
+
+  const salePointAnnotations = useMemo(() => {
+    return date
+      .map((item, index) => {
+        const sale = salesByDate.get(normalizeDateValue(item));
+        if (!sale) {
+          return null;
+        }
+
+        const isNearRightEdge = index >= date.length - 3;
+        const markerBirdCount = toChartNumber(currentCount[index]);
+
+        return {
+          x: item,
+          y: markerBirdCount,
+          yAxisIndex: 0,
+          marker: {
+            size: 7,
+            fillColor: "#f59e0b",
+            strokeColor: "#7c2d12",
+            strokeWidth: 2,
+          },
+          label: {
+            text: `Sale: ${sale.count} birds`,
+            borderColor: "#f59e0b",
+            offsetX: isNearRightEdge ? -78 : 12,
+            offsetY: markerBirdCount < 120 ? -28 : -12,
+            style: {
+              background: "#fff7ed",
+              color: "#7c2d12",
+              fontWeight: 700,
+            },
+          },
+        };
+      })
+      .filter(Boolean);
+  }, [currentCount, date, salesByDate]);
+
   const mortalityOptions = {
     ...baseChartOptions,
+    annotations: {
+      points: salePointAnnotations,
+    },
+    markers: {
+      size: 0,
+    },
     xaxis: {
       categories: date,
       labels: { style: { colors: "#67504c" } },
@@ -553,7 +642,7 @@ const Member = () => {
       },
       {
         opposite: true,
-        title: { text: "Mortality", style: { color: "#67504c" } },
+        title: { text: "Cumulative Mortality", style: { color: "#67504c" } },
         labels: { style: { colors: "#67504c" } },
       },
     ],
@@ -696,7 +785,7 @@ const Member = () => {
                 height={430}
                 series={[
                   { name: "Current Bird Count", data: currentCount },
-                  { name: "Mortality", data: mortality },
+                  { name: "Cumulative Mortality", data: cumulativeMortality },
                 ]}
                 options={mortalityOptions}
               />
