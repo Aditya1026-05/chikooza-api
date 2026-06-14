@@ -14,7 +14,8 @@ class Country(BaseModel):
     isd_code = models.DecimalField(max_digits=6, decimal_places=0)
 
     def save(self, *args, **kwargs):
-        self.public_id = PublicId.create_public_id()
+        if not self.public_id:
+            self.public_id = PublicId.create_public_id()
         super(Country, self).save(*args, **kwargs)
 
 
@@ -30,7 +31,8 @@ class State(BaseModel):
     )
 
     def save(self, *args, **kwargs):
-        self.public_id = PublicId.create_public_id()
+        if not self.public_id:
+            self.public_id = PublicId.create_public_id()
         super(State, self).save(*args, **kwargs)
 
 

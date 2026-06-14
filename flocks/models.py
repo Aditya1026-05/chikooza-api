@@ -37,7 +37,8 @@ class Breed(BaseModel):
     line = models.CharField(max_length=255)
 
     def save(self, *args, **kwargs):
-        self.public_id = PublicId.create_public_id()
+        if not self.public_id:
+            self.public_id = PublicId.create_public_id()
         super(Breed, self).save(*args, **kwargs)
 
 
@@ -63,7 +64,8 @@ class Integrator(BaseModel):
     contact = models.CharField(max_length=255, null=True)
 
     def save(self, *args, **kwargs):
-        self.public_id = PublicId.create_public_id()
+        if not self.public_id:
+            self.public_id = PublicId.create_public_id()
         super(Integrator, self).save(*args, **kwargs)
 
 

@@ -9,6 +9,7 @@ https://docs.djangoproject.com/en/4.0/topics/settings/
 For the full list of settings and their values, see
 https://docs.djangoproject.com/en/4.0/ref/settings/
 """
+
 import os
 from pathlib import Path
 
@@ -34,6 +35,7 @@ def _env_list(name, default=""):
     value = os.environ.get(name, default)
     return [item.strip() for item in value.split(",") if item.strip()]
 
+
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/4.0/howto/deployment/checklist/
 
@@ -47,7 +49,9 @@ DEBUG = _env_bool("DJANGO_DEBUG", True)
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY")
 if not SECRET_KEY:
     if not DEBUG:
-        raise ImproperlyConfigured("DJANGO_SECRET_KEY must be set when DJANGO_DEBUG is false.")
+        raise ImproperlyConfigured(
+            "DJANGO_SECRET_KEY must be set when DJANGO_DEBUG is false."
+        )
     SECRET_KEY = "django-insecure-local-dev-only-change-before-deploy"
 
 # U: OLD: CORS_ORIGIN_ALLOW_ALL = True
@@ -67,6 +71,7 @@ ALLOWED_HOSTS = _env_list(
 
 # Application definition
 INSTALLED_APPS = [
+    "jazzmin",
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -83,11 +88,43 @@ INSTALLED_APPS = [
     "purchase",
     "dailydata",
     "sales",
-#MV-2025-07-17-<1>  STARTS
+    # MV-2025-07-17-<1>  STARTS
     "chatbot",
-#MV-2025-07-17-<1>  ENDS
-    "aibot"
+    # MV-2025-07-17-<1>  ENDS
+    "aibot",
 ]
+
+JAZZMIN_SETTINGS = {
+    "site_title": "Chikooza Admin",
+    "site_header": "Chikooza Admin",
+    "site_brand": "Chikooza",
+    "welcome_sign": "Chikooza farm operations admin",
+    "copyright": "Chikooza",
+    "search_model": [
+        "common.Users",
+        "farm.Farm",
+        "flocks.Flock",
+        "purchase.Purchase",
+        "dailydata.DailyData",
+        "sales.Sales",
+    ],
+    "topmenu_links": [
+        {"name": "Dashboard", "url": "admin:index", "permissions": ["auth.view_user"]},
+    ],
+    "show_sidebar": True,
+    "navigation_expanded": True,
+    "hide_apps": ("oauth2_provider",),
+    "order_with_respect_to": [
+        "common.Users",
+        "farm",
+        "flocks",
+        "dailydata",
+        "purchase",
+        "sales",
+        "chatbot",
+        "aibot",
+    ],
+}
 # U: OLD: HOSTNAME = "http://127.0.0.1:8001/"
 # U: NEW: keep OAuth/token callback URLs configurable for local setup and deployment.
 # The previous hardcoded port broke login/signup whenever the API ran anywhere except 8001.
@@ -116,9 +153,9 @@ MIDDLEWARE = [
     # "corsheaders.middleware.CorsMiddleware",
     "common.middleware.PageNotFoundMiddleware",
     "common.middleware.AuthenticationErrorMessage",
-#MV-2025-07-17-<2>  STARTS
-    "chatbot.middleware.LoggingMiddleware"
-#MV-2025-07-17-<2>  ENDS
+    # MV-2025-07-17-<2>  STARTS
+    "chatbot.middleware.LoggingMiddleware",
+    # MV-2025-07-17-<2>  ENDS
 ]
 # U: OLD: CORS_ORIGIN_ALLOW_ALL = True
 ROOT_URLCONF = "chikooza.urls"
@@ -126,7 +163,7 @@ ROOT_URLCONF = "chikooza.urls"
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [BASE_DIR / 'templates'],
+        "DIRS": [BASE_DIR / "templates"],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
