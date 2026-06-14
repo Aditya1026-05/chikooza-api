@@ -45,6 +45,7 @@ class Farm(BaseModel):
     name = models.CharField(max_length=30)
     address = models.CharField(max_length=255)
     city = models.CharField(max_length=255)
+    district = models.CharField(max_length=255, blank=True, default="")
     state = models.ForeignKey(
         State, on_delete=models.CASCADE, related_name="farm_state"
     )

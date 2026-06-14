@@ -7,6 +7,7 @@ class AddFarmSerializer(serializers.Serializer):
     name = serializers.CharField(max_length=30)
     address = serializers.CharField(max_length=255)
     city = serializers.CharField(max_length=255)
+    district = serializers.CharField(max_length=255, required=False, allow_blank=True)
     state_public_id = serializers.IntegerField()
     country_public_id = serializers.IntegerField()
     pin = serializers.CharField(max_length=20)
@@ -21,6 +22,7 @@ class AddFarmSerializer(serializers.Serializer):
             "name",
             "address",
             "city",
+            "district",
             "state_public_id",
             "country_public_id",
             "pin",
@@ -45,6 +47,7 @@ class FarmGetSerializer(serializers.ModelSerializer):
             "name",
             "address",
             "city",
+            "district",
             "state_name",
             "country_name",
             "pin",
@@ -72,6 +75,7 @@ class FarmListSerializer(serializers.ModelSerializer):
             "name",
             "address",
             "city",
+            "district",
             "state_name",
             "country_name",
             "pin",
@@ -87,6 +91,7 @@ class UpdateFarmSerializer(serializers.Serializer):
     name = serializers.CharField(max_length=30, required=False)
     address = serializers.CharField(max_length=255, required=False)
     city = serializers.CharField(max_length=255, required=False)
+    district = serializers.CharField(max_length=255, required=False, allow_blank=True)
     pin = serializers.CharField(max_length=20, required=False)
     lat_long = serializers.CharField(max_length=50, required=False, allow_blank=True,
                                      allow_null=True)
@@ -99,6 +104,7 @@ class UpdateFarmSerializer(serializers.Serializer):
             "name",
             "address",
             "city",
+            "district",
             "state_public_id",
             "country_public_id",
             "pin",

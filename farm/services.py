@@ -21,6 +21,7 @@ class AddFarmService(services.Service):
             name=data.get("name"),
             address=data.get("address"),
             city=data.get("city"),
+            district=data.get("district", ""),
             state=state,
             country=country,
             pin=data.get("pin"),
@@ -42,6 +43,7 @@ class UpdateFarmService(services.Service):
         name = data.get("name")
         address = data.get("address")
         city = data.get("city")
+        district = data.get("district")
         state_public_id = data.get("state_public_id")
         country_public_id = data.get("country_public_id")
         pin = data.get("pin")
@@ -53,6 +55,8 @@ class UpdateFarmService(services.Service):
             farm.address = address
         if city:
             farm.city = city
+        if district is not None:
+            farm.district = district
         if state_public_id:
             state = State.objects.get(public_id=state_public_id)
             farm.state = state

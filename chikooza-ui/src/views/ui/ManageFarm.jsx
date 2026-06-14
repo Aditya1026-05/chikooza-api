@@ -16,8 +16,8 @@ const MANAGE_FARM_DRAFT_KEY = "chikooza-manage-farm-draft";
 
 const manageFarmSteps = [
   { title: "Select", helper: "Choose farm" },
-  { title: "Details", helper: "Name and address" },
-  { title: "Location", helper: "State, sheds, map" },
+  { title: "Details", helper: "Farm name and sheds" },
+  { title: "Location", helper: "Address, district and pincode" },
   { title: "Review", helper: "Check and save" },
 ];
 
@@ -26,6 +26,7 @@ const emptyManageFarmData = {
   name: "",
   address: "",
   city: "",
+  district: "",
   state_public_id: "0",
   country_public_id: "0",
   pin: "",
@@ -44,6 +45,11 @@ const readManageFarmDraft = () => {
   } catch {
     return { data: emptyManageFarmData, selectedFarmId: "0", farmStep: 0 };
   }
+};
+
+const resolveDefaultCountryId = (countries) => {
+  const preferredCountry = countries.find((item) => String(item.name || "").toLowerCase() === "india");
+  return String((preferredCountry || countries[0])?.public_id || "0");
 };
 
 const ManageFarm = () => {
@@ -70,6 +76,7 @@ const ManageFarm = () => {
   let [farmnameError, setFarmnameError] = useState(null);
   let [addressError, setAddressError] = useState(null);
   let [cityorvillageError, setCityorvillageError] = useState(null);
+  let [districtError, setDistrictError] = useState(null);
   let [pincodeError, setPincodeError] = useState(null);
   let [countryError, setCountryError] = useState(null);
   let [stateError, setStateError] = useState(null);
@@ -94,7 +101,14 @@ const ManageFarm = () => {
   useEffect(() => {
     let url = `${apiPath}country/`;
     axios.get(url, config).then((res) => {
-      setCountry(res.data.results);
+      const countries = res.data.results || [];
+      setCountry(countries);
+      setAddData((currentData) => {
+        if (String(currentData.country_public_id || "0") !== "0" || countries.length === 0) {
+          return currentData;
+        }
+        return { ...currentData, country_public_id: resolveDefaultCountryId(countries) };
+      });
     }).catch((err) => {
       //setCountry(res.data.results);
       handleUnauthorized(err, navigate);
@@ -138,21 +152,29 @@ const ManageFarm = () => {
     });
   }, [activeWorkspace.farmPublicId, initialDraft.data.public_id, initialDraft.farmStep, initialDraft.selectedFarmId, navigate])
 
-  const validateFarmDetails = () => {
+  const validateFarmIdentity = () => {
+    let valid = true;
+    if ((addData.name || '').trim() === '') { setFarmnameError('Please enter farm name'); valid = false; }
+    else if ((addData.name || '').trim().length > 30) { setFarmnameError('Farm name can be maximum 30 characters'); valid = false; }
+    else { setFarmnameError(''); }
+    if (Number(addData.shed_count) <= 0) { setNumberofshedsError('Number of sheds must be greater than 0'); valid = false; } else { setNumberofshedsError(''); }
+    return valid;
+  };
+
+  const validateFarmLocation = () => {
     // U: OLD: validation depended on e.target indexes, which breaks when the
     // U: form layout changes. NEW: validate from named state fields.
     let valid = true;
     if (String(addData.country_public_id || "0") === "0") { setCountryError('Please select country'); valid = false; } else { setCountryError(''); }
     if (String(addData.state_public_id || "0") === "0") { setStateError('Please select state'); valid = false; } else { setStateError(''); }
-    if ((addData.name || '').trim() === '') { setFarmnameError('Please enter farm name'); valid = false; }
-    else if ((addData.name || '').trim().length > 30) { setFarmnameError('Farm name can be maximum 30 characters'); valid = false; }
-    else { setFarmnameError(''); }
     if ((addData.address || '').trim() === '') { setAddressError('Please enter address'); valid = false; } else { setAddressError(''); }
     if ((addData.city || '').trim() === '') { setCityorvillageError('Please enter city/village name'); valid = false; } else { setCityorvillageError(''); }
+    if ((addData.district || '').trim() === '') { setDistrictError('Please enter district'); valid = false; } else { setDistrictError(''); }
     if (!/^\d{6}$/.test(String(addData.pin || ''))) { setPincodeError('Pincode must be 6 digits'); valid = false; } else { setPincodeError(''); }
-    if (Number(addData.shed_count) <= 0) { setNumberofshedsError('Number of sheds must be greater than 0'); valid = false; } else { setNumberofshedsError(''); }
     return valid;
   };
+
+  const validateFarmDetails = () => validateFarmIdentity() && validateFarmLocation();
 
   const goNextFarmStep = () => {
     if (farmStep === 0 && !showForm) {
@@ -160,13 +182,11 @@ const ManageFarm = () => {
       return;
     }
     if (farmStep === 1) {
-      const basicValid = (addData.name || '').trim() !== '' && (addData.address || '').trim() !== '' && (addData.city || '').trim() !== '' && /^\d{6}$/.test(String(addData.pin || ''));
-      if (!basicValid) {
-        validateFarmDetails();
+      if (!validateFarmIdentity()) {
         return;
       }
     }
-    if (farmStep === 2 && !validateFarmDetails()) {
+    if (farmStep === 2 && !validateFarmLocation()) {
       return;
     }
     setErr('');
@@ -177,12 +197,39 @@ const ManageFarm = () => {
     setFarmStep((currentStep) => Math.max(currentStep - 1, 0));
   };
 
+  const goToFarmStep = (targetStep) => {
+    if (!showForm) {
+      setErr('Select a farm first.');
+      return;
+    }
+    if (targetStep <= farmStep) {
+      setFarmStep(targetStep);
+      return;
+    }
+    // U: NEW: users can review previous sections, but cannot skip incomplete required fields.
+    if (targetStep > 1 && !validateFarmIdentity()) {
+      setFarmStep(1);
+      return;
+    }
+    if (targetStep > 2 && !validateFarmLocation()) {
+      setFarmStep(2);
+      return;
+    }
+    setErr('');
+    setFarmStep(targetStep);
+  };
+
   let save = (e) => {
     e.preventDefault();
     setLoading(false);
-    if (!validateFarmDetails()) {
-      setErr('Validation error. Please check all required fields.');
+    if (!validateFarmIdentity()) {
+      setErr('Validation error. Please check farm name and shed count.');
       setFarmStep(1);
+      return;
+    }
+    if (!validateFarmLocation()) {
+      setErr('Validation error. Please check all location fields.');
+      setFarmStep(2);
       return;
     }
         setLoading(true);
@@ -190,6 +237,7 @@ const ManageFarm = () => {
           name: addData.name,
           address: addData.address,
           city: addData.city,
+          district: addData.district,
           state_public_id: addData.state_public_id,
           country_public_id: addData.country_public_id,
           pin: addData.pin,
@@ -257,6 +305,10 @@ const ManageFarm = () => {
   let cityorvillageChange = (e) => {
     setAddData({ ...addData, city: e.target.value });
     e.target.value.trim() === '' ? setCityorvillageError('Please enter city/Village name') : setCityorvillageError('');
+  }
+  let districtChange = (e) => {
+    setAddData({ ...addData, district: e.target.value });
+    e.target.value.trim() === '' ? setDistrictError('Please enter district') : setDistrictError('');
   }
   const loadFarmForEdit = (farmId, nextStep = 0) => {
     if (String(farmId) !== "0") {
@@ -349,11 +401,7 @@ const ManageFarm = () => {
                                     key={step.title}
                                     type="button"
                                     className={actualStep === farmStep ? "is-active" : actualStep < farmStep ? "is-complete" : ""}
-                                    onClick={() => {
-                                      if (showForm) {
-                                        setFarmStep(actualStep);
-                                      }
-                                    }}
+                                    onClick={() => goToFarmStep(actualStep)}
                                   >
                                     <span>{index + 1}</span>
                                     <strong>{step.title}</strong>
@@ -365,7 +413,6 @@ const ManageFarm = () => {
 
                           {farmStep === 1 && (
                             <>
-                              <Alert color="secondary">Farm Detail</Alert>
                               <FormGroup>
                                 <Label for="exampleName">Farm Name</Label>
                                 <div className="input-group input-group">
@@ -375,57 +422,82 @@ const ManageFarm = () => {
                                 <small id="passwordHelp" className="text-danger">{farmnameError}</small>
                               </FormGroup>
                               <FormGroup>
-                                <Label for="exampleEmail">Address</Label>
-                                <div className="input-group input-group">
-                                  <input onChange={addressChange} name="address" value={addData.address || ""} placeholder="Address" type="text" className="form-control" aria-label="Address" aria-describedby="basic-addon1" />
-                                </div>
-                                <small id="passwordHelp" className="text-danger">{addressError}</small>
-                              </FormGroup>
-                              <FormGroup>
-                                <Label for="exampleCityOrVillage">City or Village</Label>
-                                <div className="input-group input-group">
-                                  <input onChange={cityorvillageChange} name="cityorvillage" value={addData.city || ""} placeholder="City or Village" type="text" className="form-control" aria-label="City or Village" aria-describedby="basic-addon1" />
-                                </div>
-                                <small id="passwordHelp" className="text-danger">{cityorvillageError}</small>
-                              </FormGroup>
-                              <FormGroup>
-                                <Label for="exampleMobile">Pincode</Label>
-                                <div className="input-group input-group">
-                                  <input onChange={pincodeChange} name="pincode" value={addData.pin || ""} placeholder="Pincode" type="text" className="form-control" aria-label="Pincode" aria-describedby="basic-addon1" />
-                                </div>
-                                <small id="passwordHelp" className="text-danger">{pincodeError}</small>
-                              </FormGroup>
-                            </>
-                          )}
-                          {farmStep === 2 && (
-                            <>
-                              <FormGroup>
-                                <Label for="country">Country</Label>
-                                <Input id="country" onChange={countryChange} value={addData.country_public_id || "0"} name="country" type="select">
-                                  <option value="0" disabled>Select Country</option>
-                                  {country.map(item => (
-                                    <option key={item.public_id} value={item.public_id}>{item.name}</option>
-                                  ))}
-                                </Input>
-                                <small id="passwordHelp" className="text-danger">{countryError}</small>
-                              </FormGroup>
-                              <FormGroup>
-                                <Label for="state">State</Label>
-                                <Input id="state" onChange={stateChange} value={addData.state_public_id || "0"} name="state" type="select">
-                                  <option value="0" disabled={true}>Select State</option>
-                                  {state.map(item => (
-                                    <option key={item.public_id} value={item.public_id}>{item.name}</option>
-                                  ))}
-                                </Input>
-                                <small id="passwordHelp" className="text-danger">{stateError}</small>
-                              </FormGroup>
-                              <FormGroup>
                                 <Label for="exampleMobile">No. of sheds</Label>
                                 <div className="input-group input-group">
                                   <input onChange={numberofshedsChange} value={addData.shed_count || ""} name="numberofsheds" placeholder="No. of sheds" type="number" min="1" className="form-control" aria-label="No. of sheds" aria-describedby="basic-addon1" />
                                 </div>
                                 <small id="passwordHelp" className="text-danger">{numberofshedsError}</small>
                               </FormGroup>
+                            </>
+                          )}
+                          {farmStep === 2 && (
+                            <>
+                              <Row>
+                                <Col md="6">
+                                  <FormGroup>
+                                    <Label for="farmAddress">Address</Label>
+                                    <div className="input-group input-group">
+                                      <input id="farmAddress" onChange={addressChange} name="address" value={addData.address || ""} placeholder="Farm address" type="text" className="form-control" aria-label="Address" aria-describedby="basic-addon1" />
+                                    </div>
+                                    <small id="passwordHelp" className="text-danger">{addressError}</small>
+                                  </FormGroup>
+                                </Col>
+                                <Col md="6">
+                                  <FormGroup>
+                                    <Label for="exampleCityOrVillage">City or Village</Label>
+                                    <div className="input-group input-group">
+                                      <input onChange={cityorvillageChange} name="cityorvillage" value={addData.city || ""} placeholder="City or Village" type="text" className="form-control" aria-label="City or Village" aria-describedby="basic-addon1" />
+                                    </div>
+                                    <small id="passwordHelp" className="text-danger">{cityorvillageError}</small>
+                                  </FormGroup>
+                                </Col>
+                              </Row>
+                              <Row>
+                                <Col md="6">
+                                  <FormGroup>
+                                    <Label for="farmDistrict">District</Label>
+                                    <div className="input-group input-group">
+                                      <input id="farmDistrict" onChange={districtChange} name="district" value={addData.district || ""} placeholder="District" type="text" className="form-control" aria-label="District" aria-describedby="basic-addon1" />
+                                    </div>
+                                    <small id="passwordHelp" className="text-danger">{districtError}</small>
+                                  </FormGroup>
+                                </Col>
+                                <Col md="6">
+                                  <FormGroup>
+                                    <Label for="exampleMobile">Pincode</Label>
+                                    <div className="input-group input-group">
+                                      <input onChange={pincodeChange} name="pincode" value={addData.pin || ""} placeholder="6 digit pincode" type="text" className="form-control" aria-label="Pincode" aria-describedby="basic-addon1" />
+                                    </div>
+                                    <small id="passwordHelp" className="text-danger">{pincodeError}</small>
+                                  </FormGroup>
+                                </Col>
+                              </Row>
+                              <Row>
+                                <Col md="6">
+                                  <FormGroup>
+                                    <Label for="country">Country</Label>
+                                    <Input id="country" onChange={countryChange} value={addData.country_public_id || "0"} name="country" type="select" disabled>
+                                      <option value="0" disabled>Select Country</option>
+                                      {country.map(item => (
+                                        <option key={item.public_id} value={item.public_id}>{item.name}</option>
+                                      ))}
+                                    </Input>
+                                    <small id="passwordHelp" className="text-danger">{countryError}</small>
+                                  </FormGroup>
+                                </Col>
+                                <Col md="6">
+                                  <FormGroup>
+                                    <Label for="state">State</Label>
+                                    <Input id="state" onChange={stateChange} value={addData.state_public_id || "0"} name="state" type="select">
+                                      <option value="0" disabled={true}>Select State</option>
+                                      {state.map(item => (
+                                        <option key={item.public_id} value={item.public_id}>{item.name}</option>
+                                      ))}
+                                    </Input>
+                                    <small id="passwordHelp" className="text-danger">{stateError}</small>
+                                  </FormGroup>
+                                </Col>
+                              </Row>
                               <FormGroup>
                                 <Label for="exampleEmail">Coordinates</Label>
                                 <div className="input-group input-group">
@@ -441,10 +513,11 @@ const ManageFarm = () => {
                               <span>Review farm update</span>
                               <dl>
                                 <div><dt>Name</dt><dd>{addData.name || "Missing"}</dd></div>
+                                <div><dt>Sheds</dt><dd>{addData.shed_count || "Missing"}</dd></div>
                                 <div><dt>Address</dt><dd>{addData.address || "Missing"}</dd></div>
                                 <div><dt>City/Village</dt><dd>{addData.city || "Missing"}</dd></div>
+                                <div><dt>District</dt><dd>{addData.district || "Missing"}</dd></div>
                                 <div><dt>Pincode</dt><dd>{addData.pin || "Missing"}</dd></div>
-                                <div><dt>Sheds</dt><dd>{addData.shed_count || "Missing"}</dd></div>
                                 <div><dt>Coordinates</dt><dd>{addData.lat_long || "Not set"}</dd></div>
                               </dl>
                             </div>

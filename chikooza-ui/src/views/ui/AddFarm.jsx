@@ -11,8 +11,8 @@ import { writeCurrentWorkspace } from "../../utils/currentWorkspace";
 const FARM_DRAFT_KEY = "chikooza-add-farm-draft";
 
 const farmSteps = [
-  { title: "Farm", helper: "Name and shed count" },
-  { title: "Location", helper: "Address and map point" },
+  { title: "Details", helper: "Farm name and sheds" },
+  { title: "Location", helper: "Address, district and pincode" },
   { title: "Review", helper: "Check and save" },
 ];
 
@@ -20,6 +20,7 @@ const emptyFarmDraft = {
   farmname: '',
   address: '',
   cityorvillage: '',
+  district: '',
   pincode: '',
   country: 0,
   numberofsheds: '',
@@ -33,6 +34,11 @@ const readFarmDraft = () => {
   } catch {
     return emptyFarmDraft;
   }
+};
+
+const resolveDefaultCountryId = (countries) => {
+  const preferredCountry = countries.find((item) => String(item.name || "").toLowerCase() === "india");
+  return String((preferredCountry || countries[0])?.public_id || "0");
 };
 
 const AddFarm = () => {
@@ -60,6 +66,7 @@ const AddFarm = () => {
   let [farmnameError, setFarmnameError] = useState(null);
   let [addressError, setAddressError] = useState(null);
   let [cityorvillageError, setCityorvillageError] = useState(null);
+  let [districtError, setDistrictError] = useState(null);
   let [pincodeError, setPincodeError] = useState(null);
   let [countryError, setCountryError] = useState(null);
   let [stateError, setStateError] = useState(null);
@@ -83,7 +90,14 @@ const AddFarm = () => {
   useEffect(() => {
     let url = `${apiPath}country/`;
     axios.get(url, config).then((res) => {
-      setCountry(res.data.results);
+      const countries = res.data.results || [];
+      setCountry(countries);
+      setAddData((currentData) => {
+        if (String(currentData.country || "0") !== "0" || countries.length === 0) {
+          return currentData;
+        }
+        return { ...currentData, country: resolveDefaultCountryId(countries) };
+      });
     }).catch((err) => {
       handleUnauthorized(err, navigate);
     });
@@ -112,6 +126,7 @@ const AddFarm = () => {
         name: addData.farmname,
         address: addData.address,
         city: addData.cityorvillage,
+        district: addData.district,
         state_public_id: addData.state,
         country_public_id: addData.country,
         pin: addData.pincode,
@@ -127,7 +142,7 @@ const AddFarm = () => {
         }
         localStorage.removeItem(FARM_DRAFT_KEY);
         setLoading(false);
-        setAddData(emptyFarmDraft);
+        setAddData({ ...emptyFarmDraft, country: resolveDefaultCountryId(country) });
         setFarmStep(0);
         setShow(true);
         setTimeout(() => {
@@ -164,8 +179,12 @@ const AddFarm = () => {
     e.target.value.trim() === '' ? setAddressError('Please enter address') : setAddressError('');
   }
   let pincodeChange = (e) => {
-    setAddData({ ...addData, pincode: e.target.value });
-    e.target.value.trim() === '' || Number(e.target.value.trim()) < 1 ? setPincodeError('Please enter pincode') : setPincodeError('');
+    const value = e.target.value;
+    if (!/^\d{0,6}$/.test(value)) {
+      return;
+    }
+    setAddData({ ...addData, pincode: value });
+    value.length !== 6 ? setPincodeError('Pincode must be 6 digits') : setPincodeError('');
   }
 
   let numberofshedsChange = (e) => {
@@ -175,6 +194,10 @@ const AddFarm = () => {
   let cityorvillageChange = (e) => {
     setAddData({ ...addData, cityorvillage: e.target.value });
     e.target.value.trim() === '' ? setCityorvillageError('Please enter city/Village name') : setCityorvillageError('');
+  }
+  let districtChange = (e) => {
+    setAddData({ ...addData, district: e.target.value });
+    e.target.value.trim() === '' ? setDistrictError('Please enter district') : setDistrictError('');
   }
   let closeAll = () => {
     navigate('/member')
@@ -192,6 +215,20 @@ const AddFarm = () => {
   const goPreviousStep = () => {
     setFarmStep((currentStep) => Math.max(currentStep - 1, 0));
   };
+  const goToStep = (targetStep) => {
+    if (targetStep <= farmStep) {
+      setFarmStep(targetStep);
+      return;
+    }
+    // U: NEW: users can move backward freely, but cannot skip required farm fields.
+    if (targetStep > 0 && !validateFarmIdentity()) {
+      return;
+    }
+    if (targetStep > 1 && !validateFarmLocation()) {
+      return;
+    }
+    setFarmStep(targetStep);
+  };
   const validateFarmIdentity = () => {
     let valid = true;
     if (addData.farmname.trim() === '') { setFarmnameError('Please enter farm name'); valid = false; }
@@ -206,7 +243,8 @@ const AddFarm = () => {
     if (addData.state === 0 || addData.state === "0") { setStateError('Please select state'); valid = false; } else { setStateError(''); }
     if (addData.address.trim() === '') { setAddressError('Please enter address'); valid = false; } else { setAddressError(''); }
     if (addData.cityorvillage.trim() === '') { setCityorvillageError('Please enter city or village'); valid = false; } else { setCityorvillageError(''); }
-    if (!/^[0-9]{4,10}$/.test(addData.pincode.trim())) { setPincodeError('Enter a valid numeric pincode'); valid = false; } else { setPincodeError(''); }
+    if (addData.district.trim() === '') { setDistrictError('Please enter district'); valid = false; } else { setDistrictError(''); }
+    if (!/^\d{6}$/.test(addData.pincode.trim())) { setPincodeError('Pincode must be 6 digits'); valid = false; } else { setPincodeError(''); }
     return valid;
   };
   return (
@@ -250,7 +288,7 @@ const AddFarm = () => {
                           key={step.title}
                           type="button"
                           className={index === farmStep ? "is-active" : index < farmStep ? "is-complete" : ""}
-                          onClick={() => setFarmStep(index)}
+                          onClick={() => goToStep(index)}
                         >
                           <span>{index + 1}</span>
                           <strong>{step.title}</strong>
@@ -280,51 +318,76 @@ const AddFarm = () => {
                       )}
                       {farmStep === 1 && (
                         <>
-                          <FormGroup>
-                            <Label for="exampleEmail">Address</Label>
-                            <div className="input-group input-group">
-                              <input onChange={addressChange} name="address" value={addData.address} placeholder="Address" type="text" className="form-control" aria-label="Address" aria-describedby="basic-addon1" />
-                            </div>
-                            <small id="passwordHelp" className="text-danger">{addressError}</small>
-                          </FormGroup>
-                          <FormGroup>
-                            <Label for="exampleCityOrVillage">City or Village</Label>
-                            <div className="input-group input-group">
-                              <input onChange={cityorvillageChange} name="cityorvillage" value={addData.cityorvillage} placeholder="City or Village" type="text" className="form-control" aria-label="City or Village" aria-describedby="basic-addon1" />
-                            </div>
-                            <small id="passwordHelp" className="text-danger">{cityorvillageError}</small>
-                          </FormGroup>
-                          <FormGroup>
-                            <Label for="exampleMobile">Pincode</Label>
-                            <div className="input-group input-group">
-                              <input onChange={pincodeChange} value={addData.pincode} name="pincode" placeholder="Pincode" type="text" className="form-control" aria-label="Pincode" aria-describedby="basic-addon1" />
-                            </div>
-                            <small id="passwordHelp" className="text-danger">{pincodeError}</small>
-                          </FormGroup>
-                          <FormGroup>
-                            <Label for="country">Country</Label>
-                            <Input id="country" onChange={countryChange} value={addData.country} name="country" type="select">
-                              <option value="0" disabled>Select Country</option>
-                              {
-                                country.map(item =>
-                                  <option key={item.public_id} value={item.public_id}>{item.name}</option>
-                                )
-                              }
-                            </Input>
-                            <small id="passwordHelp" className="text-danger">{countryError}</small>
-                          </FormGroup>
-                          <FormGroup>
-                            <Label for="state">State</Label>
-                            <Input id="state" onChange={stateChange} value={addData.state} name="state" type="select">
-                              <option value="0" disabled={true}>Select State</option>
-                              {
-                                state.map(item =>
-                                  <option key={item.public_id} value={item.public_id}>{item.name}</option>
-                                )
-                              }
-                            </Input>
-                            <small id="passwordHelp" className="text-danger">{stateError}</small>
-                          </FormGroup>
+                          <Row>
+                            <Col md="6">
+                              <FormGroup>
+                                <Label for="farmAddress">Address</Label>
+                                <div className="input-group input-group">
+                                  <input id="farmAddress" onChange={addressChange} name="address" value={addData.address} placeholder="Farm address" type="text" className="form-control" aria-label="Address" aria-describedby="basic-addon1" />
+                                </div>
+                                <small id="passwordHelp" className="text-danger">{addressError}</small>
+                              </FormGroup>
+                            </Col>
+                            <Col md="6">
+                              <FormGroup>
+                                <Label for="exampleCityOrVillage">City or Village</Label>
+                                <div className="input-group input-group">
+                                  <input onChange={cityorvillageChange} name="cityorvillage" value={addData.cityorvillage} placeholder="City or Village" type="text" className="form-control" aria-label="City or Village" aria-describedby="basic-addon1" />
+                                </div>
+                                <small id="passwordHelp" className="text-danger">{cityorvillageError}</small>
+                              </FormGroup>
+                            </Col>
+                          </Row>
+                          <Row>
+                            <Col md="6">
+                              <FormGroup>
+                                <Label for="farmDistrict">District</Label>
+                                <div className="input-group input-group">
+                                  <input id="farmDistrict" onChange={districtChange} name="district" value={addData.district} placeholder="District" type="text" className="form-control" aria-label="District" aria-describedby="basic-addon1" />
+                                </div>
+                                <small id="passwordHelp" className="text-danger">{districtError}</small>
+                              </FormGroup>
+                            </Col>
+                            <Col md="6">
+                              <FormGroup>
+                                <Label for="exampleMobile">Pincode</Label>
+                                <div className="input-group input-group">
+                                  <input onChange={pincodeChange} value={addData.pincode} name="pincode" placeholder="6 digit pincode" type="text" className="form-control" aria-label="Pincode" aria-describedby="basic-addon1" />
+                                </div>
+                                <small id="passwordHelp" className="text-danger">{pincodeError}</small>
+                              </FormGroup>
+                            </Col>
+                          </Row>
+                          <Row>
+                            <Col md="6">
+                              <FormGroup>
+                                <Label for="country">Country</Label>
+                                <Input id="country" onChange={countryChange} value={addData.country} name="country" type="select" disabled>
+                                  <option value="0" disabled>Select Country</option>
+                                  {
+                                    country.map(item =>
+                                      <option key={item.public_id} value={item.public_id}>{item.name}</option>
+                                    )
+                                  }
+                                </Input>
+                                <small id="passwordHelp" className="text-danger">{countryError}</small>
+                              </FormGroup>
+                            </Col>
+                            <Col md="6">
+                              <FormGroup>
+                                <Label for="state">State</Label>
+                                <Input id="state" onChange={stateChange} value={addData.state} name="state" type="select">
+                                  <option value="0" disabled={true}>Select State</option>
+                                  {
+                                    state.map(item =>
+                                      <option key={item.public_id} value={item.public_id}>{item.name}</option>
+                                    )
+                                  }
+                                </Input>
+                                <small id="passwordHelp" className="text-danger">{stateError}</small>
+                              </FormGroup>
+                            </Col>
+                          </Row>
                           <FormGroup>
                             <Label for="exampleEmail">Coordinates</Label>
                             <div className="input-group input-group">
@@ -342,6 +405,7 @@ const AddFarm = () => {
                             <div><dt>Sheds</dt><dd>{addData.numberofsheds || "Not added"}</dd></div>
                             <div><dt>Address</dt><dd>{addData.address || "Not added"}</dd></div>
                             <div><dt>City/Village</dt><dd>{addData.cityorvillage || "Not added"}</dd></div>
+                            <div><dt>District</dt><dd>{addData.district || "Not added"}</dd></div>
                             <div><dt>Pincode</dt><dd>{addData.pincode || "Not added"}</dd></div>
                             <div><dt>Coordinates</dt><dd>{addData.coordinates || "Not added"}</dd></div>
                           </dl>
