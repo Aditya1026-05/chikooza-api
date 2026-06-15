@@ -13,6 +13,7 @@ from users.views import (
     SendOTPView,
     SignUpView,
     UpdateMobileNoView,
+    VerifyEmailOTPView,
     VerifyOTPView,
 )
 
@@ -21,6 +22,7 @@ router.register(r"signUp", SignUpView, basename="sign_up")
 router.register(r"login", LoginView, basename="login")
 router.register(r"sendOtp", SendOTPView, basename="send_otp")
 router.register(r"verifyOtp", VerifyOTPView, basename="verify_otp")
+router.register(r"verifyEmailOtp", VerifyEmailOTPView, basename="verify_email_otp")
 router.register(r"profile", ProfileUserView, basename="profile_view")
 router.register(r"resetPassword", ResetPasswordView, basename="reset_password")
 router.register(r"forgetPassword", ForgetPasswordView, basename="forget_password")

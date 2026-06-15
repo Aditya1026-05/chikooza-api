@@ -136,6 +136,15 @@ if not HOSTNAME.endswith("/"):
 # U: NEW: allow a fixed OTP for local MVP testing, while production can use random OTPs.
 CHIKOOZA_FIXED_OTP = os.environ.get("CHIKOOZA_FIXED_OTP")
 
+# U: NEW: email OTP delivery is optional for local setup; production can enable SMTP.
+CHIKOOZA_EMAIL_OTP_DELIVERY_ENABLED = _env_bool(
+    "CHIKOOZA_EMAIL_OTP_DELIVERY_ENABLED", False
+)
+EMAIL_BACKEND = os.environ.get(
+    "DJANGO_EMAIL_BACKEND", "django.core.mail.backends.console.EmailBackend"
+)
+DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "no-reply@chikooza.local")
+
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     # U: OLD: django_heroku.settings(locals()) injected WhiteNoise implicitly at the end of settings.

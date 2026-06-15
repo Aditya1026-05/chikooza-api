@@ -4,10 +4,9 @@ from rest_framework import status
 from rest_framework.response import Response
 from xhtml2pdf import pisa
 
-from common.base_models import Otp, PublicId, Users
+from common.base_models import Otp, PublicId, RegistrationApprovalPolicy, Users
 from common.constant import ERROR, INVALID_OTP
 from common.utils import (
-    create_token,
     get_detail,
     get_or_create_oauth_application,
     mobile_number_validation,
@@ -22,14 +21,27 @@ def verify_otp(mobile_number, otp):
     return Response({ERROR: INVALID_OTP}, status.HTTP_400_BAD_REQUEST)
 
 
-def create_user(data, sign_up=None):
+def create_user(data, sign_up=None, phone_verified=False, email_verified=False):
     mobile_number_validation(data.get("mobile_number"))
+    approval_policy = RegistrationApprovalPolicy.get_default()
+    auto_approved = approval_policy.should_auto_approve(
+        email=data.get("email"),
+        phone_verified=phone_verified,
+        email_verified=email_verified,
+    )
+    approval_status = (
+        Users.APPROVAL_APPROVED if auto_approved else Users.APPROVAL_PENDING
+    )
     users = Users.objects.create(
         username=data.get("username"),
         first_name=data.get("name"),
         email=data.get("email"),
         mobile_number=data.get("mobile_number"),
         public_id=PublicId.create_public_id(),
+        is_phone_verified=phone_verified,
+        is_email_verified=email_verified,
+        approval_status=approval_status,
+        is_active=auto_approved,
     )
 
     users.set_password(data.get("password"))
@@ -37,14 +49,17 @@ def create_user(data, sign_up=None):
     # U: OLD: Application.objects.create() used django-oauth-toolkit defaults,
     # U: which hash client_secret and break this legacy password-grant login flow.
     # U: NEW: create a server-owned OAuth application with a usable secret.
-    user = get_or_create_oauth_application(users)
-    data["status_code"] = 201
-    token = create_token(
-        users.username, data.get("password"), user.client_id, user.client_secret
-    )
-    token["public_id"] = users.public_id
+    get_or_create_oauth_application(users)
     return get_detail(
-        "User Registered", {"public_id": users.public_id}, status.HTTP_201_CREATED
+        "User Registered"
+        if auto_approved
+        else "Registration submitted for admin approval",
+        {
+            "public_id": users.public_id,
+            "approval_status": users.approval_status,
+            "is_active": users.is_active,
+        },
+        status.HTTP_201_CREATED,
     )
 
 def render_to_pdf(template_src, context_dict=None, filename=None):

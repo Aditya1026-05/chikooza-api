@@ -15,6 +15,7 @@ class SignUpSerializer(serializers.Serializer):
     password = serializers.CharField(min_length=5, max_length=30)
     confirm_password = serializers.CharField(min_length=5, max_length=30)
     otp = serializers.IntegerField()
+    email_otp = serializers.IntegerField()
 
     class Meta:
         fields = [
@@ -25,6 +26,7 @@ class SignUpSerializer(serializers.Serializer):
             "password",
             "confirm_password",
             "otp",
+            "email_otp",
         ]
 
     def validate(self, data):
@@ -79,6 +81,14 @@ class VerifyOTPSerializer(serializers.Serializer):
     phone_regex = RegexValidator(regex="^[0-9]{10,12}$", message=phone_message)
     mobile_number = serializers.IntegerField(validators=[phone_regex])
     otp = serializers.IntegerField()
+
+    class Meta:
+        fields = "__all__"
+
+
+class VerifyEmailOTPSerializer(serializers.Serializer):
+    email = serializers.EmailField(max_length=255)
+    email_otp = serializers.IntegerField()
 
     class Meta:
         fields = "__all__"

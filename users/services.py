@@ -1,7 +1,7 @@
 from service_objects import services
 
-from common.base_models import Otp, PublicId, Users, UsersForgotPassword
-from common.utils import otp_delete_after_five_minutes, send_otp
+from common.base_models import EmailOtp, Otp, PublicId, Users, UsersForgotPassword
+from common.utils import deliver_email_otp, otp_delete_after_five_minutes, send_otp
 
 
 class SendOTPServices(services.Service):
@@ -19,6 +19,23 @@ class SendOTPServices(services.Service):
         return create_otp
 
 
+class SendEmailOTPServices(services.Service):
+    """
+    Service class to create email OTP model object.
+    """
+
+    def process(self):
+        email = self.data.get("email")
+        EmailOtp.objects.filter(email=email).delete()
+        create_otp = EmailOtp.objects.create(
+            public_id=PublicId.create_public_id(),
+            email=email,
+            otp=send_otp(email),
+        )
+        deliver_email_otp(email, create_otp.otp)
+        return create_otp
+
+
 class VerifyOtpService(services.Service):
     """
     Service class is used to verify otp.
@@ -33,6 +50,23 @@ class VerifyOtpService(services.Service):
             otp.save()
             return otp
         except Otp.DoesNotExist:
+            return None
+
+
+class VerifyEmailOtpService(services.Service):
+    """
+    Service class is used to verify email otp.
+    """
+
+    def process(self):
+        try:
+            otp = EmailOtp.objects.get(
+                email=self.data.get("email"), otp=self.data.get("otp")
+            )
+            otp.is_verify = True
+            otp.save()
+            return otp
+        except EmailOtp.DoesNotExist:
             return None
 
 

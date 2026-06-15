@@ -88,4 +88,7 @@ USERNAME_ALREADY_EXIST = (
     "Entered username is already register, please enter an another and unique username"
 )
 MOBILE_NUMBER_NOT_VERIFIED = "Please verify your mobile first."
+EMAIL_NOT_VERIFIED = "Please verify your email first."
+ACCOUNT_PENDING_APPROVAL = "Your account is pending admin approval."
+ACCOUNT_REJECTED = "Your account was not approved. Please contact support."
 FLOCK_VACCINATION_DELETE = "Flock Vaccination deleted successfully."

@@ -15,7 +15,10 @@ from chikooza.settings import HOSTNAME
 from common.base_models import Otp, Users
 from common.constant import (
     ACCOUNT_DEACTIVATES,
+    ACCOUNT_PENDING_APPROVAL,
+    ACCOUNT_REJECTED,
     ALREADY_REGISTERED,
+    EMAIL_NOT_VERIFIED,
     ERROR,
     INVALID_CREDENTIALS,
     INVALID_OTP,
@@ -27,6 +30,7 @@ from common.constant import (
     USERNAME_ALREADY_EXIST,
 )
 from common.utils import (
+    build_email_otp_response_payload,
     build_otp_response_payload,
     check_user_existence_for_validation,
     create_token,
@@ -48,15 +52,18 @@ from users.serializers import (
     SignUpSerializer,
     UpdateMobileSerializer,
     UpdateUserProfileSerializer,
+    VerifyEmailOTPSerializer,
     VerifyOTPSerializer,
 )
 from users.services import (
     ChangePasswordService,
     ForgetPasswordService,
     ResetPasswordServices,
+    SendEmailOTPServices,
     SendOTPServices,
     UpdateMobileService,
     UpdateUserProfileService,
+    VerifyEmailOtpService,
     VerifyOtpService,
 )
 from users.utils import create_user
@@ -87,11 +94,20 @@ class SendOTPView(viewsets.ViewSet):
                 create_otp = SendOTPServices.execute(
                     {"mobile_number": serializer.data["mobile_number"]}
                 )
+                create_email_otp = SendEmailOTPServices.execute(
+                    {"email": serializer.data["email"]}
+                )
+                otp_payload = build_otp_response_payload(
+                    create_otp.otp, create_otp.mobile_number
+                )
+                email_otp_payload = build_email_otp_response_payload(
+                    create_email_otp.otp, create_email_otp.email
+                )
                 return get_detail(
-                    "OTP created",
+                    "Verification codes created",
                     # U: OLD: {"otp": create_otp.otp, "mobile_number": create_otp.mobile_number}
-                    # U: NEW: hide OTP in production responses, keep it visible for local MVP setup.
-                    build_otp_response_payload(create_otp.otp, create_otp.mobile_number),
+                    # U: NEW: create both phone and email OTPs; hide OTPs outside local/debug setup.
+                    {**otp_payload, **email_otp_payload},
                     status.HTTP_201_CREATED,
                 )
 
@@ -105,14 +121,41 @@ class VerifyOTPView(viewsets.ViewSet):
     def create(self, request):
         serializer = VerifyOTPSerializer(data=request.data)
         if serializer.is_valid(raise_exception=True):
-            if Otp.objects.filter(
-                mobile_number=serializer.data["mobile_number"],
-                otp=serializer.data["otp"],
-            ).exists():
+            verified_otp = VerifyOtpService.execute(
+                {
+                    "mobile_number": serializer.data["mobile_number"],
+                    "otp": serializer.data["otp"],
+                }
+            )
+            if verified_otp:
                 # otp_delete_after_five_minutes(Otp.objects.get(mobile_number=serializer.data['mobile_number']))
                 return get_detail(
                     "Mobile Number Verified.",
                     {"mobile_number": serializer.data["mobile_number"]},
+                    status.HTTP_200_OK,
+                )
+            return Response({ERROR: INVALID_OTP}, status.HTTP_400_BAD_REQUEST)
+
+
+class VerifyEmailOTPView(viewsets.ViewSet):
+    """
+    Class to verify email otp.
+    """
+
+    @classmethod
+    def create(self, request):
+        serializer = VerifyEmailOTPSerializer(data=request.data)
+        if serializer.is_valid(raise_exception=True):
+            verified_otp = VerifyEmailOtpService.execute(
+                {
+                    "email": serializer.data["email"],
+                    "otp": serializer.data["email_otp"],
+                }
+            )
+            if verified_otp:
+                return get_detail(
+                    "Email verified.",
+                    {"email": serializer.data["email"]},
                     status.HTTP_200_OK,
                 )
             return Response({ERROR: INVALID_OTP}, status.HTTP_400_BAD_REQUEST)
@@ -137,11 +180,24 @@ class SignUpView(viewsets.ViewSet):
                         "otp": serializer_data["otp"],
                     }
                 )
+                verified_email_otp = VerifyEmailOtpService.execute(
+                    {
+                        "email": serializer_data["email"],
+                        "otp": serializer_data["email_otp"],
+                    }
+                )
                 if Otp.objects.filter(
                     mobile_number=serializer_data["mobile_number"]
                 ).exists():
-                    if verified_otp:
-                        return create_user(serializer_data, True)
+                    if verified_otp and verified_email_otp:
+                        return create_user(
+                            serializer_data,
+                            True,
+                            phone_verified=True,
+                            email_verified=True,
+                        )
+                    if verified_otp and not verified_email_otp:
+                        return validation_return_response("email_otp", INVALID_OTP)
                     return Response({ERROR: INVALID_OTP}, status.HTTP_400_BAD_REQUEST)
                 raise validation_return_response(
                     "mobile_number", MOBILE_NUMBER_NOT_VERIFIED
@@ -165,6 +221,25 @@ class LoginView(viewsets.ViewSet):
                 username = serializer_data.get("username")
                 password = serializer_data.get("password")
                 user = Users.objects.get(username=username)
+                if not user.is_phone_verified:
+                    return Response(
+                        {ERROR: MOBILE_NUMBER_NOT_VERIFIED},
+                        status.HTTP_406_NOT_ACCEPTABLE,
+                    )
+                if not user.is_email_verified:
+                    return Response(
+                        {ERROR: EMAIL_NOT_VERIFIED}, status.HTTP_406_NOT_ACCEPTABLE
+                    )
+                if user.approval_status == Users.APPROVAL_PENDING:
+                    return Response(
+                        {ERROR: ACCOUNT_PENDING_APPROVAL},
+                        status.HTTP_406_NOT_ACCEPTABLE,
+                    )
+                if user.approval_status == Users.APPROVAL_REJECTED:
+                    return Response(
+                        {ERROR: ACCOUNT_REJECTED},
+                        status.HTTP_406_NOT_ACCEPTABLE,
+                    )
                 if user.is_active is True:
                     validate_user = authenticate(username=username, password=password)
                     if validate_user is None:

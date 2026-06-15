@@ -26,6 +26,7 @@ const Register = () => {
   const [loading, setLoading] = useState(false);
   const [showOtp, setShowOtp] = useState(false);
   const [otp, setOtp] = useState("");
+  const [emailOtp, setEmailOtp] = useState("");
   const [otpError, setOtpError] = useState("");
   const [otpSuccess, setOtpSuccess] = useState(false);
   const [resendAfter, setResendAfter] = useState(0);
@@ -107,13 +108,15 @@ const Register = () => {
     try {
       const response = await axios.post(apiUrl("sendOtp"), payload(), config);
       const returnedOtp = response.data?.results?.otp;
+      const returnedEmailOtp = response.data?.results?.email_otp;
       setMessage(
-        returnedOtp
-          ? `OTP sent. Local MVP OTP is ${returnedOtp}.`
-          : "OTP sent. Check the delivery channel configured on the backend."
+        returnedOtp || returnedEmailOtp
+          ? `Verification sent. Local MVP phone OTP is ${returnedOtp || "hidden"} and email OTP is ${returnedEmailOtp || "hidden"}.`
+          : "Verification sent. Check the delivery channels configured on the backend."
       );
       setShowOtp(true);
       setOtp("");
+      setEmailOtp("");
       setOtpError("");
       setOtpSuccess(false);
       setResendAfter(55);
@@ -130,18 +133,32 @@ const Register = () => {
 
   const verifyOtp = async () => {
     const cleanOtp = otp.replace(/\D/g, "");
+    const cleanEmailOtp = emailOtp.replace(/\D/g, "");
     if (cleanOtp.length !== 6) {
-      setOtpError("Enter the 6 digit OTP.");
+      setOtpError("Enter the 6 digit phone OTP.");
+      return;
+    }
+    if (cleanEmailOtp.length !== 6) {
+      setOtpError("Enter the 6 digit email OTP.");
       return;
     }
 
     setLoading(true);
     setOtpError("");
     try {
-      await axios.post(apiUrl("signUp"), { ...payload(), otp: cleanOtp }, config);
+      const response = await axios.post(
+        apiUrl("signUp"),
+        { ...payload(), otp: cleanOtp, email_otp: cleanEmailOtp },
+        config
+      );
+      const approvalStatus = response.data?.results?.approval_status;
       setOtpSuccess(true);
-      setMessage("Registration complete. You can now login.");
-      window.setTimeout(() => navigate("/login"), 1200);
+      setMessage(
+        approvalStatus === "pending"
+          ? "Registration submitted. You can login after admin approval."
+          : "Registration complete. You can now login."
+      );
+      window.setTimeout(() => navigate("/login"), 1400);
     } catch (err) {
       setOtpError(
         err?.response?.data?.error ||
@@ -164,7 +181,7 @@ const Register = () => {
           </Link>
           <span className="auth-kicker">Register for free</span>
           <h1>Create farmer account.</h1>
-          <p>Enter farmer details. OTP verification happens before the account is created.</p>
+          <p>Enter farmer details. Phone and email verification happen before the account is created.</p>
           {error && <Alert color="danger">{error}</Alert>}
           {message && <Alert color="success">{message}</Alert>}
           <form className="auth-form" onSubmit={sendOtp}>
@@ -199,7 +216,7 @@ const Register = () => {
               <small className="form-error">{fieldErrors.cpassword}</small>
             </div>
             <Button className="ck-button" disabled={loading} type="submit">
-              {loading ? "Sending OTP..." : "Send OTP"}
+              {loading ? "Sending verification..." : "Send verification codes"}
             </Button>
           </form>
           <div className="auth-switch">
@@ -210,7 +227,7 @@ const Register = () => {
 
       <Modal className="otp-modal" show={showOtp} backdrop="static" keyboard={false} centered>
         <Modal.Header>
-          <Modal.Title>Verify OTP</Modal.Title>
+          <Modal.Title>Verify account</Modal.Title>
           <Button className="btn-close" color="transparent" aria-label="Close" onClick={() => setShowOtp(false)} />
         </Modal.Header>
         <Modal.Body>
@@ -218,10 +235,10 @@ const Register = () => {
             <Alert color="success">Registration complete. Redirecting to login...</Alert>
           ) : (
             <>
-              <p>Enter the 6 digit OTP for {cleanMobile}.</p>
+              <p>Enter the phone OTP for {cleanMobile} and email OTP for {formData.email.trim()}.</p>
               {otpError && <Alert color="danger">{otpError}</Alert>}
               <div className="form-field">
-                <label htmlFor="register-otp">OTP</label>
+                <label htmlFor="register-otp">Phone OTP</label>
                 <input
                   id="register-otp"
                   inputMode="numeric"
@@ -230,6 +247,18 @@ const Register = () => {
                   placeholder="123456"
                   type="text"
                   value={otp}
+                />
+              </div>
+              <div className="form-field">
+                <label htmlFor="register-email-otp">Email OTP</label>
+                <input
+                  id="register-email-otp"
+                  inputMode="numeric"
+                  maxLength={6}
+                  onChange={(event) => setEmailOtp(event.target.value)}
+                  placeholder="123456"
+                  type="text"
+                  value={emailOtp}
                 />
               </div>
             </>
@@ -241,7 +270,7 @@ const Register = () => {
               {resendAfter > 0 ? `Resend in ${resendAfter}s` : "Resend OTP"}
             </Button>
             <Button className="ck-button" disabled={loading} onClick={verifyOtp} type="button">
-              {loading ? "Verifying..." : "Verify and register"}
+              {loading ? "Verifying..." : "Verify and submit"}
             </Button>
           </Modal.Footer>
         )}

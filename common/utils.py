@@ -10,6 +10,7 @@ from django.core.exceptions import ImproperlyConfigured
 
 import requests
 from django.conf import settings
+from django.core.mail import send_mail
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.exceptions import ValidationError
@@ -319,6 +320,31 @@ def build_otp_response_payload(otp, mobile_number):
     if settings.DEBUG or getattr(settings, "CHIKOOZA_FIXED_OTP", None):
         payload["otp"] = otp
     return payload
+
+
+def build_email_otp_response_payload(otp, email):
+    payload = {"email": email}
+    # U: NEW: email verification mirrors phone OTP visibility rules for local MVP testing.
+    if settings.DEBUG or getattr(settings, "CHIKOOZA_FIXED_OTP", None):
+        payload["email_otp"] = otp
+    return payload
+
+
+def deliver_email_otp(email, otp):
+    """
+    Send email OTP when delivery is enabled. Local/dev keeps the OTP in the API
+    response so setup is possible without SMTP credentials.
+    """
+    if not getattr(settings, "CHIKOOZA_EMAIL_OTP_DELIVERY_ENABLED", False):
+        return False
+    send_mail(
+        "Verify your Chikooza email",
+        f"Your Chikooza email verification OTP is {otp}.",
+        getattr(settings, "DEFAULT_FROM_EMAIL", "no-reply@chikooza.local"),
+        [email],
+        fail_silently=False,
+    )
+    return True
 
 
 def otp_delete_after_five_minutes(otp_object):

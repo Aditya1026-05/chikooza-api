@@ -1,5 +1,6 @@
 import uuid
 
+from django.conf import settings
 from django.contrib.auth.models import User
 from django.db import models
 
@@ -55,6 +56,19 @@ class Otp(BaseModel):
     is_verify = models.BooleanField(default=False)
 
 
+class EmailOtp(BaseModel):
+    """
+    Model for storing email verification OTP.
+    """
+
+    class Meta:
+        db_table = "email_otp"
+
+    otp = models.IntegerField()
+    email = models.EmailField(max_length=255)
+    is_verify = models.BooleanField(default=False)
+
+
 class UsersForgotPassword(BaseModel):
     """
     Model for storing customer OTP.
@@ -79,7 +93,103 @@ class Users(User, BaseModel):
     class Meta:
         db_table = "users"
 
+    APPROVAL_PENDING = "pending"
+    APPROVAL_APPROVED = "approved"
+    APPROVAL_REJECTED = "rejected"
+    APPROVAL_STATUS_CHOICES = (
+        (APPROVAL_PENDING, "Pending"),
+        (APPROVAL_APPROVED, "Approved"),
+        (APPROVAL_REJECTED, "Rejected"),
+    )
+
     mobile_number = models.CharField(max_length=15)
+    is_email_verified = models.BooleanField(default=False)
+    is_phone_verified = models.BooleanField(default=False)
+    approval_status = models.CharField(
+        max_length=20,
+        choices=APPROVAL_STATUS_CHOICES,
+        default=APPROVAL_PENDING,
+    )
+    approval_note = models.TextField(blank=True)
+    approval_reviewed_at = models.DateTimeField(null=True, blank=True)
+    approval_reviewed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="reviewed_farmer_accounts",
+    )
+
+
+class RegistrationApprovalPolicy(BaseModel):
+    """
+    Admin-controlled policy for deciding whether new farmer accounts auto-activate.
+    """
+
+    class Meta:
+        db_table = "registration_approval_policy"
+        verbose_name = "registration approval policy"
+        verbose_name_plural = "registration approval policy"
+
+    MODE_AUTO = "auto"
+    MODE_MANUAL = "manual"
+    MODE_CHOICES = (
+        (MODE_AUTO, "Auto approve"),
+        (MODE_MANUAL, "Manual review"),
+    )
+
+    name = models.CharField(max_length=100, default="Default policy", unique=True)
+    mode = models.CharField(max_length=20, choices=MODE_CHOICES, default=MODE_AUTO)
+    require_email_verified = models.BooleanField(default=True)
+    require_phone_verified = models.BooleanField(default=True)
+    allowed_email_domains = models.TextField(
+        blank=True,
+        help_text="Optional comma-separated allow-list, for example gmail.com,outlook.com.",
+    )
+    blocked_email_domains = models.TextField(
+        blank=True,
+        help_text="Optional comma-separated block-list, for example mailinator.com.",
+    )
+    is_enabled = models.BooleanField(default=True)
+
+    @classmethod
+    def get_default(cls):
+        policy, _ = cls.objects.get_or_create(
+            name="Default policy",
+            defaults={
+                "public_id": PublicId.create_public_id(),
+                "mode": cls.MODE_AUTO,
+                "require_email_verified": True,
+                "require_phone_verified": True,
+                "is_enabled": True,
+            },
+        )
+        return policy
+
+    @staticmethod
+    def _domain_list(value):
+        return {item.strip().lower() for item in value.split(",") if item.strip()}
+
+    def should_auto_approve(self, email, phone_verified, email_verified):
+        if not self.is_enabled or self.mode != self.MODE_AUTO:
+            return False
+        if self.require_phone_verified and not phone_verified:
+            return False
+        if self.require_email_verified and not email_verified:
+            return False
+
+        email_domain = (email or "").split("@")[-1].lower()
+        allowed_domains = self._domain_list(self.allowed_email_domains)
+        blocked_domains = self._domain_list(self.blocked_email_domains)
+
+        if blocked_domains and email_domain in blocked_domains:
+            return False
+        if allowed_domains and email_domain not in allowed_domains:
+            return False
+        return True
+
+    def __str__(self):
+        return f"{self.name} ({self.mode})"
 
 
 class Address(BaseModel):
