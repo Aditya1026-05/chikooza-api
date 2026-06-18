@@ -4,10 +4,6 @@ from rest_framework.response import Response
 from rest_framework import viewsets, status
 from oauth2_provider.contrib.rest_framework import OAuth2Authentication
 
-# U: OLD: from .services import SQLAgentService, AISQLService
-# U: NEW: keep legacy services in aibot/services.py, but do not import them into
-# U: the active endpoint because that unnecessarily loads the old LangChain stack.
-# from .services import SQLAgentService, AISQLService
 from .modern_services import ChikoozaModernAgentService
 from .preprocessing import QueryPreprocessor
 from .log_utils import ChatLogHandler
@@ -53,11 +49,7 @@ class AIChatViewSet(viewsets.ViewSet):
                 "active_context": self._active_context_from_request(request),
             }
 
-            # U: OLD services kept for reference/rollback:
-            # service = SQLAgentService(user=request.user)
-            # service = AISQLService(user=request.user)
-            # U: NEW service ports the cloned BizBot routing/isolation approach
-            # U: into Chikooza and uses request.user as the only tenant source.
+            # The service scopes all farm-data access to request.user.
             service = ChikoozaModernAgentService(user=request.user)
             history = self._recent_history(request.user)
             result = service.query(
@@ -134,14 +126,8 @@ class AIChatViewSet(viewsets.ViewSet):
             logger.error(f"Database save failed: {str(e)}")
 
     def _recent_history(self, user):
-        # U: OLD: history only carried answer text, so a list containing several
-        # U: flocks could be mistaken for one selected flock.
-        # U: NEW: keep a bounded number of turns and include safe resolved ids so
-        # U: follow-ups such as "same farm" and "last one" reuse explicit context.
+        # Keep bounded context plus resolved ids for follow-up questions.
         try:
-            # U: NEW: keep exactly the last six chat turns by default.
-            # U: One turn becomes one user message plus one assistant message,
-            # U: so Farmer AI receives up to 12 recent messages as context.
             history_turns = int(os.getenv("AIBOT_HISTORY_TURNS", "6"))
         except ValueError:
             logger.warning("Invalid AIBOT_HISTORY_TURNS value; using 6 turns.")

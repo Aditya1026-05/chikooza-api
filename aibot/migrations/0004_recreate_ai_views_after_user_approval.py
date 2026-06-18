@@ -165,7 +165,5 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        # U: NEW: common.0002 drops SQLite AI views before altering users; recreate
-        # U: them afterward so the AI assistant keeps its tenant-scoped SQL views.
         migrations.RunSQL(FORWARD_SQL, REVERSE_SQL),
     ]

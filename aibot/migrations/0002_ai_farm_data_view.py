@@ -100,8 +100,6 @@ LEFT JOIN
 class Migration(migrations.Migration):
     dependencies = [
         ('aibot', '0001_initial'),
-        # U: OLD used "__latest__", which made this already-applied migration
-        # U: depend on future migrations and broke local migration history.
         ('farm', '0002_auto_20220630_0526'),
         ('flocks', '0004_flock_flock_bird'),
         ('purchase', '0001_initial'),

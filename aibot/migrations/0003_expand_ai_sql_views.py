@@ -247,7 +247,5 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        # U: NEW: expand tenant-scoped AI views so Farmer AI can answer richer
-        # U: SQL questions without touching raw app tables directly.
         migrations.RunSQL(FORWARD_SQL, REVERSE_SQL),
     ]

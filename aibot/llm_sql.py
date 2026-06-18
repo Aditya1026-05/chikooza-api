@@ -277,8 +277,6 @@ Return the JSON SQL plan now.
 
     def _history_text(self, history: list[dict]) -> str:
         parts = []
-        # U: OLD: only eight messages were sent, which dropped part of a
-        # U: six-turn chat. Keep six user turns + six assistant turns.
         for item in history[-16:]:
             role = item.get("role", "user")
             content = str(item.get("content", "")).strip()
@@ -312,12 +310,7 @@ class EntityResolution:
 
 
 class ChikoozaEntityResolver:
-    """
-    U: NEW: Resolve rough farmer language such as "flock 1", "first flock", or
-    U: a public id into the authenticated farmer's actual farm/flock before the
-    U: LLM builds SQL. This prevents the LLM from treating "flock 1" as a raw
-    U: database id that may not exist for this farmer.
-    """
+    """Resolve farmer language like "first flock" to tenant-scoped records."""
 
     FLOCK_NUMBER_PATTERN = re.compile(r"\bflock\s*(?:id|#)?\s*(\d+)\b")
     FARM_NUMBER_PATTERN = re.compile(r"\bfarm\s*(?:id|#)?\s*(\d+)\b")
@@ -553,8 +546,6 @@ class ChikoozaEntityResolver:
             return False
         if normalized_name == query:
             return True
-        # U: NEW: avoid matching one-letter flock names such as "a" inside
-        # U: normal sentences like "selected farm and flock".
         if len(normalized_name) < 3:
             return bool(
                 re.search(
@@ -723,13 +714,7 @@ class ChikoozaEntityResolver:
 
 
 class ChikoozaLLMTextToSQLService:
-    """
-    U: Groq-backed Farmer AI SQL service adapted from the separate chatbot repo.
-    U: The live class has no old deterministic answer fallback. Common,
-    U: high-volume farmer questions can still use tenant-safe SQL templates to
-    U: reduce Groq planning calls, but answers are built from executed SQL rows
-    U: plus Groq formatting, not the old rule-answer engine.
-    """
+    """Groq-backed Text-to-SQL service for tenant-scoped Farmer AI answers."""
 
     MAX_SQL_ATTEMPTS = 2
 
@@ -745,9 +730,6 @@ class ChikoozaLLMTextToSQLService:
         self.prompt_builder = ChikoozaSQLPromptBuilder()
         self.entity_resolver = entity_resolver or ChikoozaEntityResolver(user=user)
         self.client = groq_client or GroqChatClient(
-            # U: NEW: keep the private Farmer AI pinned to the approved 8B
-            # U: Groq model so SQL planning and answer formatting are tested
-            # U: against one predictable production model.
             model=AIBOT_SQL_DEFAULT_MODEL,
             fallback_model=AIBOT_SQL_DEFAULT_MODEL,
             timeout=float(os.getenv("AIBOT_SQL_TIMEOUT", "30")),
@@ -917,11 +899,6 @@ class ChikoozaLLMTextToSQLService:
         # --- Priority -1: Compound / Jumbled queries fall through to LLM ---
         if self._is_compound_query(query):
             return None
-
-        # U: NEW: These are not the old deterministic answer rules. They are
-        # U: safety-first SQL plan shortcuts for common farmer questions that
-        # U: llama-3.1-8b-instant was repeatedly planning incorrectly. Groq
-        # U: still formats the executed SQL rows into natural language.
         if self._asks_current_workspace(query):
             active_farm_id, active_flock_id = self._active_context_ids(entity_context)
             if active_flock_id:
@@ -942,9 +919,6 @@ class ChikoozaLLMTextToSQLService:
         context_flock_id = self._context_flock_id(entity_context)
 
         # --- Priority 0.5: Daily metric extremes / follow-up date questions ---
-        # U: "when is feed highest", "mortality lowest", "FCR lowest and highest"
-        # U: must use daily rows for the current/resolved flock. Do not let broad
-        # U: "highest/lowest" scope logic turn these into account aggregates.
         daily_metric_column = self._daily_time_series_metric(query)
         if self._asks_daily_time_series(query) and daily_metric_column:
             return self._daily_metric_extremes_plan(
@@ -958,9 +932,6 @@ class ChikoozaLLMTextToSQLService:
             )
 
         # --- Priority 0.6: Best/worst performing flock rankings ---
-        # U: These are financial/performance rankings and must not be answered by
-        # U: a generic "flock performance" table, because the LLM has previously
-        # U: hallucinated profit values from that table.
         performance_extreme = self._performance_extreme_kind(query)
         if performance_extreme == "best":
             return self._flock_performance_ranking_plan(
@@ -992,7 +963,6 @@ class ChikoozaLLMTextToSQLService:
             return self._all_flocks_performance_plan()
 
         # --- Priority 3: FCR and Weight (before flock_list which also matches 'my flocks') ---
-        # U: Skip aggregate plans when the user asks for specific days/dates.
         if self._asks_avg_fcr(query) and not self._asks_daily_time_series(query):
             return self._avg_fcr_plan(flock_id=context_flock_id if not self._asks_all_scope(query, history) else None)
 
@@ -1091,9 +1061,6 @@ class ChikoozaLLMTextToSQLService:
             )
 
         # --- Priority 10: Simple aggregate metrics ---
-        # U: Time-series / which-days questions are handled above by
-        # U: _daily_metric_extremes_plan. Keep this flag only to prevent any
-        # U: remaining aggregate fall-through for unsupported phrasing.
         is_time_series = self._asks_daily_time_series(query)
 
         if self._asks_current_birds(query) and not is_time_series:
@@ -1116,9 +1083,6 @@ class ChikoozaLLMTextToSQLService:
     def _is_generic_flock_followup(self, query: str) -> bool:
         normalized = query.strip("? .!").lower()
         # Exclude queries that have specific metric/topic keywords, because those should go to their dedicated plans.
-        # U: "flock"/"flocks"/"batch"/"batches" are also excluded: if the query explicitly names the entity
-        # U: (e.g. "show all flocks", "list all my flocks"), it must route to the flock-list plan,
-        # U: NOT inherit the previous topic (e.g. mortality) via the generic follow-up chain.
         if re.search(
             r"\b(?:daily|feed|fcr|weight|mortality|died|dead|death|sale|sales|purchase|purchases|breed|species|farm|farms|flock|flocks|batch|batches|performance|doing|improve|advice)\b",
             normalized,
@@ -1475,9 +1439,6 @@ class ChikoozaLLMTextToSQLService:
             )
         )
 
-    # U: NEW detector methods — cover all high-frequency farmer question types
-    # U: so they never reach the LLM when a safe plan already exists.
-
     def _asks_performance(self, query: str) -> bool:
         """Detect performance/health/stats questions that are NOT improvement advice."""
         has_performance = bool(
@@ -1512,9 +1473,6 @@ class ChikoozaLLMTextToSQLService:
         )
         if not has_flock or not has_performance:
             return None
-        # U: Multi-part comparison questions need the full performance table so
-        # U: the user can see best/worst/middle together. Single best/worst
-        # U: questions use the exact SQL ranking plan below.
         has_best = bool(re.search(r"\b(?:best|top|highest|most)\b", query))
         has_worst = bool(re.search(r"\b(?:worst|poorest|lowest|least|bottom|bad|weakest)\b", query))
         if (has_best and has_worst) or re.search(r"\b(?:middle|mid|zone|compare|comparison|ranking)\b", query):
@@ -1693,7 +1651,6 @@ class ChikoozaLLMTextToSQLService:
         return has_time_ref and has_daily_metric
 
     def _daily_time_series_metric(self, query: str) -> str | None:
-        # U: Order matters: FCR contains the word "feed" conceptually, so detect it first.
         if re.search(r"\b(?:fcr|feed\s+conversion|conversion\s+ratio|feed\s+conversion\s+ratio)\b", query):
             return "fcr"
         if re.search(r"\b(?:avg\s+weight|average\s+weight|bird\s+weight|body\s+weight|weight|weights)\b", query):
@@ -2370,9 +2327,6 @@ class ChikoozaLLMTextToSQLService:
             result_type="table",
         )
 
-    # U: NEW: all the deterministic plan builder methods added below.
-    # U: These guarantee correct SQL for common farmer questions.
-
     def _all_flocks_performance_plan(self) -> SQLPlan:
         """Performance summary for all farmer's flocks: feed, mortality, weight, FCR, sales, purchases, profit/loss."""
         return self._plan(
@@ -2878,11 +2832,6 @@ class ChikoozaLLMTextToSQLService:
         owner_param_count = sum(1 for param in payload.params if param == OWNER_PARAM)
 
         if placeholder_count != len(payload.params):
-            # U: llama-3.1-8b sometimes copies an owner-only aggregate SQL
-            # U: pattern correctly but forgets to repeat OWNER_PARAM for every
-            # U: owner_id placeholder. This repair is intentionally narrow:
-            # U: it only applies when every placeholder is an owner filter, so
-            # U: it cannot invent missing farm/flock/name/date parameters.
             if placeholder_count == owner_filter_count and owner_filter_count > 0:
                 payload = LLMPlanPayload(
                     sql=payload.sql,
@@ -2954,9 +2903,6 @@ If the question is a comparison or ranking request, write a detailed text analys
                 "Groq answer formatting failed; returning safe unformatted result.",
                 exc_info=True,
             )
-            # U: NEW: do not silently fall back to the old deterministic answer
-            # U: formatter. The response still includes rows/display payload, so
-            # U: the frontend can render the data without mixing approaches.
             if rows:
                 return (
                     "I found the matching farm records, but I could not format the "
@@ -3037,8 +2983,6 @@ If the question is a comparison or ranking request, write a detailed text analys
                 title_keys=("flock_name",),
                 field_keys=("farm_name", "breed_name"),
             )
-
-        # U: NEW: Flock performance table.
         if plan.metric == "flock_performance":
             return self._table_payload(
                 title="Flock performance",
@@ -3106,8 +3050,6 @@ If the question is a comparison or ranking request, write a detailed text analys
                     "profit_loss",
                 ),
             )
-
-        # U: NEW: Summary/scalar metrics — show as a simple summary card.
         if plan.metric in {
             "farm_record_summary", "total_sales", "total_purchases",
             "mortality", "feed_consumed", "average_fcr", "average_weight",
@@ -3351,10 +3293,6 @@ If the question is a comparison or ranking request, write a detailed text analys
             return "You're welcome. Ask me whenever you need farm records."
         if re.match(r"^(ok|okay)[!. ]*$", query):
             return "Okay. Ask your next farm question whenever you want."
-        # U: NEW: catch "okay next" / "okay now" / "okay then" prefixes that are
-        # U: just transition phrases — NOT standalone conversational messages.
-        # U: They should not produce a conversation-only answer; the rest of the
-        # U: question text is the actual query and will be handled by SQL planner.
         if re.match(r"^(ok|okay)(?:\s+(?:next|now|then|so|well|fine))+[!., ]*$", query):
             return "Okay. Ask your next farm question whenever you want."
         if re.match(r"^(nothing more|no more|that's all|thats all|all good|done|stop|enough)[!. ]*$", query):
