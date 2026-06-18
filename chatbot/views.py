@@ -1,16 +1,16 @@
-# MV-2025-07-04-<6>  STARTS
-from django.http import JsonResponse
-from django.views.decorators.csrf import csrf_exempt
-from .models import ChatLog
-from .public_assistant import PublicSiteAssistant
-from .services import RAGService
-from .preprocessing import QueryPreprocessor
 import json
 import time
 import uuid
 
-# OLD: rag_service = RAGService()
-# NEW: lazy-load RAG only when /chat/ is called, so chatbot setup does not block API startup.
+from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
+
+from .models import ChatLog
+from .preprocessing import QueryPreprocessor
+from .public_assistant import PublicSiteAssistant
+from .services import RAGService
+
+# Heavy chatbot services are created only when a request needs them.
 rag_service = None
 public_site_assistant = None
 preprocessor = QueryPreprocessor()
@@ -46,16 +46,11 @@ def chat_api(request):
         if not isinstance(chat_history, list):
             chat_history = []
         prompt_type = data.get("prompt_type", "qa")
-        # U: OLD: /chat/ only supported the legacy poultry RAG assistant.
-        # U: NEW: keep legacy RAG mode available, and add a public site mode
-        # U: for unauthenticated homepage visitors.
         chat_mode = (
             data.get("mode") or data.get("assistant") or data.get("chat_mode") or "rag"
         )
         chat_mode = str(chat_mode).strip().lower()
 
-        # U: OLD: empty queries reached the RAG service and failed later.
-        # U: NEW: reject bad input before loading FAISS/Ollama.
         if not query_text:
             return JsonResponse({"error": "Query is required"}, status=400)
 
@@ -69,8 +64,6 @@ def chat_api(request):
             result = {
                 "result": site_result.result,
                 "source_documents": [],
-                # U: NEW: public site chat is RAG-first, so expose compact source
-                # U: metadata for the UI without returning full PDF chunks.
                 "sources": site_result.sources,
                 "provider": site_result.provider,
                 "model": site_result.model,
@@ -78,8 +71,7 @@ def chat_api(request):
                 "display": site_result.display,
             }
         elif chat_mode == "rag":
-            # OLD: result = rag_service.query(clean_query, prompt_type)
-            # NEW: use lazy-loaded service so missing local LLM/model setup affects only /chat/.
+            # Legacy Ollama/FAISS mode remains available for direct `/chat/` callers.
             rag = get_rag_service()
             result = rag.query(clean_query, prompt_type)
             result["provider"] = "ollama-rag"
@@ -119,8 +111,6 @@ def chat_api(request):
             "processing_time": processing_time,
             "mode": chat_mode,
             "provider": result.get("provider", "unknown"),
-            # U: OLD: 'model': 'llama3.2:3b'
-            # U: NEW: record the configured runtime model.
             "model": result.get("model", "unknown"),
             "fallback": result.get("fallback", False),
             "sources": result.get("sources", []),
@@ -138,13 +128,9 @@ def chat_api(request):
                 "fallback": result.get("fallback", False),
                 "sources": result.get("sources", []),
                 "display": result.get("display", {}),
-                # 'context': serializable_context
             }
         )
     except ValueError as e:
         return JsonResponse({"error": str(e)}, status=400)
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=500)
-
-
-# MV-2025-07-04-<6>  ENDS

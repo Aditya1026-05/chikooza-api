@@ -1,9 +1,7 @@
-# U: OLD: from langchain.prompts import PromptTemplate
-# U: NEW: LangChain 1.x exposes prompt templates from langchain_core.
 from langchain_core.prompts import PromptTemplate
 
 PROMPTS = {
-    'qa': PromptTemplate(
+    "qa": PromptTemplate(
         input_variables=["context", "question"],
         template="""You are an expert assistant. Use only the provided context to answer questions accurately.
 
@@ -19,9 +17,9 @@ Instructions:
 - If information is not available, say "I don't have enough information to answer this"
 - Focus on practical, actionable advice
 
-Answer:"""
+Answer:""",
     ),
-    'follow_up': PromptTemplate(
+    "follow_up": PromptTemplate(
         input_variables=["context", "question"],
         template="""Based on the context provided, suggest relevant follow-up questions for: {question}
 
@@ -33,9 +31,9 @@ Instructions:
 - Focus on implementation, costs, or next steps
 - Make questions specific and actionable
 
-Follow-up Questions:"""
+Follow-up Questions:""",
     ),
-    'summary': PromptTemplate(
+    "summary": PromptTemplate(
         input_variables=["context", "question"],
         template="""Provide a brief summary for: {question}
 
@@ -47,9 +45,9 @@ Instructions:
 - Include only the most important points
 - Use simple, clear language
 
-Summary:"""
+Summary:""",
     ),
-    'clarification': PromptTemplate(
+    "clarification": PromptTemplate(
         input_variables=["context", "question"],
         template="""Clarify and explain the following question in simple terms: {question}
 
@@ -62,6 +60,6 @@ Instructions:
 - Use examples when helpful
 - If the question is unclear, ask for more details
 
-Clarification:"""
-    )
+Clarification:""",
+    ),
 }

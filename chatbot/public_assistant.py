@@ -276,10 +276,10 @@ class PublicAssistantResponse:
 
 class PublicRagRetriever:
     """
-    U: NEW: public-site retriever that uses the local chatbot knowledge base
-    U: before any LLM call. It now prefers curated Markdown/text chunks with
-    U: cached TF-IDF cosine ranking, then optionally falls back to FAISS and
-    U: lexical ranking over the legacy index.pkl document chunks.
+    Retrieve public Chikooza and poultry context before any LLM call.
+
+    Curated Markdown chunks are ranked first with local TF-IDF cosine scoring.
+    FAISS remains optional for environments that explicitly enable it.
     """
 
     def __init__(
@@ -351,14 +351,9 @@ class PublicRagRetriever:
 
         chunks.extend(self._retrieve_text_vectors(search_text, query_terms))
 
-        # U: OLD: FAISS was the first path and could block while loading a
-        # U: local HuggingFace model. Keep it optional for environments that
-        # U: explicitly want the legacy semantic index.
         if self.retrieval_backend in {"faiss", "hybrid"}:
             chunks.extend(self._retrieve_with_faiss(search_text, query_terms))
 
-        # U: FAISS can fail locally if the embedding model is unavailable. Keep
-        # U: public chat RAG-based by ranking the same local docstore text.
         if not chunks:
             chunks = self._retrieve_lexical(search_text, query_terms)
 
@@ -437,9 +432,7 @@ class PublicRagRetriever:
         query_terms: set[str],
     ) -> list[PublicRagChunk]:
         """
-        U: NEW: fast local cosine retriever for the public chatbot. It uses
-        U: cleaned Markdown/text chunks first, so common homepage questions do
-        U: not wait for an external embedding model to load.
+        Rank local Markdown/text chunks without loading an external embedding model.
         """
         index = self._build_text_vector_index()
         if not index:
@@ -548,8 +541,6 @@ class PublicRagRetriever:
         for item in PUBLIC_PRODUCT_CHUNKS:
             score = self._lexical_score(query_terms, item["text"], item)
             if score >= self.min_lexical_score or "chikooza" in query_terms:
-                # U: NEW: public product answers should keep Chikooza product
-                # U: context ahead of generic poultry PDF chunks.
                 if self._is_product_question(query_terms):
                     score += 0.8
                 chunks.append(
@@ -844,9 +835,10 @@ class PublicRagRetriever:
 
 class PublicSiteAssistant:
     """
-    U: NEW: public website assistant for unauthenticated visitors.
-    U: It is retrieval-first: local public RAG context is selected before Groq
-    U: is allowed to generate a natural-language answer.
+    Public website assistant for unauthenticated visitors.
+
+    The assistant selects local public RAG context before asking Groq to produce
+    the final natural-language answer.
     """
 
     def __init__(
@@ -855,10 +847,6 @@ class PublicSiteAssistant:
         retriever: PublicRagRetriever | None = None,
         groq_client: GroqChatClient | None = None,
     ):
-        # U: OLD direct path kept for review:
-        # U: if provider == "groq": return self._answer_with_groq(query_text)
-        # U: if provider == "ollama": return self._answer_with_ollama(query_text)
-        # U: NEW path below always retrieves public knowledge-base context first.
         self.provider = (
             os.getenv("CHIKOOZA_PUBLIC_CHAT_PROVIDER", "auto").strip().lower()
         )
@@ -1042,9 +1030,7 @@ class PublicSiteAssistant:
         sources: list[dict[str, Any]],
     ) -> dict[str, Any]:
         """
-        U: NEW: keep the public chatbot response readable in the small landing
-        U: page widget. The raw answer remains available, but the frontend can
-        U: render this normalized structure instead of one long text block.
+        Normalize chatbot answers for compact rendering in the landing widget.
         """
         lines = [line.strip() for line in str(answer).splitlines() if line.strip()]
         summary_parts: list[str] = []
