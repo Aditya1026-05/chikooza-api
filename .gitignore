@@ -8,6 +8,7 @@
 /chikooza_env/
 .venv/
 /images/
+mdfolder
 
 # SSL certificates
 *.crt
