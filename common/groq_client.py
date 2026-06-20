@@ -20,11 +20,10 @@ class GroqChatResult:
 
 class GroqChatClient:
     """
-    U: Shared Groq client for Chikooza AI features.
-    U: The previous public chatbot used only GROQ_API_KEY directly. This client
-    U: adds a comma-separated GROQ_API_KEYS pool plus legacy key names and
-    U: rotates keys when a key is rate-limited, invalid, timed out, or the API
-    U: is temporarily unavailable.
+    Shared Groq client with key rotation and optional model fallback.
+
+    Keys rotate when a request is rate-limited, invalid, timed out, or the API
+    is temporarily unavailable.
     """
 
     RETRYABLE_STATUS_CODES = {401, 403, 408, 409, 425, 429, 500, 502, 503, 504}

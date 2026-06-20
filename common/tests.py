@@ -55,9 +55,9 @@ class OtpResponsePayloadTests(SimpleTestCase):
 
 class AuthenticationErrorMiddlewareTests(SimpleTestCase):
     def test_handles_plain_http_response_without_drf_data(self):
-        # U: OLD: OAuth HttpResponse errors crashed because middleware assumed `.data`.
-        # U: NEW: middleware converts plain auth responses into JSON safely.
-        middleware = AuthenticationErrorMessage(lambda request: HttpResponse('{"error": "invalid_client"}', status=401))
+        middleware = AuthenticationErrorMessage(
+            lambda request: HttpResponse('{"error": "invalid_client"}', status=401)
+        )
         response = middleware(object())
 
         self.assertEqual(response.status_code, 401)

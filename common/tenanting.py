@@ -1,14 +1,12 @@
 def is_admin_request(request):
     """
-    U: NEW: central admin/staff gate for tenant-scoped API querysets.
-    U: Normal farmers see only their own rows; staff/superusers can inspect all
-    U: rows through the API when supervisor/admin control is needed.
+    Return whether the request may bypass normal farmer tenant scoping.
+
+    Normal farmers see only their own rows. Staff and superusers may inspect
+    all rows through API endpoints that explicitly use this gate.
     """
     user = getattr(request, "user", None)
-    return bool(
-        getattr(user, "is_superuser", False)
-        or getattr(user, "is_staff", False)
-    )
+    return bool(getattr(user, "is_superuser", False) or getattr(user, "is_staff", False))
 
 
 def request_account_user(request):
