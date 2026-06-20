@@ -1,4 +1,3 @@
-// MV-2025-07-05-<3>  STARTS
 import React, { useLayoutEffect, useRef, useState } from 'react';
 import PropTypes from 'prop-types';
 import { apiPath } from '../../Constants';
@@ -111,12 +110,7 @@ const PublicUserMessage = ({ text }) => (
   </div>
 );
 
-/**
- * U: NEW: custom controlled public chatbot panel.
- * U: The old react-chatbot-kit widget forced scroll-to-bottom on render, which
- * U: made reading previous messages difficult. This component only auto-scrolls
- * U: when the user is already near the bottom or just sent a message.
- */
+/** Public chatbot that preserves the reader's position unless they are near the latest message. */
 const ChikoozaChatbot = ({ defaultOpen = false, alwaysVisible = true }) => {
   const [showChatbot, setShowChatbot] = useState(defaultOpen);
   const [messages, setMessages] = useState([INITIAL_MESSAGE]);
@@ -311,4 +305,3 @@ ChikoozaChatbot.propTypes = {
 };
 
 export default ChikoozaChatbot;
-// MV-2025-07-05-<3>  ENDS
