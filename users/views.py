@@ -105,8 +105,6 @@ class SendOTPView(viewsets.ViewSet):
                 )
                 return get_detail(
                     "Verification codes created",
-                    # U: OLD: {"otp": create_otp.otp, "mobile_number": create_otp.mobile_number}
-                    # U: NEW: create both phone and email OTPs; hide OTPs outside local/debug setup.
                     {**otp_payload, **email_otp_payload},
                     status.HTTP_201_CREATED,
                 )
@@ -128,7 +126,6 @@ class VerifyOTPView(viewsets.ViewSet):
                 }
             )
             if verified_otp:
-                # otp_delete_after_five_minutes(Otp.objects.get(mobile_number=serializer.data['mobile_number']))
                 return get_detail(
                     "Mobile Number Verified.",
                     {"mobile_number": serializer.data["mobile_number"]},
@@ -246,8 +243,6 @@ class LoginView(viewsets.ViewSet):
                         raise ValidationError(
                             {ERROR: INVALID_CREDENTIALS}, status.HTTP_400_BAD_REQUEST
                         )
-                    # U: OLD: login assumed an old unhashed OAuth app secret already existed.
-                    # U: NEW: create or rotate the user's OAuth app so Django OAuth Toolkit 3 works.
                     user_detail = get_or_create_oauth_application(user)
                     token = create_token(
                         user.username,
@@ -363,8 +358,6 @@ class ResetPasswordView(viewsets.ViewSet):
                     )
                     return get_detail(
                         "OTP created to reset password",
-                        # U: OLD: {"otp": create_otp.otp, "mobile_number": serializer.data["mobile_number"]}
-                        # U: NEW: hide OTP in production responses, keep it visible for local MVP setup.
                         build_otp_response_payload(
                             create_otp.otp,
                             serializer.data["mobile_number"],
@@ -443,8 +436,6 @@ class SendOtpForUpdateMobileView(viewsets.ViewSet):
             )
             return get_detail(
                 "OTP created to update mobile_number",
-                # U: OLD: {"otp": create_otp.otp, "mobile_number": create_otp.mobile_number}
-                # U: NEW: hide OTP in production responses, keep it visible for local MVP setup.
                 build_otp_response_payload(create_otp.otp, create_otp.mobile_number),
                 status.HTTP_201_CREATED,
             )

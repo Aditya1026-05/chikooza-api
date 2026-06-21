@@ -1,7 +1,6 @@
 import datetime
 import re
 
-# Create your views here.
 from oauth2_provider.contrib.rest_framework import (
     OAuth2Authentication,
     TokenMatchesOASRequirements,
@@ -15,9 +14,12 @@ from common.constant import (
     FLOCK_DOES_NOT_EXIST,
     FLOCK_VACCINATION_DELETE,
     FLOCK_VACCINATION_DOES_NOT_EXIST,
+    DARKNESS_TIME_DOES_NOT_EXIST,
+    FEED_AVAILABILITY_DOES_NOT_EXIST,
     PURCHASE_DOES_NOT_EXIST,
-    VACCINES_DOES_NOT_EXIST, DARKNESS_TIME_DOES_NOT_EXIST, FEED_AVAILABILITY_DOES_NOT_EXIST,
+    VACCINES_DOES_NOT_EXIST,
 )
+from common.tenanting import is_admin_request, request_account_user
 from common.utils import (
     check_dailydata_existence_for_validation,
     delete_response,
@@ -26,8 +28,13 @@ from common.utils import (
     list_response,
     success_response,
 )
-from common.tenanting import is_admin_request, request_account_user
-from dailydata.models import DailyData, FlockVaccination, Vaccines, DarknessTime, FeedAvailability
+from dailydata.models import (
+    DailyData,
+    DarknessTime,
+    FeedAvailability,
+    FlockVaccination,
+    Vaccines,
+)
 from dailydata.serializers import (
     CreateDailyDataSerializer,
     CreateFlockVaccinationSerializer,
@@ -36,11 +43,13 @@ from dailydata.serializers import (
     DailyDataGetSerializer,
     DailyDataMortalitySerializer,
     GetFlockVaccinationSerializer,
+    GetDailyDataListSerializer,
+    GetDarknessTimeListSerializer,
+    GetFeedAvailabilityListSerializer,
     GetVaccinesSerializer,
     ListDailyDataSerializer,
     UpdateDailyDataSerializer,
-    YesterdayDailyDataGetSerializer, GetDailyDataListSerializer, GetDarknessTimeListSerializer,
-    GetFeedAvailabilityListSerializer,
+    YesterdayDailyDataGetSerializer,
 )
 from dailydata.services import (
     CreateDailyDataService,
@@ -48,48 +57,62 @@ from dailydata.services import (
     UpdateDailyDataService,
 )
 from flocks.models import Flock
-from flocks.serializers import GetDailyDataDetailSerializer
+from flocks.utils import prepare_daily_data_response
 from purchase.models import Purchase
 from sales.models import Sales
 from users.utils import render_to_pdf
 
-#MV-23-6-25- 17-10 import function prepare_daily_data_response
-from flocks.utils import prepare_daily_data_response
-#MV-23-6-25- 17-10 change end
-
 
 def _flock_queryset_for_request(request):
-    """
-    U: Scope flock records to the authenticated farmer unless an admin explicitly requests data.
-    """
+    """Return flocks visible to the current request."""
     if is_admin_request(request):
         return Flock.objects.all()
     return Flock.objects.filter(user=request_account_user(request))
 
 
 def _dailydata_queryset_for_request(request):
-    """
-    U: Scope daily data rows to the authenticated farmer unless an admin explicitly requests data.
-    """
+    """Return daily data rows visible to the current request."""
     if is_admin_request(request):
         return DailyData.objects.all()
     return DailyData.objects.filter(user=request_account_user(request))
 
 
 def _flock_vaccination_queryset_for_request(request):
-    """
-    U: Scope flock vaccination rows through the authenticated farmer's flocks.
-    """
+    """Return flock vaccinations visible to the current request."""
     if is_admin_request(request):
         return FlockVaccination.objects.all()
     return FlockVaccination.objects.filter(flock__user=request_account_user(request))
 
 
+def _serialize_daily_data_rows(daily_data, bird_count_key="bird_count"):
+    """Serialize daily rows with the calculated values used by reports and charts."""
+    result = []
+    for entry in daily_data:
+        enriched = prepare_daily_data_response(entry, entry.flock)
+        row = GetDailyDataListSerializer(entry).data
+        row.update(
+            {
+                bird_count_key: enriched["bird_count"],
+                "total_feed_purchased": enriched["total_feed_purchased"],
+                "total_feed_consumed": enriched["total_feed_consumed"],
+                "feed_stock": enriched["feed_stock"],
+                "average_feed_per_bird": enriched["average_feed_per_bird"],
+                "total_average_feed": enriched["total_average_feed"],
+                "total_mortality_percentage": enriched[
+                    "total_mortality_percentage"
+                ],
+                "cum_mort": enriched["cum_mort"],
+                "fcr": enriched["fcr"],
+                "total_fcr": enriched["total_fcr"],
+                "remarks": enriched["remarks"],
+            }
+        )
+        result.append(row)
+    return result
+
 
 class DailyDataView(viewsets.ViewSet):
-    """
-    Class to create daily data object.
-    """
+    """Create, retrieve, and update daily flock data."""
 
     authentication_classes = [OAuth2Authentication]
     permission_classes = [TokenMatchesOASRequirements]
@@ -107,8 +130,6 @@ class DailyDataView(viewsets.ViewSet):
             serializer = CreateDailyDataSerializer(data=request.data)
             if serializer.is_valid(raise_exception=True):
                 serializer_data = serializer.validated_data
-                # U: OLD: duplicate check and create trusted flock_public_id globally.
-                # U: NEW: resolve the flock through the authenticated farmer first.
                 flock = _flock_queryset_for_request(request).get(
                     public_id=serializer_data["flock_public_id"]
                 )
@@ -139,44 +160,35 @@ class DailyDataView(viewsets.ViewSet):
             if serializer.is_valid(raise_exception=True):
                 serializer_data = serializer.validated_data
                 flock_public_id = serializer_data["flock"].get("public_id")
-                #flock_date = Flock.objects.get(public_id=flock_public_id).hatch_date
-                
-#MV-23-6-25- 17-10 get flock and hatch date
-                # U: OLD: Flock.objects.get(public_id=flock_public_id)
-                flock = _flock_queryset_for_request(request).get(public_id=flock_public_id)
+                flock = _flock_queryset_for_request(request).get(
+                    public_id=flock_public_id
+                )
                 flock_date = flock.hatch_date
-#MV-23-6-25- 17-10 change end
 
                 date = serializer_data["date"]
                 number_of_days = (date - flock_date).days
                 yesterday = date - datetime.timedelta(days=1)
-                
+
                 daily_data_queryset = _dailydata_queryset_for_request(request)
                 if daily_data_queryset.filter(flock=flock, date=yesterday).exists():
                     yesterday_daily_data = daily_data_queryset.get(
                         flock=flock, date=yesterday
                     )
-                    yesterday_daily_data_result = YesterdayDailyDataGetSerializer(yesterday_daily_data).data
-                    
-#MV-23-6-25- 17-10 update with calculated values
-                    yesterday_calculated = prepare_daily_data_response(yesterday_daily_data, flock)
+                    yesterday_daily_data_result = YesterdayDailyDataGetSerializer(
+                        yesterday_daily_data
+                    ).data
+                    yesterday_calculated = prepare_daily_data_response(
+                        yesterday_daily_data, flock
+                    )
                     yesterday_daily_data_result.update(yesterday_calculated)
-#MV-23-6-25- 17-10 change end
-
                 else:
                     yesterday_daily_data_result = {}
-                    
+
                 if daily_data_queryset.filter(flock=flock, date=date).exists():
-                    dailydata = daily_data_queryset.get(
-                        flock=flock, date=date
-                    )
+                    dailydata = daily_data_queryset.get(flock=flock, date=date)
                     result = DailyDataGetSerializer(dailydata).data
-                    
-#MV-23-6-25- 17-10 update with calculated values
                     today_calculated = prepare_daily_data_response(dailydata, flock)
                     result.update(today_calculated)
-#MV-23-6-25- 17-10 change end
-
                 else:
                     result = {}
                 return get_detail(
@@ -190,11 +202,10 @@ class DailyDataView(viewsets.ViewSet):
                 )
         except Flock.DoesNotExist:
             return Response({ERROR: FLOCK_DOES_NOT_EXIST}, status.HTTP_404_NOT_FOUND)
-        
+
     @classmethod
     def partial_update(cls, request, pk):
         try:
-            # U: OLD: DailyData.objects.get(public_id=pk)
             dailydata = _dailydata_queryset_for_request(request).get(public_id=pk)
             serializer = UpdateDailyDataSerializer(data=request.data)
             if serializer.is_valid(raise_exception=True):
@@ -215,9 +226,7 @@ class DailyDataView(viewsets.ViewSet):
 
 
 class FlockVaccinationView(viewsets.ViewSet):
-    """
-    Class to create vaccine objects for daily data.
-    """
+    """Manage vaccinations recorded against flock daily data."""
 
     authentication_classes = [OAuth2Authentication]
     permission_classes = [TokenMatchesOASRequirements]
@@ -261,7 +270,6 @@ class FlockVaccinationView(viewsets.ViewSet):
 
     @classmethod
     def list(cls, request):
-        # U: OLD: FlockVaccination.objects.all()
         flock_vaccination = _flock_vaccination_queryset_for_request(request)
         return list_response(
             "Flock Vaccination List",
@@ -274,8 +282,9 @@ class FlockVaccinationView(viewsets.ViewSet):
     @classmethod
     def retrieve(cls, request, pk):
         try:
-            # U: OLD: FlockVaccination.objects.get(public_id=pk)
-            flock_vaccination = _flock_vaccination_queryset_for_request(request).get(public_id=pk)
+            flock_vaccination = _flock_vaccination_queryset_for_request(request).get(
+                public_id=pk
+            )
             return get_detail(
                 "Flock Vaccination Detail",
                 GetFlockVaccinationSerializer(flock_vaccination).data,
@@ -289,8 +298,9 @@ class FlockVaccinationView(viewsets.ViewSet):
     @classmethod
     def delete(cls, request, pk):
         try:
-            # U: OLD: FlockVaccination.objects.get(public_id=pk)
-            flock_vaccination = _flock_vaccination_queryset_for_request(request).get(public_id=pk)
+            flock_vaccination = _flock_vaccination_queryset_for_request(request).get(
+                public_id=pk
+            )
             flock_vaccination.delete()
             return delete_response(FLOCK_VACCINATION_DELETE, status.HTTP_200_OK)
         except FlockVaccination.DoesNotExist:
@@ -300,15 +310,12 @@ class FlockVaccinationView(viewsets.ViewSet):
 
     @classmethod
     def destroy(cls, request, pk):
-        # U: OLD: DefaultRouter DELETE routes expect destroy(), but this view only exposed delete().
-        # U: NEW: keep delete() for compatibility and route DELETE through the same scoped logic.
+        # Retain the legacy delete method while supporting DRF's destroy action.
         return cls.delete(request, pk)
 
 
 class VaccinesView(viewsets.ViewSet):
-    """
-    Class for vaccines objects.
-    """
+    """List available vaccines."""
 
     @classmethod
     def list(cls, request):
@@ -323,9 +330,7 @@ class VaccinesView(viewsets.ViewSet):
 
 
 class DailyDataDetailView(viewsets.ViewSet):
-    """
-    Class to give detail of daily data.
-    """
+    """List detailed daily data for a flock."""
 
     authentication_classes = [OAuth2Authentication]
     permission_classes = [TokenMatchesOASRequirements]
@@ -337,54 +342,23 @@ class DailyDataDetailView(viewsets.ViewSet):
     @classmethod
     def list(cls, request):
         try:
-            # U: OLD: DailyData.objects.filter(flock__public_id=...)
             flock = _flock_queryset_for_request(request).get(
                 public_id=request.GET.get("flock_public_id")
             )
-            # U: OLD: PDF rows used database default ordering.
-            # U: NEW: exports should be stable and readable by flock date.
             daily_data = (
                 _dailydata_queryset_for_request(request)
                 .filter(flock=flock)
                 .order_by("date")
             )
-            
-#MV-23-6-25- 17-10 append new values to response
-            result_data = []
-
-            for entry in daily_data:
-                flock = entry.flock
-                enriched = prepare_daily_data_response(entry, flock)
-                
-                base_data = GetDailyDataListSerializer(entry).data
-                
-                base_data.update({
-                    "birds_count": enriched["bird_count"],
-                    "total_feed_purchased": enriched["total_feed_purchased"],
-                    "total_feed_consumed": enriched["total_feed_consumed"],
-                    "feed_stock": enriched["feed_stock"],
-                    "average_feed_per_bird": enriched["average_feed_per_bird"],
-                    "total_average_feed": enriched["total_average_feed"],
-                    "total_mortality_percentage": enriched["total_mortality_percentage"],
-                    "cum_mort": enriched["cum_mort"],
-                    "fcr": enriched["fcr"],
-                    "total_fcr": enriched["total_fcr"],
-                    "remarks": enriched["remarks"],
-                })
-                
-                result_data.append(base_data)
-#MV-23-6-25- 17-10 change end
+            result_data = _serialize_daily_data_rows(
+                daily_data, bird_count_key="birds_count"
+            )
 
             return list_response(
                 "Daily Data List.",
                 daily_data.count(),
                 "daily_data_list",
-                # GetDailyDataDetailSerializer(daily_data, many=True).data,
-                
-#MV-23-6-25- 17-10 add to response
                 result_data,
-#MV-23-6-25- 17-10 change end
-
                 status.HTTP_200_OK,
             )
         except Flock.DoesNotExist:
@@ -429,9 +403,7 @@ class DailyDataMortalityView(viewsets.ViewSet):
 
 
 class DailyDataAverageFeedBirdsView(viewsets.ViewSet):
-    """
-    Class to create average feed/birds details of daily data.
-    """
+    """Calculate average feed consumed per bird."""
 
     authentication_classes = [OAuth2Authentication]
     permission_classes = [TokenMatchesOASRequirements]
@@ -450,7 +422,6 @@ class DailyDataAverageFeedBirdsView(viewsets.ViewSet):
             if serializer.is_valid(raise_exception=True):
                 serializer_data = serializer.validated_data
                 feed_intake = serializer_data["feed_intake"]
-                # U: OLD: Flock.objects.get(public_id=...)
                 flock = _flock_queryset_for_request(request).get(
                     public_id=serializer.validated_data["flock"].get("public_id")
                 )
@@ -482,9 +453,7 @@ class DailyDataAverageFeedBirdsView(viewsets.ViewSet):
 
 
 class DailyDataFCRView(viewsets.ViewSet):
-    """
-    Class to create fcr details of daily data.
-    """
+    """Calculate daily and total feed conversion ratios."""
 
     authentication_classes = [OAuth2Authentication]
     permission_classes = [TokenMatchesOASRequirements]
@@ -503,7 +472,6 @@ class DailyDataFCRView(viewsets.ViewSet):
             serializer = DailyDataFCRSerializer(data=request.GET)
             if serializer.is_valid(raise_exception=True):
                 serializer_data = serializer.validated_data
-                # U: OLD: Flock.objects.get(public_id=...)
                 flock = _flock_queryset_for_request(request).get(
                     public_id=serializer_data["flock"].get("public_id")
                 )
@@ -532,8 +500,6 @@ class DailyDataFCRView(viewsets.ViewSet):
                 )
                 if fcr <= 0:
                     fcr = 0
-                else:
-                    fcr = fcr
                 return get_detail(
                     "FCR",
                     {
@@ -549,9 +515,7 @@ class DailyDataFCRView(viewsets.ViewSet):
 
 
 class DailyDataLastDateView(viewsets.ViewSet):
-    """
-    Class to give last date of daily data.
-    """
+    """Return the latest daily-data date and adjusted bird count."""
 
     authentication_classes = [OAuth2Authentication]
     permission_classes = [TokenMatchesOASRequirements]
@@ -563,9 +527,12 @@ class DailyDataLastDateView(viewsets.ViewSet):
     def retrieve(self, request, pk):
         try:
             count = 0
-            # U: OLD: Flock.objects.get(public_id=pk)
             flock = _flock_queryset_for_request(request).get(public_id=pk)
-            daily_data = _dailydata_queryset_for_request(request).filter(flock=flock).latest("date")
+            daily_data = (
+                _dailydata_queryset_for_request(request)
+                .filter(flock=flock)
+                .latest("date")
+            )
             sales = Sales.objects.filter(flock=flock, date__gt=daily_data.date)
             for sale in sales:
                 count += sale.lifting_count
@@ -573,8 +540,7 @@ class DailyDataLastDateView(viewsets.ViewSet):
                 "Last date of daily data",
                 {
                     "last_date": daily_data.date,
-                    "current_bird_count": daily_data.current_bird_count - count
-
+                    "current_bird_count": daily_data.current_bird_count - count,
                 },
                 status.HTTP_200_OK,
             )
@@ -589,9 +555,8 @@ class DailyDataLastDateView(viewsets.ViewSet):
 
 
 class DailyDataListView(viewsets.ViewSet):
-    """
-    List of all daily data of particular flock.
-    """
+    """List all daily data for a flock."""
+
     authentication_classes = [OAuth2Authentication]
     permission_classes = [TokenMatchesOASRequirements]
 
@@ -606,48 +571,17 @@ class DailyDataListView(viewsets.ViewSet):
     @classmethod
     def list(cls, request):
         try:
-            # U: OLD: DailyData.objects.filter(flock__public_id=...)
             flock = _flock_queryset_for_request(request).get(
                 public_id=request.GET.get("flock_public_id")
             )
             daily_data = _dailydata_queryset_for_request(request).filter(flock=flock)
-            
-#MV-23-6-25- 17-10 append new values to response
-            result_data = []
+            result_data = _serialize_daily_data_rows(daily_data)
 
-            for entry in daily_data:
-                flock = entry.flock
-                enriched = prepare_daily_data_response(entry, flock)
-                
-                base_data = GetDailyDataListSerializer(entry).data
-                
-                base_data.update({
-                    "bird_count": enriched["bird_count"],
-                    "total_feed_purchased": enriched["total_feed_purchased"],
-                    "total_feed_consumed": enriched["total_feed_consumed"],
-                    "feed_stock": enriched["feed_stock"],
-                    "average_feed_per_bird": enriched["average_feed_per_bird"],
-                    "total_average_feed": enriched["total_average_feed"],
-                    "total_mortality_percentage": enriched["total_mortality_percentage"],
-                    "cum_mort": enriched["cum_mort"],
-                    "fcr": enriched["fcr"],
-                    "total_fcr": enriched["total_fcr"],
-                    "remarks": enriched["remarks"],
-                })
-                
-                result_data.append(base_data)
-#MV-23-6-25- 17-10 change end
-            
             return list_response(
                 "Daily Data List.",
                 daily_data.count(),
                 "daily_data_list",
-                # GetDailyDataListSerializer(daily_data, many=True).data,
-
-#MV-23-6-25- 17-10 change add to response
                 result_data,
-#MV-23-6-25- 17-10 change end
-
                 status.HTTP_200_OK,
             )
         except Flock.DoesNotExist:
@@ -661,9 +595,7 @@ class DailyDataListView(viewsets.ViewSet):
 
 
 class DarknessTimeView(viewsets.ViewSet):
-    """
-    List of all darkness time.
-    """
+    """List available darkness-time options."""
 
     @classmethod
     def list(cls, request):
@@ -683,9 +615,7 @@ class DarknessTimeView(viewsets.ViewSet):
 
 
 class FeedAvailabilityView(viewsets.ViewSet):
-    """
-    List of all feed availability.
-    """
+    """List available feed-availability options."""
 
     @classmethod
     def list(cls, request):
@@ -705,6 +635,8 @@ class FeedAvailabilityView(viewsets.ViewSet):
 
 
 class PDFView(viewsets.ViewSet):
+    """Export filtered daily data as a PDF report."""
+
     authentication_classes = [OAuth2Authentication]
     permission_classes = [TokenMatchesOASRequirements]
 
@@ -717,61 +649,49 @@ class PDFView(viewsets.ViewSet):
         try:
             template_name = "dailydata.html"
 
-#MV-23-6-25- 17-10 append to response
-            # records = DailyData.objects.filter(flock__public_id=request.GET.get("flock_public_id"))
-            # U: OLD: DailyData.objects.filter(flock__public_id=...)
             flock = _flock_queryset_for_request(request).get(
                 public_id=request.GET.get("flock_public_id")
             )
-            daily_data = _dailydata_queryset_for_request(request).filter(flock=flock).order_by("date")
+            daily_data = (
+                _dailydata_queryset_for_request(request)
+                .filter(flock=flock)
+                .order_by("date")
+            )
             start_date = request.GET.get("start_date") or request.GET.get("from_date")
             end_date = request.GET.get("end_date") or request.GET.get("to_date")
             if start_date:
                 daily_data = daily_data.filter(date__gte=start_date)
             if end_date:
                 daily_data = daily_data.filter(date__lte=end_date)
-        
-            result_data = []
 
-            for entry in daily_data:
-                flock = entry.flock
-                enriched = prepare_daily_data_response(entry, flock)
-                
-                base_data = GetDailyDataListSerializer(entry).data
-                
-                base_data.update({
-                    "bird_count": enriched["bird_count"],
-                    "total_feed_purchased": enriched["total_feed_purchased"],
-                    "total_feed_consumed": enriched["total_feed_consumed"],
-                    "feed_stock": enriched["feed_stock"],
-                    "average_feed_per_bird": enriched["average_feed_per_bird"],
-                    "total_average_feed": enriched["total_average_feed"],
-                    "total_mortality_percentage": enriched["total_mortality_percentage"],
-                    "cum_mort": enriched["cum_mort"],
-                    "fcr": enriched["fcr"],
-                    "total_fcr": enriched["total_fcr"],
-                    "remarks": enriched["remarks"],
-                })
-                
-                result_data.append(base_data)
-#MV-23-6-25- 17-10 change end
+            result_data = _serialize_daily_data_rows(daily_data)
 
             totals = {
                 "mortality": sum(item.get("mortality", 0) or 0 for item in result_data),
-                "feed_intake": sum(item.get("feed_intake", 0) or 0 for item in result_data),
-                "latest_birds": result_data[-1].get("current_bird_count", 0) if result_data else 0,
-                "latest_feed_stock": result_data[-1].get("feed_stock", 0) if result_data else 0,
+                "feed_intake": sum(
+                    item.get("feed_intake", 0) or 0 for item in result_data
+                ),
+                "latest_birds": (
+                    result_data[-1].get("current_bird_count", 0)
+                    if result_data
+                    else 0
+                ),
+                "latest_feed_stock": (
+                    result_data[-1].get("feed_stock", 0) if result_data else 0
+                ),
             }
-            safe_flock_name = re.sub(r"[^A-Za-z0-9]+", "_", flock.name).strip("_") or "Flock"
-            filename = f"Chikooza_DailyDataSheet_{safe_flock_name}_{datetime.date.today().isoformat()}.pdf"
+            safe_flock_name = (
+                re.sub(r"[^A-Za-z0-9]+", "_", flock.name).strip("_") or "Flock"
+            )
+            filename = (
+                f"Chikooza_DailyDataSheet_{safe_flock_name}_"
+                f"{datetime.date.today().isoformat()}.pdf"
+            )
 
             return render_to_pdf(
                 template_name,
                 {
-                    # "record": records,
-#MV-23-6-25- 17-10 new var
                     "record": result_data,
-                    # U: NEW: provide flock/export metadata for the corrected daily-data PDF template.
                     "flock": {
                         "name": flock.name,
                         "public_id": flock.public_id,
@@ -786,7 +706,6 @@ class PDFView(viewsets.ViewSet):
                         "end": end_date or "All",
                     },
                     "totals": totals,
-#MV-23-6-25- 17-10 change end
                 },
                 filename=filename,
             )

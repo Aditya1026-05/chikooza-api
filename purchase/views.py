@@ -7,7 +7,13 @@ from rest_framework.response import Response
 
 from common.constant import ERROR, FLOCK_DOES_NOT_EXIST, PURCHASE_DOES_NOT_EXIST
 from common.tenanting import is_admin_request, request_account_user
-from common.utils import error_response, get_detail, list_response, success_response, validate_url_value
+from common.utils import (
+    error_response,
+    get_detail,
+    list_response,
+    success_response,
+    validate_url_value,
+)
 from flocks.models import Flock
 from purchase.models import Purchase
 from purchase.serializers import (
@@ -20,9 +26,7 @@ from purchase.services import AddPurchaseService, UpdatePurchaseService
 
 
 def _purchase_queryset_for_request(request):
-    """
-    U: Scope purchase records to the authenticated farmer unless an admin is explicitly requesting data.
-    """
+    """Scope purchase records to the current farmer unless an admin requests data."""
     if is_admin_request(request):
         return Purchase.objects.all()
     return Purchase.objects.filter(user=request_account_user(request))
@@ -77,7 +81,6 @@ class PurchaseView(viewsets.ViewSet):
         """
         try:
             validate_url_value(pk, "purchasePublicId")
-            # U: OLD: Purchase.objects.get(public_id=pk)
             purchase = _purchase_queryset_for_request(request).get(public_id=pk)
             return get_detail(
                 "Purchase details",
@@ -91,7 +94,6 @@ class PurchaseView(viewsets.ViewSet):
     def partial_update(cls, request, pk):
         try:
             validate_url_value(pk, "purchasePublicId")
-            # U: OLD: update lookup only checked public_id and allowed cross-farmer updates.
             purchase = _purchase_queryset_for_request(request).get(public_id=pk)
             serializer = UpdatePurchaseSerializer(data=request.data)
             if serializer.is_valid(raise_exception=True):
@@ -112,17 +114,12 @@ class PurchaseView(viewsets.ViewSet):
     @classmethod
     def list(cls, request):
         try:
-            # U: OLD: another farmer's flock id returned 200 with an empty list.
-            # U: NEW: validate the flock through the tenant/admin scope first.
             flock = _flock_queryset_for_request(request).get(
                 public_id=request.GET.get("flock_public_id")
             )
-            purchase = _purchase_queryset_for_request(request).filter(
-                flock=flock
-            )
-            if request.GET.get('filter') == 'feed':
-                # U: OLD: list used flock_public_id only, so another farmer's flock purchases were visible.
-                purchase = purchase.filter(type='Feed')
+            purchase = _purchase_queryset_for_request(request).filter(flock=flock)
+            if request.GET.get("filter") == "feed":
+                purchase = purchase.filter(type="Feed")
             return list_response(
                 "Purchase List",
                 purchase.count(),
@@ -164,8 +161,6 @@ class QuantityView(viewsets.ViewSet):
                 )
                 purchases = _purchase_queryset_for_request(request).filter(
                     flock=flock,
-                    # U: OLD: quantity silently returned 0 for another farmer's flock.
-                    # U: NEW: reject inaccessible flock ids before summing.
                     type="Feed",
                     date__lte=serializer_data["date"],
                 )

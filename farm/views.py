@@ -1,4 +1,3 @@
-# Create your views here.
 from oauth2_provider.contrib.rest_framework import (
     OAuth2Authentication,
     TokenMatchesOASRequirements,
@@ -12,8 +11,8 @@ from common.constant import (
     FARM_DOES_NOT_EXIST,
     STATE_DOES_NOT_EXIST,
 )
-from common.utils import get_detail, success_response, validate_url_value
 from common.tenanting import is_admin_request, request_account_user
+from common.utils import get_detail, success_response, validate_url_value
 from farm.models import Country, Farm, State
 from farm.serializers import (
     AddFarmSerializer,
@@ -27,9 +26,7 @@ from farm.services import AddFarmService, UpdateFarmService
 
 
 def _farm_queryset_for_request(request):
-    """
-    U: Scope farm records to the authenticated farmer unless an admin explicitly requests data.
-    """
+    """Scope farm records to the current farmer unless an admin requests data."""
     if is_admin_request(request):
         return Farm.objects.all()
     return Farm.objects.filter(user=request_account_user(request))
@@ -71,8 +68,6 @@ class FarmView(viewsets.ViewSet):
     def retrieve(cls, request, pk):
         try:
             validate_url_value(pk, "farmPublicId")
-            # U: OLD: Farm.objects.get(public_id=pk) loaded any farmer's farm before checking ownership.
-            # U: NEW: query through the authenticated farmer scope so cross-account access returns not found.
             farm = _farm_queryset_for_request(request).get(public_id=pk)
             return get_detail(
                 "Farm details", FarmGetSerializer(farm).data, status.HTTP_200_OK
@@ -95,8 +90,6 @@ class FarmView(viewsets.ViewSet):
     def partial_update(cls, request, pk):
         try:
             validate_url_value(pk, "farmPublicId")
-            # U: OLD: update loaded by public_id globally and could fall through without a response.
-            # U: NEW: update only farms visible to the authenticated farmer/admin.
             farm = _farm_queryset_for_request(request).get(public_id=pk)
             serializer = UpdateFarmSerializer(data=request.data)
             if serializer.is_valid(raise_exception=True):

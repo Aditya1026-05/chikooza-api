@@ -2,7 +2,14 @@ import datetime
 
 from rest_framework import serializers
 
-from dailydata.models import DailyData, FlockVaccination, Vaccines, status_choices, DarknessTime, FeedAvailability
+from dailydata.models import (
+    DailyData,
+    DarknessTime,
+    FeedAvailability,
+    FlockVaccination,
+    Vaccines,
+    status_choices,
+)
 from sales.models import Sales
 
 
@@ -38,7 +45,7 @@ class UpdateDailyDataSerializer(serializers.ModelSerializer):
             "remarks",
             "flock_vaccination",
             "darkness_time_public_id",
-            "feed_availability_public_id"
+            "feed_availability_public_id",
         ]
 
 
@@ -77,8 +84,6 @@ class CreateDailyDataSerializer(serializers.ModelSerializer):
             "flock_vaccination",
             "darkness_time_public_id",
             "feed_availability_public_id",
-            "darkness_time_public_id",
-            "feed_availability_public_id"
         ]
 
 
@@ -171,13 +176,6 @@ class YesterdayDailyDataGetSerializer(serializers.ModelSerializer):
             current_bird_count = obj.current_bird_count
         return current_bird_count
 
-class GetDailyDataSerializer(serializers.Serializer):
-    date = serializers.DateField()
-
-    class Meta:
-        fields = ["date"]
-
-
 class ListDailyDataSerializer(serializers.Serializer):
     flock_public_id = serializers.IntegerField(source="flock.public_id")
     date = serializers.DateField()
@@ -190,10 +188,12 @@ class DailyDataGetSerializer(serializers.ModelSerializer):
     flock_public_id = serializers.IntegerField(source="flock.public_id")
     flock_vaccination = serializers.SerializerMethodField()
     flock_actual_birds = serializers.IntegerField(source="flock.actual_birds")
-    darkness_time_public_id = serializers.IntegerField(source="darkness_time.public_id")
-    feed_availability_public_id = serializers.IntegerField(source="feed_availability.public_id")
-    # current_bird_count = serializers.SerializerMethodField()
-    # number_of_days = serializers.SerializerMethodField()
+    darkness_time_public_id = serializers.IntegerField(
+        source="darkness_time.public_id"
+    )
+    feed_availability_public_id = serializers.IntegerField(
+        source="feed_availability.public_id"
+    )
 
     class Meta:
         model = DailyData
@@ -220,20 +220,12 @@ class DailyDataGetSerializer(serializers.ModelSerializer):
             "total_fcr",
             "total_average_feed",
             "darkness_time_public_id",
-            "feed_availability_public_id"
+            "feed_availability_public_id",
         ]
 
     def get_flock_vaccination(self, obj):
         flock_vaccine = FlockVaccination.objects.filter(dailydata=obj)
         return GetFlockVaccinationSerializer(flock_vaccine, many=True).data
-
-    # def get_current_bird_count(self, obj):
-    #     if Sales.objects.filter(flock=obj.flock, date__lte=obj.date).exists():
-    #         sales = Sales.objects.filter(flock=obj.flock, date__lte=obj.date).last()
-    #         current_bird_count = obj.current_bird_count - sales.lifting_count
-    #     else:
-    #         current_bird_count = obj.current_bird_count
-
 
 class DailyDataMortalitySerializer(serializers.Serializer):
     current_bird_count = serializers.IntegerField()

@@ -5,9 +5,7 @@ from purchase.models import Purchase
 
 
 def total_feed_purchased(flock, user, date=None):
-    """
-    U: Feed stock is derived from feed purchases, scoped to one farmer and flock.
-    """
+    """Return feed purchased for one farmer and flock through an optional date."""
     queryset = Purchase.objects.filter(flock=flock, user=user, type="Feed")
     if date:
         queryset = queryset.filter(date__lte=date)
@@ -15,9 +13,7 @@ def total_feed_purchased(flock, user, date=None):
 
 
 def total_feed_consumed_before_date(flock, user, date):
-    """
-    U: Only daily rows before the target day are available stock consumers.
-    """
+    """Return feed consumed by a farmer's flock before the target date."""
     return (
         DailyData.objects.filter(flock=flock, user=user, date__lt=date)
         .aggregate(total=Sum("feed_intake"))
@@ -27,18 +23,14 @@ def total_feed_consumed_before_date(flock, user, date):
 
 
 def available_feed_stock_for_date(flock, user, date):
-    """
-    U: Available feed for a day = purchased up to that day - consumed before that day.
-    """
+    """Return purchased feed minus consumption before the target date."""
     return total_feed_purchased(flock, user, date) - total_feed_consumed_before_date(
         flock, user, date
     )
 
 
 def recalculate_feed_snapshots(flock, user):
-    """
-    U: Keep saved daily snapshots in sync after feed purchases or feed intake edits.
-    """
+    """Refresh stored feed totals after purchase or intake changes."""
     consumed = 0
     rows = DailyData.objects.filter(flock=flock, user=user).order_by("date", "id")
 

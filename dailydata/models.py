@@ -1,7 +1,6 @@
 from django.db import models
 
-# Create your models here.
-from common.base_models import BaseModel, Users, PublicId
+from common.base_models import BaseModel, Users
 from flocks.models import Flock
 
 status_choices = (
@@ -12,16 +11,14 @@ status_choices = (
 
 
 class DarknessTime(BaseModel):
-    """"
-    Class to perform crud on darkness time.
-    """
+    """Available darkness-time option for daily flock records."""
+
     name = models.CharField(max_length=55)
 
 
 class FeedAvailability(BaseModel):
-    """"
-    Class to perform crud operation on feed availability.
-    """
+    """Available feed-status option for daily flock records."""
+
     name = models.CharField(max_length=55)
 
 
@@ -54,10 +51,12 @@ class DailyData(BaseModel):
     medicine = models.BooleanField()
     remarks = models.CharField(max_length=555)
     status = models.BooleanField(default=False)
-    darkness_time = models.ForeignKey(DarknessTime, on_delete=models.CASCADE,
-                                      related_name='darkness_time')
-    feed_availability = models.ForeignKey(FeedAvailability, on_delete=models.CASCADE,
-                                          related_name='feed_availability')
+    darkness_time = models.ForeignKey(
+        DarknessTime, on_delete=models.CASCADE, related_name="darkness_time"
+    )
+    feed_availability = models.ForeignKey(
+        FeedAvailability, on_delete=models.CASCADE, related_name="feed_availability"
+    )
     flock_birds = models.IntegerField(null=True, default=0)
 
 
@@ -88,5 +87,4 @@ class FlockVaccination(BaseModel):
         Vaccines, on_delete=models.CASCADE, related_name="vaccine_flock_vaccine"
     )
     status = models.CharField(max_length=255, choices=status_choices)
-
 

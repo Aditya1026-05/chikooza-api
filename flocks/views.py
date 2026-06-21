@@ -20,31 +20,26 @@ from common.utils import (
     get_detail,
     list_response,
     success_response,
-    validate_url_value, validation_return_response,
+    validate_url_value,
 )
 from common.tenanting import is_admin_request, request_account_user
+from dailydata.models import DailyData
 from farm.models import Farm
 from flocks.models import Breed, Flock, Hatchery, Integrator
 from flocks.serializers import (
     AddFlockSerializer,
     BreedListSerializer,
+    FlockSummarySerializer,
     GetFlockSerializer,
     IntegratorListSerializer,
-    UpdateFlockSerializer, FlockSummarySerializer,
+    UpdateFlockSerializer,
 )
 from flocks.services import AddFlockService, UpdateFlockService
-from purchase.models import Purchase
-
-#MV-23-6-25- 17-10 new imports
 from flocks.utils import prepare_daily_data_response
-from dailydata.models import DailyData
-#MV-23-6-25- 17-10 change end
 
 
 def _flock_queryset_for_request(request):
-    """
-    U: Scope flock records to the authenticated farmer unless an admin explicitly requests data.
-    """
+    """Scope flock records to the authenticated farmer unless admin/staff request all data."""
     if is_admin_request(request):
         return Flock.objects.all()
     return Flock.objects.filter(user=request_account_user(request))
@@ -107,8 +102,6 @@ class FlockView(viewsets.ViewSet):
     def retrieve(cls, request, pk):
         try:
             validate_url_value(pk, "farmPublicId")
-            # U: OLD: farm existence was checked by owner, then reloaded
-            # U: globally. NEW: load through the tenant/admin scoped queryset.
             farm = _farm_queryset_for_request(request).get(public_id=pk)
             flocks = _flock_queryset_for_request(request).filter(farm=farm)
             return list_response(
@@ -124,7 +117,6 @@ class FlockView(viewsets.ViewSet):
     def partial_update(cls, request, pk):
         try:
             validate_url_value(pk, "flockPublicId")
-            # U: OLD: update lookup only checked public_id and allowed cross-farmer flock updates.
             flock = _flock_queryset_for_request(request).get(public_id=pk)
             serializer = UpdateFlockSerializer(data=request.data)
             if serializer.is_valid(raise_exception=True):
@@ -227,8 +219,6 @@ class FlockDetailView(viewsets.ViewSet):
     def retrieve(cls, request, pk):
         try:
             validate_url_value(pk, "flockPublicId")
-            # U: OLD: detail used request.user.users directly and skipped the
-            # U: shared admin/staff tenant gate.
             flocks = _flock_queryset_for_request(request).get(public_id=pk)
             return get_detail(
                 "Flocks Detail", GetFlockSerializer(flocks).data, status.HTTP_200_OK
@@ -239,8 +229,8 @@ class FlockDetailView(viewsets.ViewSet):
 
 class FlockSummaryView(viewsets.ViewSet):
     """
-       Class to give details of flock.
-       """
+    Class to give details of flock.
+    """
 
     authentication_classes = [OAuth2Authentication]
     permission_classes = [TokenMatchesOASRequirements]
@@ -256,45 +246,39 @@ class FlockSummaryView(viewsets.ViewSet):
     def retrieve(cls, request, pk):
         try:
             validate_url_value(pk, "flockPublicId")
-            # U: OLD: Flock.objects.get(public_id=pk)
             flock = _flock_queryset_for_request(request).get(public_id=pk)
-            # return get_detail(Add commentMore actions
-            #     "Flock Summary",
-            #     FlockSummarySerializer(flock).data,
-            #     status.HTTP_200_OK,
-            # )
-        # except Flock.DoesNotExist:Add commentMore actions
-        #     return Response({ERROR: FLOCK_DOES_NOT_EXIST}, status.HTTP_404_NOT_FOUND)
-            
-#MV-23-6-25- 17-10 update response
             base_data = FlockSummarySerializer(flock).data
-            
-            latest_daily_data = DailyData.objects.filter(flock=flock).order_by('-date').first()
-            
+
+            latest_daily_data = (
+                DailyData.objects.filter(flock=flock).order_by("-date").first()
+            )
+
             if latest_daily_data:
                 enriched = prepare_daily_data_response(latest_daily_data, flock)
-                base_data.update({
-                    "birds_count": enriched["bird_count"],
-                    "total_feed_purchased": enriched["total_feed_purchased"],
-                    "total_feed_consumed": enriched["total_feed_consumed"],
-                    "feed_stock": enriched["feed_stock"],
-                    "average_feed_per_bird": enriched["average_feed_per_bird"],
-                    "total_average_feed": enriched["total_average_feed"],
-                    "total_mortality_percentage": enriched["total_mortality_percentage"],
-                    "cum_mort": enriched["cum_mort"],
-                    "fcr": enriched["fcr"],
-                    "total_fcr": enriched["total_fcr"],
-                    "remarks": enriched["remarks"],
-                })
-            
-            return Response({
-                "success": True,
-                "results": base_data
-            }, status=status.HTTP_200_OK)
-            
+                base_data.update(
+                    {
+                        "birds_count": enriched["bird_count"],
+                        "total_feed_purchased": enriched["total_feed_purchased"],
+                        "total_feed_consumed": enriched["total_feed_consumed"],
+                        "feed_stock": enriched["feed_stock"],
+                        "average_feed_per_bird": enriched["average_feed_per_bird"],
+                        "total_average_feed": enriched["total_average_feed"],
+                        "total_mortality_percentage": enriched[
+                            "total_mortality_percentage"
+                        ],
+                        "cum_mort": enriched["cum_mort"],
+                        "fcr": enriched["fcr"],
+                        "total_fcr": enriched["total_fcr"],
+                        "remarks": enriched["remarks"],
+                    }
+                )
+
+            return Response(
+                {"success": True, "results": base_data}, status=status.HTTP_200_OK
+            )
+
         except Flock.DoesNotExist:
-            return Response({
-                "success": False,
-                "error": FLOCK_DOES_NOT_EXIST
-            }, status=status.HTTP_404_NOT_FOUND)
-#MV-23-6-25- 17-10 change end
+            return Response(
+                {"success": False, "error": FLOCK_DOES_NOT_EXIST},
+                status=status.HTTP_404_NOT_FOUND,
+            )

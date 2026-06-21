@@ -27,9 +27,7 @@ class AddPurchaseSerializer(serializers.Serializer):
             self.fields["item_name"] = serializers.CharField(
                 max_length=255, allow_null=True
             )
-            # U: OLD: feed bag count/size could be null or zero, which made
-            # U: feed stock stay at 0 after a feed purchase.
-            # U: NEW: feed stock can increase only from positive bag details.
+            # Feed stock can increase only from positive bag count and bag size.
             self.fields["unit"] = serializers.IntegerField(min_value=1)
             self.fields["size"] = serializers.IntegerField(min_value=1)
             self.fields["item_type"] = serializers.ChoiceField(
