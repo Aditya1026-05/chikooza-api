@@ -15,7 +15,7 @@ const FullLayoutMember = () => {
         {/********Content Area**********/}
         <div className="contentArea" id="main-content" tabIndex="-1">
           {/********Middle Content**********/}
-          <Container className="p-4" fluid>
+          <Container className="member-page-container" fluid>
             {/* <Row>
               <Col>
                 <Card className="sliderclass">

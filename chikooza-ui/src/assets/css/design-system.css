@@ -1051,3 +1051,195 @@ textarea::placeholder {
     max-width: 190px;
   }
 }
+
+/* Phone layouts use compact, touch-friendly controls without changing desktop UI. */
+.member-page-container {
+  padding: 1.5rem;
+}
+
+@media (max-width: 767px) {
+  html,
+  body,
+  #root {
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+  img,
+  svg,
+  canvas,
+  video {
+    max-width: 100%;
+  }
+
+  .chikooza-public-header {
+    padding: 0.65rem 0.75rem;
+    position: sticky;
+    top: 0;
+    z-index: 1035;
+  }
+
+  .chikooza-public-header .navbar-collapse {
+    max-height: calc(100dvh - 78px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .chikooza-menu-button {
+    align-items: center;
+    display: inline-flex !important;
+    height: 48px;
+    justify-content: center;
+    min-width: 48px;
+    width: 48px !important;
+  }
+
+  .chikooza-public-header .navbar-nav,
+  .chikooza-public-header .nav-item,
+  .chikooza-public-header .dropdown,
+  .member-user-menu {
+    width: 100%;
+  }
+
+  .linkheader,
+  .chikooza-public-header .dropdown-toggle,
+  .member-user-toggle {
+    align-items: center;
+    display: flex;
+    min-height: 48px;
+    width: 100%;
+  }
+
+  .chikooza-public-header .dropdown-menu,
+  .member-user-dropdown {
+    position: static !important;
+    transform: none !important;
+    width: 100%;
+  }
+
+  .member-page-container {
+    padding: 0.75rem !important;
+  }
+
+  .contentArea {
+    min-width: 0;
+  }
+
+  .form-control,
+  .form-select,
+  .input-group-text {
+    min-height: 48px;
+  }
+
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+
+  .form-stepper,
+  .member-workflow-steps {
+    display: grid !important;
+    gap: 0.55rem;
+    grid-auto-columns: minmax(132px, 42vw);
+    grid-auto-flow: column;
+    grid-template-columns: none !important;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    padding-bottom: 0.55rem;
+    scroll-snap-type: inline proximity;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .form-stepper button,
+  .member-workflow-steps article {
+    min-height: 104px;
+    scroll-snap-align: start;
+  }
+
+  .member-workflow-steps article::after {
+    display: none !important;
+  }
+
+  .form-wizard-actions,
+  .report-actions,
+  .ck-actions,
+  .record-review-toolbar {
+    align-items: center !important;
+    flex-direction: row !important;
+    flex-wrap: wrap;
+  }
+
+  .form-wizard-actions .btn,
+  .report-actions .btn,
+  .ck-actions .btn,
+  .record-review-toolbar .btn {
+    min-height: 48px;
+    min-width: 48px;
+    width: auto;
+  }
+
+  .table-responsive,
+  .record-review-table,
+  .farmer-ai-display-table-scroll {
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .member-chart-top,
+  .member-chart-controls {
+    grid-template-columns: 1fr !important;
+  }
+
+  .member-chart-card {
+    overflow: hidden;
+  }
+
+  .modal-dialog {
+    margin: 0.5rem;
+    max-width: calc(100vw - 1rem);
+  }
+
+  .modal-content {
+    max-height: calc(100dvh - 1rem);
+    overflow-y: auto;
+  }
+
+  .chikooza-footer-inner {
+    gap: 1.5rem;
+    padding: 2rem 1rem 1.5rem;
+  }
+
+  .chikooza-footer-links {
+    gap: 1.25rem;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .chikooza-footer-links > div:last-child {
+    grid-column: 1 / -1;
+  }
+
+  .chikooza-footer-bottom {
+    gap: 0.35rem;
+    padding: 0.9rem 1rem calc(0.9rem + env(safe-area-inset-bottom));
+  }
+}
+
+@media (max-width: 480px) {
+  .form-wizard-actions .btn,
+  .report-actions .btn,
+  .ck-actions .btn,
+  .record-review-toolbar .btn {
+    width: auto;
+  }
+
+  .member-continue-actions {
+    width: 100%;
+  }
+
+  .member-continue-actions > * {
+    flex: 1 1 auto;
+    min-height: 48px;
+  }
+}

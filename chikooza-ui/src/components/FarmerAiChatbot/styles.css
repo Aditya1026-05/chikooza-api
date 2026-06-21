@@ -565,3 +565,85 @@
     grid-template-columns: 1fr;
   }
 }
+
+@media (max-width: 760px) {
+  .farmer-ai-page {
+    height: calc(100dvh - 66px);
+  }
+
+  .farmer-ai-chat-header {
+    align-items: center;
+    flex-direction: row;
+    padding: 0.8rem;
+  }
+
+  .farmer-ai-chat-header p {
+    font-size: 0.85rem;
+  }
+
+  .farmer-ai-messages {
+    overscroll-behavior: contain;
+    padding: 0.85rem;
+    scroll-behavior: auto;
+  }
+
+  .farmer-ai-message-row-bot {
+    max-width: 100%;
+  }
+
+  .farmer-ai-message-row-user {
+    max-width: 94%;
+  }
+
+  .farmer-ai-message {
+    padding: 0.78rem 0.85rem;
+  }
+
+  .farmer-ai-form {
+    padding: 0.65rem 0.65rem calc(0.65rem + env(safe-area-inset-bottom));
+  }
+
+  .farmer-ai-suggestions {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 0.25rem;
+    scrollbar-width: none;
+  }
+
+  .farmer-ai-suggestions::-webkit-scrollbar {
+    display: none;
+  }
+
+  .farmer-ai-suggestions button {
+    flex: 0 0 auto;
+    min-height: 44px;
+  }
+
+  .farmer-ai-composer {
+    align-items: flex-end;
+    flex-direction: row;
+    gap: 0.5rem;
+  }
+
+  .farmer-ai-composer textarea {
+    font-size: 16px;
+    min-height: 48px;
+    min-width: 0;
+  }
+
+  .farmer-ai-form .farmer-ai-composer .btn {
+    flex: 0 0 auto;
+    min-height: 48px;
+    min-width: 82px;
+    padding: 0.75rem 0.9rem;
+    width: auto;
+  }
+
+  .farmer-ai-display-table {
+    overflow-x: auto;
+  }
+
+  .farmer-ai-display-table table {
+    min-width: 36rem;
+  }
+}

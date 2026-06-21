@@ -1,5 +1,5 @@
-import React from "react";
-import { Link } from "react-router-dom";
+import React, { useEffect } from "react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   Navbar,
   Collapse,
@@ -10,44 +10,53 @@ import {
   Dropdown,
   Button,
 } from "reactstrap";
-//import { ReactComponent as LogoWhite } from "../assets/images/logos/adminprowhite.svg";
 import '../assets/css/header.css';
 import Logo from "../assets/images/logos/chikooza_logo.png";
-import { useEffect } from "react";
-import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { apiPath, getAuthConfig } from "../Constants";
 import { FaAngleDown } from "react-icons/fa";
 
 const Header = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [isOpen, setIsOpen] = React.useState(false);
   const [activeMenu, setActiveMenu] = React.useState(null);
-
   const [dropdownOpen, setDropdownOpen] = React.useState(false);
 
-  const toggle = () => setDropdownOpen((prevState) => !prevState);
+  const toggleUserMenu = () => {
+    setDropdownOpen((current) => !current);
+    setActiveMenu(null);
+  };
   const toggleMenu = (menu) => {
     setActiveMenu((current) => (current === menu ? null : menu));
+    setDropdownOpen(false);
   };
   const closeMenus = () => {
     setActiveMenu(null);
+    setDropdownOpen(false);
+    setIsOpen(false);
   };
-  const Handletoggle = () => {
-    setIsOpen(!isOpen);
+  const toggleNavigation = () => {
+    setIsOpen((current) => !current);
     setActiveMenu(null);
+    setDropdownOpen(false);
   };
+
   useEffect(() => {
     if (localStorage.getItem('token') === null) {
       navigate("/login")
     }
-  // U: OLD dependency list was empty and triggered React hook warnings.
-  // U: NEW includes navigate so the auth redirect effect follows React hook rules.
   }, [navigate])
+
+  useEffect(() => {
+    setIsOpen(false);
+    setActiveMenu(null);
+    setDropdownOpen(false);
+  }, [location.pathname]);
+
   let logout = () => {
+    closeMenus();
     let url = `${apiPath}users/logout/`;
-    // U: Replaced shared config mutation with per-request auth headers from getAuthConfig().
-    // config.headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
     axios.get(url, getAuthConfig()).then((res) => {
       localStorage.clear();
       navigate("/login");
@@ -56,39 +65,28 @@ const Header = () => {
       navigate("/login");
     });
   }
-  // const showMobilemenu = () => {
-  //   document.getElementById("sidebarArea").classList.toggle("showSidebar");
-  // };
   return (
     <Navbar light expand="md" className="fix-header chikooza-public-header" aria-label="Farmer workspace navigation">
       <div className="d-flex align-items-center">
-        {/* U: OLD: member header used a temporary CSS "C" mark.
-            U: NEW: use the same real Chikooza wordmark as the public header. */}
-        <Link to="/member" className="navbar-brand chikooza-brand">
+        <Link to="/member" className="navbar-brand chikooza-brand" onClick={closeMenus}>
           <img src={Logo} alt="Chikooza" className="chikooza-brand-logo" />
         </Link>
-        {/* <Button
-          color="primary"
-          className=" d-lg-none"
-          onClick={() => showMobilemenu()}
-        >
-          <i className="bi bi-list"></i>
-        </Button> */}
       </div>
       <div className="hstack gap-2">
         <Button
           color="success"
           size="sm"
           className="d-sm-block d-md-none chikooza-menu-button"
-          onClick={Handletoggle}
+          type="button"
+          onClick={toggleNavigation}
           aria-controls="member-navigation"
           aria-expanded={isOpen}
           aria-label={isOpen ? "Close farmer workspace navigation" : "Open farmer workspace navigation"}
         >
           {isOpen ? (
-            <i className="bi bi-x fs-5"></i>
+            <i className="bi bi-x-lg fs-5" aria-hidden="true"></i>
           ) : (
-            <i className="bi bi-three-dots-vertical fs-5"></i>
+            <i className="bi bi-list fs-4" aria-hidden="true"></i>
           )}
         </Button>
       </div>
@@ -100,15 +98,11 @@ const Header = () => {
               Home
             </Link>
           </NavItem>
-          {/* U: OLD: independent uncontrolled dropdowns could stay open together and overlap.
-              U: NEW: control member-nav dropdowns with one active menu so opening Flock closes Farm. */}
           <Dropdown inNavbar nav isOpen={activeMenu === "farm"} toggle={() => toggleMenu("farm")}>
             <DropdownToggle caret nav className="linkheader">
               Farm
             </DropdownToggle>
             <DropdownMenu end>
-              {/* U: OLD: DropdownItem tag={Link} did not navigate reliably after making menus controlled.
-                  U: NEW: render real React Router links inside the dropdown menu. */}
               <Link to="/addfarm" className="dropdown-item member-dropdown-link" onClick={closeMenus}>
                 Add Farm
               </Link>
@@ -160,14 +154,13 @@ const Header = () => {
             </Link>
           </NavItem>
         </Nav>
-        <Dropdown isOpen={dropdownOpen} toggle={toggle} className="member-user-menu">
+        <Dropdown isOpen={dropdownOpen} toggle={toggleUserMenu} className="member-user-menu">
           <DropdownToggle color="transparent" className="member-user-toggle" aria-label="Open farmer account menu">
             Hi, {localStorage.getItem('fname')} <FaAngleDown></FaAngleDown>
-            {/*<img src={user1} alt="profile" className="rounded-circle" width="30"></img>*/}
           </DropdownToggle>
           <DropdownMenu end className="member-user-dropdown">
-            <Link to="/profile" className="member-user-dropdown__item" onClick={toggle}>Profile</Link>
-            <Link to="/changepassword" className="member-user-dropdown__item" onClick={toggle}>Change password</Link>
+            <Link to="/profile" className="member-user-dropdown__item" onClick={closeMenus}>Profile</Link>
+            <Link to="/changepassword" className="member-user-dropdown__item" onClick={closeMenus}>Change password</Link>
             <button type="button" className="member-user-dropdown__item member-user-dropdown__item--danger" onClick={logout}>Logout</button>
           </DropdownMenu>
         </Dropdown>
