@@ -135,6 +135,12 @@ const Home = () => {
               Farmer login
             </Link>
           </div>
+          <div className="home-mobile-capabilities" aria-label="Chikooza capabilities">
+            <span><i className="bi bi-buildings" />Farms</span>
+            <span><i className="bi bi-calendar2-check" />Daily work</span>
+            <span><i className="bi bi-graph-up" />Reports</span>
+            <span><i className="bi bi-stars" />Farmer AI</span>
+          </div>
         </div>
 
         <div className="home-hero-media" aria-label="Chikooza poultry farm operations">

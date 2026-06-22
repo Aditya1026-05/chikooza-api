@@ -4,7 +4,7 @@ import MemberFooter from "./MemberFooter";
 import { Container } from "reactstrap"
 const FullLayoutMember = () => {
   return (
-    <div className="app-layout">
+    <div className="app-layout member-app-layout">
       {/********header**********/}
       <Header />
       <div className="pageWrapper d-lg-flex">

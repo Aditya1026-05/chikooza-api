@@ -30,6 +30,7 @@ const Register = () => {
   const [otpError, setOtpError] = useState("");
   const [otpSuccess, setOtpSuccess] = useState(false);
   const [resendAfter, setResendAfter] = useState(0);
+  const [mobileStep, setMobileStep] = useState(1);
 
   useEffect(() => {
     if (!showOtp || resendAfter <= 0) {
@@ -77,6 +78,18 @@ const Register = () => {
     }
     setFieldErrors(errors);
     return Object.keys(errors).length === 0;
+  };
+
+  const continueMobileRegistration = () => {
+    const errors = {};
+    if (formData.name.trim().length < 3) errors.name = "Name must be at least 3 characters.";
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email.trim())) errors.email = "Enter a valid email address.";
+    if (cleanMobile.length !== 10) errors.mobile = "Enter a 10 digit mobile number.";
+    setFieldErrors(errors);
+    if (Object.keys(errors).length === 0) {
+      setMobileStep(2);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
   };
 
   const payload = () => ({
@@ -182,9 +195,16 @@ const Register = () => {
           <span className="auth-kicker">Register for free</span>
           <h1>Create farmer account.</h1>
           <p>Enter farmer details. Phone and email verification happen before the account is created.</p>
+          <div className="register-mobile-progress" aria-label={`Registration step ${mobileStep} of 2`}>
+            <span className={mobileStep >= 1 ? "is-active" : ""}>1</span>
+            <i />
+            <span className={mobileStep >= 2 ? "is-active" : ""}>2</span>
+            <strong>{mobileStep === 1 ? "Your details" : "Secure your account"}</strong>
+          </div>
           {error && <Alert color="danger">{error}</Alert>}
           {message && <Alert color="success">{message}</Alert>}
           <form className="auth-form" onSubmit={sendOtp}>
+            <div className={`register-field-group register-field-group--identity ${mobileStep === 1 ? "is-mobile-active" : ""}`}>
             <div className="form-field">
               <label htmlFor="register-name">Full name</label>
               <input id="register-name" name="name" onChange={updateField} placeholder="Farmer name" type="text" value={formData.name} />
@@ -200,6 +220,8 @@ const Register = () => {
               <input id="register-mobile" inputMode="numeric" maxLength={10} name="mobile" onChange={updateField} placeholder="10 digit mobile number" type="tel" value={formData.mobile} />
               <small className="form-error">{fieldErrors.mobile}</small>
             </div>
+            </div>
+            <div className={`register-field-group register-field-group--security ${mobileStep === 2 ? "is-mobile-active" : ""}`}>
             <div className="form-field">
               <label htmlFor="register-username">Username</label>
               <input autoComplete="username" id="register-username" name="username" onChange={updateField} placeholder="Choose username" type="text" value={formData.username} />
@@ -215,9 +237,19 @@ const Register = () => {
               <input autoComplete="new-password" id="register-cpassword" name="cpassword" onChange={updateField} placeholder="Confirm password" type="password" value={formData.cpassword} />
               <small className="form-error">{fieldErrors.cpassword}</small>
             </div>
-            <Button className="ck-button" disabled={loading} type="submit">
+            </div>
+            <Button className="ck-button register-desktop-submit" disabled={loading} type="submit">
               {loading ? "Sending verification..." : "Send verification codes"}
             </Button>
+            <Button className="ck-button register-mobile-next" onClick={continueMobileRegistration} type="button">
+              Continue
+            </Button>
+            <div className="register-mobile-submit-actions">
+              <Button className="ck-button-secondary" onClick={() => setMobileStep(1)} type="button">Back</Button>
+              <Button className="ck-button" disabled={loading} type="submit">
+                {loading ? "Sending..." : "Send codes"}
+              </Button>
+            </div>
           </form>
           <div className="auth-switch">
             Already registered? <Link to="/login">Login here</Link>

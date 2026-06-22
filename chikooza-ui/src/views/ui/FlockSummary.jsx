@@ -84,7 +84,7 @@ const FlockSummary = () => {
   const latestDailyRow = filteredDailyRows[filteredDailyRows.length - 1] || null;
   const hasSelectedFlock = selectedFlockId !== "0" && currentFlock;
   const hasAnyDailyData = dailyDataList.length > 0;
-  const hasFilteredRows = filteredDailyRows.length || filteredPurchases.length || filteredSales.length;
+  const hasFilteredRows = Boolean(filteredDailyRows.length || filteredPurchases.length || filteredSales.length);
 
   const selectFlockForReport = (nextFlock, { persistCurrent = false, source = "flock_summary_manual_flock" } = {}) => {
     if (!nextFlock || String(nextFlock.flock_public_id) === "0") {

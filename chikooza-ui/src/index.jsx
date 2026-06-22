@@ -6,6 +6,7 @@ import App from "./App";
 import { BrowserRouter } from "react-router-dom";
 import Loader from "./layouts/loader/Loader";
 import "./assets/css/design-system.css";
+import "./assets/css/mobile.css";
 
 const rootElement = document.getElementById("root");
 

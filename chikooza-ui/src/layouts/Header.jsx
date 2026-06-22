@@ -9,6 +9,7 @@ import {
 } from "reactstrap";
 import '../assets/css/header.css';
 import Logo from "../assets/images/logos/chikooza_logo.png";
+import { PublicMobileMenu, PublicMobileNavigation } from "./MobileNavigation";
 
 const Header = () => {
   const location = useLocation();
@@ -21,6 +22,7 @@ const Header = () => {
   }, [location.pathname]);
 
   return (
+    <>
     <Navbar light expand="md" className="fix-header chikooza-public-header" aria-label="Public navigation">
       <div className="d-flex align-items-center">
         <Link to="/" className="navbar-brand chikooza-brand" onClick={closeNavigation}>
@@ -28,10 +30,11 @@ const Header = () => {
         </Link>
       </div>
       <div className="hstack gap-2">
+        <Link to="/register" className="public-mobile-register" onClick={closeNavigation}>Register</Link>
         <Button
           color="success"
           size="sm"
-          className="d-sm-block d-md-none chikooza-menu-button"
+          className="d-block d-md-none chikooza-menu-button"
           type="button"
           onClick={() => setIsOpen((current) => !current)}
           aria-controls="public-navigation"
@@ -76,6 +79,9 @@ const Header = () => {
         </Nav>
       </Collapse>
     </Navbar>
+    {isOpen && <PublicMobileMenu close={closeNavigation} />}
+    <PublicMobileNavigation />
+    </>
   );
 };
 

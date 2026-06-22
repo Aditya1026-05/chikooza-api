@@ -15,6 +15,35 @@ import Logo from "../assets/images/logos/chikooza_logo.png";
 import axios from 'axios';
 import { apiPath, getAuthConfig } from "../Constants";
 import { FaAngleDown } from "react-icons/fa";
+import { MemberMobileNavigation } from "./MobileNavigation";
+
+const pageTitles = {
+  "/member": "Dashboard",
+  "/addfarm": "Add farm",
+  "/managefarm": "Manage farms",
+  "/addflock": "Add flock",
+  "/manageflock": "Manage flocks",
+  "/flockdailydata": "Daily data",
+  "/dailydatasheet": "Daily report",
+  "/flocksummary": "Flock summary",
+  "/flocksale": "Add sale",
+  "/viewsale": "Sales",
+  "/editsale": "Sale details",
+  "/addpurchase": "Add purchase",
+  "/listpurchase": "Purchases",
+  "/chatbot": "Farmer AI",
+  "/profile": "Profile",
+  "/changepassword": "Change password",
+  "/updatemobile": "Update mobile",
+  "/member/about": "About",
+  "/member/contact": "Contact",
+};
+
+const getPageTitle = (pathname) => {
+  if (pathname.startsWith("/daydata/")) return "Daily entry";
+  if (pathname.startsWith("/viewpurchase/")) return "Purchase details";
+  return pageTitles[pathname] || "Workspace";
+};
 
 const Header = () => {
   const navigate = useNavigate();
@@ -22,6 +51,7 @@ const Header = () => {
   const [isOpen, setIsOpen] = React.useState(false);
   const [activeMenu, setActiveMenu] = React.useState(null);
   const [dropdownOpen, setDropdownOpen] = React.useState(false);
+  const [activeSheet, setActiveSheet] = React.useState(null);
 
   const toggleUserMenu = () => {
     setDropdownOpen((current) => !current);
@@ -35,6 +65,7 @@ const Header = () => {
     setActiveMenu(null);
     setDropdownOpen(false);
     setIsOpen(false);
+    setActiveSheet(null);
   };
   const toggleNavigation = () => {
     setIsOpen((current) => !current);
@@ -66,17 +97,25 @@ const Header = () => {
     });
   }
   return (
-    <Navbar light expand="md" className="fix-header chikooza-public-header" aria-label="Farmer workspace navigation">
+    <>
+    <Navbar light expand="md" className="fix-header chikooza-public-header chikooza-member-header" aria-label="Farmer workspace navigation">
       <div className="d-flex align-items-center">
         <Link to="/member" className="navbar-brand chikooza-brand" onClick={closeMenus}>
           <img src={Logo} alt="Chikooza" className="chikooza-brand-logo" />
         </Link>
       </div>
+      <div className="member-mobile-title" aria-live="polite">
+        <span>Chikooza</span>
+        <strong>{getPageTitle(location.pathname)}</strong>
+      </div>
       <div className="hstack gap-2">
+        <button className="member-mobile-profile" onClick={() => setActiveSheet("all")} type="button" aria-label="Open all Chikooza tools">
+          <i className="bi bi-grid" aria-hidden="true" />
+        </button>
         <Button
           color="success"
           size="sm"
-          className="d-sm-block d-md-none chikooza-menu-button"
+          className="d-block d-md-none chikooza-menu-button"
           type="button"
           onClick={toggleNavigation}
           aria-controls="member-navigation"
@@ -166,6 +205,13 @@ const Header = () => {
         </Dropdown>
       </Collapse>
     </Navbar>
+    <MemberMobileNavigation
+      activeSheet={activeSheet}
+      closeSheet={() => setActiveSheet(null)}
+      logout={logout}
+      openSheet={(sheet) => setActiveSheet((current) => current === sheet ? null : sheet)}
+    />
+    </>
   );
 };
 

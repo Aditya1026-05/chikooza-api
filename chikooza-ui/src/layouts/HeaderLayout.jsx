@@ -5,7 +5,7 @@ import Footer from "./Footer";
 const FullLayout = () => {
 
   return (
-    <div className="app-layout">
+    <div className="app-layout public-app-layout">
       {/********header**********/}
       <Header />
       <div className="pageWrapper d-lg-flex" id="main-content" tabIndex="-1">

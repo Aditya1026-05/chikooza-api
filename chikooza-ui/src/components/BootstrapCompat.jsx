@@ -96,7 +96,21 @@ export const CardImg = forwardRef(
   ),
 );
 
-export const Table = passthrough("table", "table");
+export const Table = forwardRef(
+  ({ responsive, className, ...props }, ref) => {
+    const table = <table ref={ref} className={cx("table", className)} {...props} />;
+
+    if (!responsive) {
+      return table;
+    }
+
+    const responsiveClass = typeof responsive === "string"
+      ? `table-responsive-${responsive}`
+      : "table-responsive";
+
+    return <div className={responsiveClass}>{table}</div>;
+  },
+);
 export const Form = passthrough("form", "");
 export const FormGroup = passthrough("div", "mb-3");
 export const FormText = passthrough("div", "form-text");
@@ -269,7 +283,7 @@ export const Nav = forwardRef(({ navbar, className, ...props }, ref) => (
 export const NavItem = passthrough("li", "nav-item");
 
 export const Dropdown = forwardRef(
-  ({ isOpen, toggle, className, children, ...props }, ref) => {
+  ({ isOpen, toggle, nav, inNavbar: _inNavbar, className, children, ...props }, ref) => {
     const [internalOpen, setInternalOpen] = useState(false);
     const open = typeof isOpen === "boolean" ? isOpen : internalOpen;
     const value = useMemo(
@@ -284,7 +298,7 @@ export const Dropdown = forwardRef(
       <DropdownContext.Provider value={value}>
         <div
           ref={ref}
-          className={cx("dropdown", open ? "show" : "", className)}
+          className={cx("dropdown", nav ? "nav-item" : "", open ? "show" : "", className)}
           {...props}
         >
           {children}
