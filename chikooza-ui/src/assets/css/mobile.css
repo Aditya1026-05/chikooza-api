@@ -9,7 +9,8 @@
 
 .mobile-auth-header,
 .member-dashboard-title-mobile,
-.member-mobile-quick-actions {
+.member-mobile-quick-actions,
+.member-mobile-back {
   display: none;
 }
 
@@ -1603,5 +1604,617 @@
   .member-dashboard-summary,
   .report-kpi-grid {
     grid-template-columns: 1fr !important;
+  }
+}
+
+/* Authenticated mobile application refinement. Keep this block last so the
+   native app shell wins over route-level desktop styles loaded lazily. */
+@media (max-width: 767.98px) {
+  :root {
+    --ck-mobile-header-height: 60px;
+    --ck-mobile-nav-height: 64px;
+  }
+
+  .member-app-layout,
+  .member-app-layout .contentArea,
+  .member-app-layout .pageWrapper {
+    background: #ffffff !important;
+  }
+
+  .member-app-layout .chikooza-member-header {
+    background: rgba(255, 255, 255, 0.97) !important;
+    border-bottom-color: #ececec !important;
+    box-shadow: none !important;
+    gap: 8px;
+    height: var(--ck-mobile-header-height);
+    min-height: var(--ck-mobile-header-height);
+    padding-inline: 12px !important;
+  }
+
+  .member-app-layout .chikooza-member-header:not(:has(.member-header-leading.has-mobile-back)) {
+    grid-template-columns: minmax(0, 1fr) 44px;
+  }
+
+  .member-app-layout .chikooza-member-header:has(.member-header-leading.has-mobile-back) {
+    grid-template-columns: 44px minmax(0, 1fr) 44px;
+  }
+
+  .member-header-leading {
+    height: 44px;
+    justify-content: center;
+    min-width: 42px;
+  }
+
+  .member-header-leading:not(.has-mobile-back) {
+    display: none !important;
+  }
+
+  .member-mobile-back {
+    align-items: center;
+    background: transparent;
+    border: 0;
+    border-radius: 50%;
+    color: #2b211f;
+    display: inline-flex;
+    font-size: 1.45rem;
+    height: 44px;
+    justify-content: center;
+    padding: 0;
+    width: 44px;
+  }
+
+  .member-header-leading .chikooza-brand {
+    display: none;
+  }
+
+  .member-mobile-title span {
+    display: none;
+  }
+
+  .member-mobile-title strong {
+    color: #111111;
+    font-size: 1.3rem;
+    letter-spacing: -0.035em;
+    line-height: 1;
+  }
+
+  .member-mobile-profile {
+    background: transparent;
+    border: 0;
+    height: 42px;
+    width: 42px;
+  }
+
+  .member-mobile-profile i {
+    color: #171717;
+    font-size: 1.25rem;
+  }
+
+  .member-mobile-tab-bar {
+    background: #ffffff;
+    border-top-color: #ececec;
+    box-shadow: none;
+    min-height: var(--ck-mobile-nav-height);
+  }
+
+  .member-mobile-tab-bar .mobile-tab {
+    color: #777777;
+    gap: 2px;
+    min-height: var(--ck-mobile-nav-height);
+  }
+
+  .member-mobile-tab-bar .mobile-tab i {
+    background: transparent !important;
+    font-size: 1.2rem;
+    height: 28px;
+  }
+
+  .member-mobile-tab-bar .mobile-tab.is-active i {
+    background: transparent !important;
+  }
+
+  .member-mobile-tab-bar .mobile-tab.is-active {
+    color: #ad211b;
+  }
+
+  .member-app-layout .member-page-container {
+    padding: 0 !important;
+  }
+
+  .member-app-layout .member-page-container .card-body {
+    padding: 18px var(--ck-mobile-gutter) 24px !important;
+  }
+
+  .member-app-layout .member-page-container .buttoncurve {
+    background: transparent !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+  }
+
+  .member-app-layout .member-page-container .gridmargin {
+    margin: 0 !important;
+  }
+
+  .member-app-layout .member-page-container label,
+  .member-app-layout .account-settings-form label {
+    color: #4e4e4e;
+    font-size: 0.76rem !important;
+    font-weight: 750;
+    margin: 0 0 6px;
+  }
+
+  .member-app-layout .member-page-container .form-control,
+  .member-app-layout .member-page-container .form-select,
+  .member-app-layout .account-settings-form .form-control {
+    background-color: #f3f3f4 !important;
+    border: 1px solid transparent !important;
+    border-radius: 12px !important;
+    box-shadow: none !important;
+    color: #2b211f;
+    min-height: 50px;
+  }
+
+  .member-app-layout .member-page-container .form-control:focus,
+  .member-app-layout .member-page-container .form-select:focus,
+  .member-app-layout .account-settings-form .form-control:focus {
+    background-color: #fff !important;
+    border-color: #b42318 !important;
+    box-shadow: 0 0 0 2px rgba(180, 35, 24, 0.08) !important;
+  }
+
+  .member-app-layout .member-page-container .mb-3,
+  .member-app-layout .member-page-container .form-group {
+    margin-bottom: 14px !important;
+  }
+
+  .member-app-layout .form-stepper {
+    background: transparent;
+    border-bottom: 1px solid #ededed;
+    border-radius: 0;
+    gap: 0 !important;
+    margin: -4px 0 18px;
+    padding: 0 0 10px;
+  }
+
+  .member-app-layout .form-stepper button {
+    background: transparent !important;
+    border: 0 !important;
+    border-radius: 0;
+    box-shadow: none !important;
+    min-height: 52px !important;
+  }
+
+  .member-app-layout .form-stepper button span {
+    background: #ededed;
+    color: #737373;
+    height: 22px;
+    width: 22px;
+  }
+
+  .member-app-layout .form-stepper button.is-active {
+    background: transparent !important;
+    box-shadow: inset 0 -2px 0 #b42318 !important;
+  }
+
+  .member-app-layout .form-stepper button.is-active span,
+  .member-app-layout .form-stepper button.is-complete span {
+    background: #bf251d;
+    color: #fff;
+  }
+
+  .member-app-layout .form-review-card,
+  .member-app-layout .form-prerequisite-card,
+  .member-app-layout .form-helper-panel,
+  .member-app-layout .record-review-toolbar,
+  .member-app-layout .record-review-empty {
+    background: #f6f6f7 !important;
+    border: 0 !important;
+    border-radius: 14px !important;
+    box-shadow: none !important;
+  }
+
+  .member-app-layout .record-review-empty {
+    min-height: 0 !important;
+    padding: 18px 16px !important;
+  }
+
+  .member-app-layout .record-review-empty p {
+    font-size: 0.9rem;
+    line-height: 1.5;
+    margin-bottom: 14px;
+  }
+
+  .member-app-layout .member-page-container:has(.form-wizard-actions) {
+    padding-bottom: 118px !important;
+  }
+
+  .member-app-layout .form-wizard-actions {
+    background: rgba(255, 255, 255, 0.98) !important;
+    border-top: 1px solid #ececec !important;
+    bottom: calc(var(--ck-mobile-nav-height) + env(safe-area-inset-bottom));
+    box-shadow: none !important;
+    display: grid !important;
+    gap: 8px !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    left: 0;
+    margin: 0 !important;
+    padding: 9px var(--ck-mobile-gutter) 10px !important;
+    position: fixed !important;
+    right: 0;
+    z-index: 2400;
+  }
+
+  .member-app-layout .form-wizard-actions .btn {
+    border-radius: 10px !important;
+    font-size: 0.88rem;
+    min-height: 46px;
+  }
+
+  .member-app-layout .form-wizard-actions > .btn-danger,
+  .member-app-layout .form-wizard-actions > .btn-primary,
+  .member-app-layout .form-wizard-actions > .btn-success {
+    grid-column: 1 / -1;
+    grid-row: 1;
+  }
+
+  .member-app-layout .manage-farm-cancel-action,
+  .member-app-layout .manage-flock-cancel-action {
+    display: none !important;
+  }
+
+  .member-app-layout .manage-farm-actions .manage-farm-back-action,
+  .member-app-layout .manage-flock-actions .manage-flock-back-action,
+  .member-app-layout .manage-farm-actions .manage-farm-add-action,
+  .member-app-layout .manage-flock-actions .manage-flock-add-action {
+    grid-column: auto;
+    order: initial;
+  }
+
+  .member-app-layout .manage-farm-actions:not(:has(.manage-farm-back-action)) .manage-farm-add-action,
+  .member-app-layout .manage-flock-actions:not(:has(.manage-flock-back-action)) .manage-flock-add-action {
+    grid-column: 1 / -1;
+  }
+
+  .member-app-layout .account-settings-page {
+    padding: 18px var(--ck-mobile-gutter) 22px !important;
+  }
+
+  .member-app-layout .account-settings-card {
+    background: transparent !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+  }
+
+  .member-app-layout .account-settings-header {
+    border: 0 !important;
+    padding: 4px 0 14px !important;
+  }
+
+  .member-app-layout .account-settings-header span,
+  .member-app-layout .account-settings-header h1 {
+    display: none;
+  }
+
+  .member-app-layout .account-settings-header p {
+    color: #756865;
+    font-size: 0.88rem;
+    margin: 0;
+  }
+
+  .member-app-layout .account-settings-form {
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+    padding: 10px 0 0 !important;
+  }
+
+  .member-app-layout .account-field-row {
+    align-items: end;
+    display: grid;
+    gap: 8px;
+    grid-template-columns: minmax(0, 1fr) auto !important;
+  }
+
+  .member-app-layout .account-inline-action {
+    background: #f3f3f4 !important;
+    border: 0 !important;
+    border-radius: 10px;
+    color: #a9231d !important;
+    font-size: 0;
+    min-height: 50px;
+    padding: 0 12px;
+    white-space: nowrap;
+  }
+
+  .member-app-layout .account-inline-action::before {
+    content: "Update";
+    font-size: 0.78rem;
+  }
+
+  .member-app-layout .report-page__header {
+    display: none;
+  }
+
+  .member-app-layout .report-page__body {
+    padding: 14px var(--ck-mobile-gutter) 24px !important;
+  }
+
+  .member-app-layout .report-actions {
+    margin: 2px 0 14px;
+  }
+
+  .member-app-layout .report-export-button {
+    border-radius: 12px;
+    min-height: 48px;
+  }
+
+  .member-app-layout .report-empty-state {
+    background: #f5f5f6 !important;
+    border: 0 !important;
+    border-radius: 14px;
+    padding: 18px 16px;
+  }
+
+  .member-app-layout .report-section-card {
+    background: #f7f7f8;
+    border: 0;
+    box-shadow: none;
+  }
+
+  .member-app-layout .farmer-ai-chat-header {
+    display: none !important;
+  }
+
+  .member-app-layout .farmer-ai-chat {
+    grid-template-rows: minmax(0, 1fr) auto !important;
+  }
+
+  .member-app-layout .farmer-ai-chat,
+  .member-app-layout .farmer-ai-messages {
+    background: #ffffff !important;
+  }
+
+  .member-app-layout .farmer-ai-suggestions {
+    align-items: center !important;
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    gap: 7px;
+    overflow-x: auto;
+    padding: 0 0 2px;
+    scrollbar-width: none;
+  }
+
+  .member-app-layout .farmer-ai-suggestions button {
+    background: #f3f3f4 !important;
+    border-color: transparent !important;
+    flex: 0 0 auto;
+    font-size: 0.78rem;
+    min-height: 38px;
+    padding: 7px 11px;
+    width: auto !important;
+  }
+
+  .member-app-layout .farmer-ai-composer {
+    align-items: center !important;
+    background: #f3f3f4;
+    border-color: transparent;
+    border-radius: 22px;
+    flex-direction: row !important;
+    gap: 5px;
+    padding: 4px 5px 4px 10px;
+  }
+
+  .member-app-layout .farmer-ai-composer textarea {
+    min-height: 44px;
+    padding: 10px 6px;
+  }
+
+  .member-app-layout .farmer-ai-message-row-bot {
+    max-width: 88%;
+  }
+
+  .member-app-layout .farmer-ai-message-row-bot .farmer-ai-message {
+    background: #f3f3f4;
+    border: 0;
+  }
+
+  .member-app-layout .farmer-ai-form .farmer-ai-composer .btn {
+    border-radius: 50% !important;
+    font-size: 0 !important;
+    height: 42px;
+    min-height: 42px;
+    min-width: 42px;
+    padding: 0 !important;
+    width: 42px !important;
+  }
+
+  .member-app-layout .farmer-ai-form .farmer-ai-composer .btn::before {
+    content: "\2191";
+    font-size: 1.25rem;
+    line-height: 1;
+  }
+
+  .member-app-layout .member-dashboard {
+    gap: 0;
+    padding: 0 0 18px;
+  }
+
+  .member-app-layout .member-dashboard-hero {
+    padding: 20px var(--ck-mobile-gutter) 16px;
+  }
+
+  .member-app-layout .member-dashboard-hero > div:first-child > span {
+    display: none;
+  }
+
+  .member-app-layout .member-dashboard-title-mobile {
+    color: #111 !important;
+    font-size: 1.9rem !important;
+    letter-spacing: -0.055em !important;
+    margin: 0 0 16px !important;
+  }
+
+  .member-app-layout .member-dashboard-summary article,
+  .member-app-layout .member-mobile-quick-actions,
+  .member-app-layout .member-continue-card,
+  .member-app-layout .member-workflow-card,
+  .member-app-layout .member-chart-card {
+    border-color: #ececec !important;
+    box-shadow: none !important;
+  }
+
+  .member-app-layout .member-dashboard-summary article {
+    background: #f5f5f6 !important;
+    border: 0 !important;
+    border-radius: 11px;
+  }
+
+  .member-app-layout .member-dashboard-summary span,
+  .member-app-layout .member-dashboard-summary label,
+  .member-app-layout .member-mobile-section-heading span,
+  .member-app-layout .member-card-heading span,
+  .member-app-layout .member-continue-card span {
+    color: #777 !important;
+    letter-spacing: 0.04em !important;
+  }
+
+  .member-app-layout .member-mobile-quick-actions,
+  .member-app-layout .member-continue-card {
+    border-radius: 0 !important;
+  }
+
+  .member-app-layout .member-mobile-quick-actions {
+    border: 0 !important;
+    border-top: 8px solid #f5f5f6 !important;
+    padding: 18px var(--ck-mobile-gutter);
+  }
+
+  .member-app-layout .member-mobile-action-grid i {
+    background: #f3f3f4;
+    border-radius: 50%;
+    height: 42px;
+    width: 42px;
+  }
+
+  .member-app-layout .member-continue-card {
+    align-items: center;
+    border: 0 !important;
+    border-top: 8px solid #f5f5f6 !important;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    padding: 16px var(--ck-mobile-gutter);
+  }
+
+  .member-app-layout .member-continue-actions {
+    display: block;
+    width: auto;
+  }
+
+  .member-app-layout .member-continue-card button {
+    display: none;
+  }
+
+  .member-app-layout .member-continue-card a {
+    align-items: center;
+    background: #b42318 !important;
+    border-radius: 50%;
+    display: inline-flex;
+    font-size: 0;
+    height: 42px;
+    justify-content: center;
+    padding: 0;
+    width: 42px;
+  }
+
+  .member-app-layout .member-continue-card a::before {
+    content: "\203A";
+    font-size: 1.8rem;
+    font-weight: 500;
+    line-height: 1;
+    margin-top: -2px;
+  }
+
+  .member-app-layout .member-workflow-card,
+  .member-app-layout .member-chart-card {
+    border: 0 !important;
+    border-radius: 0 !important;
+    border-top: 8px solid #f5f5f6 !important;
+    padding: 18px var(--ck-mobile-gutter);
+  }
+
+  .member-app-layout .member-empty-state {
+    background: #f5f5f6;
+    border: 0;
+    border-radius: 14px;
+  }
+
+  .member-app-layout .sales-review-table tbody tr {
+    background: #f7f7f8;
+    border: 0;
+    box-shadow: none;
+  }
+
+  .member-app-layout .mobile-bottom-sheet--all {
+    background: #fff;
+  }
+
+  .member-app-layout .mobile-bottom-sheet--all .mobile-sheet-handle,
+  .member-app-layout .mobile-bottom-sheet--all .mobile-sheet-header span {
+    display: none;
+  }
+
+  .member-app-layout .mobile-bottom-sheet--all .mobile-sheet-header {
+    padding: 10px 2px 14px;
+  }
+
+  .member-app-layout .mobile-bottom-sheet--all .mobile-sheet-header h2 {
+    font-size: 1.65rem;
+    letter-spacing: -0.05em;
+  }
+
+  .member-app-layout .mobile-bottom-sheet--all .mobile-sheet-icon {
+    background: #f3f3f4;
+    color: #242424;
+  }
+
+  .member-app-layout .mobile-bottom-sheet--all .mobile-sheet-logout .mobile-sheet-icon,
+  .member-app-layout .mobile-bottom-sheet--all .mobile-sheet-logout strong {
+    color: #b42318;
+  }
+
+  .member-route-managefarm .manage-farm-actions:not(:has(.manage-farm-back-action)),
+  .member-route-manageflock .manage-flock-actions:not(:has(.manage-flock-back-action)) {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr);
+  }
+
+  .member-route-managefarm .manage-farm-actions:not(:has(.manage-farm-back-action)) .manage-farm-add-action,
+  .member-route-manageflock .manage-flock-actions:not(:has(.manage-flock-back-action)) .manage-flock-add-action {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .member-route-managefarm .manage-farm-actions:not(:has(.manage-farm-back-action)) .manage-farm-next-action,
+  .member-route-manageflock .manage-flock-actions:not(:has(.manage-flock-back-action)) .manage-flock-next-action {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .member-route-addfarm .form-wizard-actions > .btn-warning:last-child,
+  .member-route-addflock .form-wizard-actions > .btn-warning:last-child,
+  .member-route-addpurchase .form-wizard-actions > .btn-warning:last-child,
+  .member-route-flocksale .form-wizard-actions > .btn:last-child,
+  .member-route-editsale .form-wizard-actions > .btn:last-child,
+  .member-route-changepassword .form-wizard-actions > .btn-secondary:last-child,
+  .member-route-updatemobile .form-wizard-actions > .btn-secondary:last-child {
+    display: none !important;
+  }
+
+  .member-route-profile .form-wizard-actions > .btn:last-child,
+  .member-route-flockdailydata .form-wizard-actions > .btn:last-child {
+    display: none !important;
   }
 }

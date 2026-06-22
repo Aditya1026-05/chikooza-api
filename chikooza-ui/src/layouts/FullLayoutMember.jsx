@@ -1,10 +1,13 @@
-import { Outlet } from "react-router-dom";
+import { Outlet, useLocation } from "react-router-dom";
 import Header from "./HeaderMember";
 import MemberFooter from "./MemberFooter";
 import { Container } from "reactstrap"
 const FullLayoutMember = () => {
+  const location = useLocation();
+  const routeKey = location.pathname.split("/").filter(Boolean)[0] || "member";
+
   return (
-    <div className="app-layout member-app-layout">
+    <div className={`app-layout member-app-layout member-route-${routeKey}`}>
       {/********header**********/}
       <Header />
       <div className="pageWrapper d-lg-flex">

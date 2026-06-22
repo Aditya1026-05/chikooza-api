@@ -45,6 +45,23 @@ const getPageTitle = (pathname) => {
   return pageTitles[pathname] || "Workspace";
 };
 
+const getMobileBackTarget = (pathname) => {
+  if (pathname.startsWith("/daydata/")) return "/flockdailydata";
+  if (pathname.startsWith("/viewpurchase/")) return "/listpurchase";
+
+  return {
+    "/addfarm": "/managefarm",
+    "/addflock": "/manageflock",
+    "/addpurchase": "/listpurchase",
+    "/flocksale": "/viewsale",
+    "/editsale": "/viewsale",
+    "/updatemobile": "/profile",
+    "/changepassword": "/profile",
+    "/member/about": "/member",
+    "/member/contact": "/member",
+  }[pathname] || null;
+};
+
 const Header = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -52,6 +69,7 @@ const Header = () => {
   const [activeMenu, setActiveMenu] = React.useState(null);
   const [dropdownOpen, setDropdownOpen] = React.useState(false);
   const [activeSheet, setActiveSheet] = React.useState(null);
+  const mobileBackTarget = getMobileBackTarget(location.pathname);
 
   const toggleUserMenu = () => {
     setDropdownOpen((current) => !current);
@@ -99,7 +117,17 @@ const Header = () => {
   return (
     <>
     <Navbar light expand="md" className="fix-header chikooza-public-header chikooza-member-header" aria-label="Farmer workspace navigation">
-      <div className="d-flex align-items-center">
+      <div className={`member-header-leading d-flex align-items-center ${mobileBackTarget ? "has-mobile-back" : ""}`}>
+        {mobileBackTarget && (
+          <button
+            className="member-mobile-back"
+            onClick={() => navigate(mobileBackTarget)}
+            type="button"
+            aria-label={`Back from ${getPageTitle(location.pathname)}`}
+          >
+            <i className="bi bi-chevron-left" aria-hidden="true" />
+          </button>
+        )}
         <Link to="/member" className="navbar-brand chikooza-brand" onClick={closeMenus}>
           <img src={Logo} alt="Chikooza" className="chikooza-brand-logo" />
         </Link>
