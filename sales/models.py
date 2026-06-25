@@ -40,6 +40,6 @@ class Sales(BaseModel):
     less_amct = models.IntegerField(default=0)
     other_taxes = models.IntegerField(default=0)
     integration_cost = models.FloatField(default=0)
-    buyer_phone_no = models.IntegerField(null=True)
+    buyer_phone_no = models.BigIntegerField(null=True)
     buyer_address = models.CharField(max_length=255, null=True)
     buyer_email = models.EmailField(null=True)

@@ -7,27 +7,19 @@ from django.views.decorators.csrf import csrf_exempt
 
 from .models import ChatLog
 from .preprocessing import QueryPreprocessor
-from .public_assistant import PublicSiteAssistant
-from .services import RAGService
+from .rag_assistant import RAGAssistantService
 
-# Heavy chatbot services are created only when a request needs them.
-rag_service = None
-public_site_assistant = None
+# The RAG assistant is created lazily so Django can start without loading
+# embedding or LLM resources during import.
+rag_assistant = None
 preprocessor = QueryPreprocessor()
 
 
-def get_rag_service():
-    global rag_service
-    if rag_service is None:
-        rag_service = RAGService()
-    return rag_service
-
-
-def get_public_site_assistant():
-    global public_site_assistant
-    if public_site_assistant is None:
-        public_site_assistant = PublicSiteAssistant()
-    return public_site_assistant
+def get_rag_assistant():
+    global rag_assistant
+    if rag_assistant is None:
+        rag_assistant = RAGAssistantService()
+    return rag_assistant
 
 
 @csrf_exempt
@@ -45,6 +37,7 @@ def chat_api(request):
         chat_history = data.get("history", [])
         if not isinstance(chat_history, list):
             chat_history = []
+        session_id = data.get("session_id") or data.get("conversation_id")
         prompt_type = data.get("prompt_type", "qa")
         chat_mode = (
             data.get("mode") or data.get("assistant") or data.get("chat_mode") or "rag"
@@ -58,27 +51,26 @@ def chat_api(request):
 
         start_time = time.time()
 
-        if chat_mode in {"site", "public", "public_site"}:
-            assistant = get_public_site_assistant()
-            site_result = assistant.answer(clean_query, history=chat_history)
-            result = {
-                "result": site_result.result,
-                "source_documents": [],
-                "sources": site_result.sources,
-                "provider": site_result.provider,
-                "model": site_result.model,
-                "fallback": site_result.fallback,
-                "display": site_result.display,
-            }
-        elif chat_mode == "rag":
-            # Legacy Ollama/FAISS mode remains available for direct `/chat/` callers.
-            rag = get_rag_service()
-            result = rag.query(clean_query, prompt_type)
-            result["provider"] = "ollama-rag"
-            result["model"] = getattr(rag, "ollama_model", "unknown")
-            result["fallback"] = False
-        else:
+        if chat_mode not in {"rag", "knowledge"}:
             return JsonResponse({"error": "Unsupported chat mode"}, status=400)
+
+        assistant = get_rag_assistant()
+        assistant_result = assistant.answer(
+            clean_query,
+            user=request.user,
+            session_id=session_id,
+            client_history=chat_history,
+        )
+        result = {
+            "result": assistant_result.result,
+            "source_documents": [],
+            "sources": assistant_result.sources,
+            "provider": assistant_result.provider,
+            "model": assistant_result.model,
+            "fallback": assistant_result.fallback,
+            "display": assistant_result.display,
+            "session_id": assistant_result.session_id,
+        }
 
         processing_time = time.time() - start_time
 
@@ -110,6 +102,7 @@ def chat_api(request):
             "prompt_type": prompt_type,
             "processing_time": processing_time,
             "mode": chat_mode,
+            "session_id": result.get("session_id"),
             "provider": result.get("provider", "unknown"),
             "model": result.get("model", "unknown"),
             "fallback": result.get("fallback", False),
@@ -121,8 +114,9 @@ def chat_api(request):
             {
                 "response": result["result"],
                 "query_id": chat_log.query_id,
+                "session_id": result.get("session_id"),
                 "time_taken": processing_time,
-                "mode": chat_mode,
+                "mode": "rag",
                 "provider": result.get("provider", "unknown"),
                 "model": result.get("model", "unknown"),
                 "fallback": result.get("fallback", False),

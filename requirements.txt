@@ -2,7 +2,7 @@
 # U: NEW: Celery is not configured or imported by this project; keep broker deps out until a worker exists.
 # amqp==5.1.1
 # U: OLD: anyio==3.6.1
-# U: NEW: not directly imported; httpx/langchain can resolve the compatible async backend they need.
+# U: NEW: not directly imported; httpx can resolve the compatible async backend it needs.
 # anyio==3.6.1
 # U: OLD: asgiref==3.5.2
 # U: NEW: Django 5.2 requires the modern ASGI support package.
@@ -123,25 +123,7 @@ flake8==7.3.0
 # U: OLD: black==22.6.0
 black==26.5.1
 
-#MV-2025-07-04-<1>  STARTS
-# OLD: AI packages below were mostly unpinned, which allowed incompatible LangChain packages.
-# NEW: Pin the current LangChain package split plus FAISS used by chatbot/services.py.
-# U: OLD: langchain-community==0.3.27
-# U: NEW: upgrade active chatbot RAG path to the current LangChain package split.
-langchain-community==0.4.1
-# U: OLD: langchain==0.3.30
-langchain==1.3.1
-# U: NEW: active prompts now import from langchain_core.prompts.
-langchain-core==1.4.0
-# U: OLD: langchain-huggingface==0.3.1
-langchain-huggingface==1.2.2
-# U: OLD: langchain-ollama==0.3.10
-langchain-ollama==1.1.0
-# U: OLD: RecursiveCharacterTextSplitter was imported from langchain.text_splitter.
-# U: NEW: use the dedicated current package.
-langchain-text-splitters==1.1.2
-faiss-cpu==1.13.2
-ollama==0.6.2
+# Database-backed RAG chatbot dependencies.
+pypdf==6.11.0
 sentence-transformers==5.5.0
 better-profanity==0.7.0
-#MV-2025-07-04-<1>  ENDS

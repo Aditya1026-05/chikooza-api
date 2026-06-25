@@ -7,7 +7,7 @@ This note captures the current understanding of the repo after first local setup
 - Backend: Django API runs locally on `http://127.0.0.1:8002/`.
 - UI: React/Vite app usually runs locally on `http://localhost:5173/`.
 - Database: local SQLite file is `db1.sqlite3`.
-- Chatbot: existing RAG wiring is preserved and upgraded to the current LangChain package split. Full generated answers require local Ollama plus the configured model; without Ollama, `/chat/` returns a retrieval-only fallback instead of a 500 error.
+- Chatbot: public `/chat/` now uses database-backed RAG with `KnowledgeDocument`, `KnowledgeChunk`, `ChatSession`, and `ChatMessage`. Real local/prod chatbot runs should use PostgreSQL with pgvector; SQLite remains only a lightweight fallback for tests and non-RAG checks.
 
 ## Verified
 
@@ -16,7 +16,7 @@ This note captures the current understanding of the repo after first local setup
 - `venv/bin/python manage.py test` runs successfully with the current backend test suite.
 - `npm run build` succeeds for the UI.
 - The UI build tool has been migrated from CRA/react-scripts to Vite and React 19; no frontend test runner is configured yet.
-- `/chat/` returns `200 OK` with retrieved context fallback when Ollama is not installed/running.
+- `/chat/` returns `200 OK` through the database RAG assistant, with retrieval-only fallback when Groq is not configured.
 - API smoke test works for OTP creation, signup, and login.
 
 ## Backend Folder Map
@@ -59,7 +59,7 @@ This note captures the current understanding of the repo after first local setup
 
 - Backend dependencies were upgraded to the current Django 5.2 / DRF 3.17 stack and pass checks/tests.
 - OLD sales migrations that duplicated columns already present in `sales/migrations/0001_initial.py` were commented and replaced with no-op migration operations.
-- OLD eager chatbot service startup was commented/replaced with lazy loading so Django can start without initializing local RAG/Ollama on import.
+- OLD eager chatbot service startup was removed; the active database RAG assistant is lazy-loaded by the `/chat/` view.
 - OLD hardcoded backend `HOSTNAME = "http://127.0.0.1:8001/"` was commented/replaced with `CHIKOOZA_API_BASE_URL`, defaulting to `http://127.0.0.1:8002/`.
 - U: OLD hardcoded `SECRET_KEY`, duplicated `DEBUG=True`, wildcard `ALLOWED_HOSTS`, and always-open CORS were replaced with environment-driven settings and safer local defaults.
 - U: OLD `corsheaders.middleware.CorsMiddleware` order was replaced with the recommended high middleware position before `CommonMiddleware`.
@@ -71,7 +71,7 @@ This note captures the current understanding of the repo after first local setup
 - Added UI `.env.example` so `VITE_API_BASE_URL`/`VITE_TEMPLATE_BASE_URL` are explicit while old `REACT_APP_*` names remain temporarily supported.
 - Added missing UI dependency `react-chatbot-kit`.
 - OLD UI chatbot fetch URL `https://local.api.chuza.com:8001/chat/` was commented/replaced with `${apiPath}chat/`.
-- OLD chatbot behavior returned a 500 when Ollama was unavailable; new behavior keeps the endpoint usable with a retrieval-only fallback and explicit Ollama setup guidance.
+- OLD local chatbot behavior was removed; new behavior keeps the endpoint usable with retrieval-only database answers when Groq is unavailable.
 - U: OLD frontend used a blue generic admin theme; global SCSS now uses a poultry/agriculture palette and modern typography.
 
 ## Good Things

@@ -44,14 +44,17 @@ query includes the authenticated user filter before execution. In simple words:
 when farmer A asks a question, the AI must query only rows where
 `owner_id = farmer_a_user_id`.
 
-RAG is different. The current public `chatbot/` feature uses static poultry PDF
-documents from `chatbot/data/processed_documents/`, Chikooza product notes in
-code, and FAISS files in `chatbot/data/`. The important RAG files are
-`index.faiss` and `index.pkl`. U: NEW: public chat retrieves this public context
-first and only then asks Groq to write the final answer. That RAG data is
-general poultry/product knowledge, not private farmer data. If we later add farmer-specific RAG, it should either build per-user
-indexes/namespaces or retrieve SQL records through authenticated, user-scoped
-queries before embedding/answering.
+RAG is different. The current public `chatbot/` feature stores approved
+Chikooza/poultry reference documents in SQL through `KnowledgeDocument` and
+`KnowledgeChunk`. In production those chunk embeddings live in PostgreSQL
+pgvector columns. Local chatbot development should use the same PostgreSQL +
+pgvector path by setting `DATABASE_URL` and `CHIKOOZA_RAG_REQUIRE_PGVECTOR=True`;
+SQLite is only a fallback for tests/lightweight checks. Public chat retrieves
+this database context first and only then asks Groq to write the final answer.
+That RAG data is general
+poultry/product knowledge, not private farmer data. If we later add
+farmer-specific RAG, it should either build per-user namespaces or retrieve SQL
+records through authenticated, user-scoped queries before embedding/answering.
 
 ## How To Read The Backend
 
@@ -249,31 +252,20 @@ Sales affect bird counts and profit/loss summaries.
 
 ### `chatbot/`
 
-This app now has two public `/chat/` modes.
+This app has one public `/chat/` RAG flow.
 
 Endpoint:
 
 - `/chat/`
 
-Public site mode:
+Current public RAG behavior:
 
-- The homepage widget sends `mode: "site"`.
-- It answers general questions about what Chikooza does.
-- It can use Groq when `GROQ_API_KEY` is configured.
-- It can fall back to Ollama or a deterministic local product answer.
+- The homepage widget sends `mode: "rag"`.
+- It answers only from approved `KnowledgeDocument`/`KnowledgeChunk` rows.
+- It stores server-side chat sessions and messages so follow-up questions keep context.
+- It can use Groq when `GROQ_API_KEY` is configured, but Groq only receives retrieved context.
+- It falls back to retrieval-only answers if Groq is unavailable.
 - It does not access private farmer data.
-
-Legacy RAG mode:
-
-- Loads a FAISS vector index from `data/`.
-- Uses sentence transformer embeddings.
-- Tries to call local Ollama model `llama3.2:3b`.
-- Stores chat logs.
-
-Current local behavior:
-
-- If Ollama is not installed/running, `/chat/` now returns a retrieval-only fallback instead of crashing.
-- For full generated answers, Ollama must be running locally.
 
 ### `aibot/`
 
@@ -308,14 +300,17 @@ This older root folder is not the active chatbot data path.
 
 The active RAG data path is:
 
-- `chatbot/data/`
+- SQL tables managed by the `chatbot` app.
+- Source documents in `chatbot/data/public_knowledge/` and
+  `chatbot/data/processed_documents/` can be seeded with
+  `python manage.py ingest_chatbot_knowledge`.
 
 It includes:
 
 - Source poultry documents.
-- FAISS index files.
+- Database document/chunk rows with embeddings.
 
-The chatbot uses this folder for document retrieval.
+The chatbot retrieves from the database; those folders are seed sources only.
 
 ### `*/migrations/`
 

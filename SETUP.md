@@ -224,17 +224,22 @@ DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1,0.0.0.0,.herokuapp.com
 CHIKOOZA_CORS_ALLOW_ALL=True
 CHIKOOZA_API_BASE_URL=http://127.0.0.1:8002/
 CHIKOOZA_FIXED_OTP=123456
-CHIKOOZA_PUBLIC_CHAT_PROVIDER=auto
 GROQ_API_KEY=
 GROQ_MODEL=llama-3.1-8b-instant
+CHIKOOZA_RAG_REQUIRE_PGVECTOR=True
+CHIKOOZA_RAG_EMBEDDING_PROVIDER=hash
 ```
 
 `GROQ_API_KEY` must stay in local `.env` or deployment secrets only. Do not commit
 the real key; `.env.example` intentionally keeps it blank.
 
-`CHIKOOZA_PUBLIC_CHAT_PROVIDER=auto` means the public website chatbot uses Groq
-when `GROQ_API_KEY` is configured, otherwise it can fall back to Ollama or the
-deterministic local product answer.
+The public website chatbot is database-backed RAG. It retrieves approved
+Chikooza/poultry knowledge chunks first, then uses Groq only to write the final
+answer from those chunks. If Groq is not configured, it returns a
+retrieval-only answer from the database.
+For local/prod parity, use PostgreSQL with pgvector locally too and set
+`DATABASE_URL` plus `CHIKOOZA_RAG_REQUIRE_PGVECTOR=True`. SQLite is only a
+lightweight fallback for tests and non-RAG checks.
 
 `CHIKOOZA_FIXED_OTP=123456` is only for local MVP testing. In production, remove
 that variable so OTPs are generated randomly.
@@ -265,7 +270,8 @@ business tables are `farms`, `flocks_flock`, `purchase_purchase`,
 
 By default, local setup uses SQLite at `db1.sqlite3`. If `DATABASE_URL` is set,
 Django uses that database instead; use a PostgreSQL URL for a shared or
-production-like setup.
+production-like setup. The public chatbot should use PostgreSQL with pgvector
+in both local and production environments.
 
 The authenticated `/ai/` endpoint answers private farmer-data questions through
 tenant-safe SQL views: `ai_purchase_data_view`, `ai_dailydata_data_view`, and
@@ -273,15 +279,16 @@ tenant-safe SQL views: `ai_purchase_data_view`, `ai_dailydata_data_view`, and
 must filter by the logged-in user before executing a query.
 
 The public `/chat/` site assistant is not allowed to access private farmer data.
-U: NEW: public site chat now uses public RAG first. It retrieves Chikooza product
-notes and general poultry PDF chunks from `chatbot/data/index.faiss` and
-`chatbot/data/index.pkl`, then uses Groq only to write a natural-language answer
-from those retrieved snippets. If Groq is unavailable, it returns a
-retrieval-only answer instead of sending the question directly to an LLM.
+U: NEW: public site chat now uses database-backed RAG first. It retrieves
+approved `KnowledgeDocument`/`KnowledgeChunk` rows, then uses Groq only to write
+a natural-language answer from those retrieved snippets. If Groq is unavailable,
+it returns a retrieval-only answer instead of sending the question directly to
+an LLM. Production should use PostgreSQL with pgvector; local SQLite stores
+vectors as text for development checks.
 
 Frontend routing mirrors that separation:
 
-- Public homepage widget: `/chat/` with `mode: "site"`.
+- Public homepage widget: `/chat/` with `mode: "rag"`.
 - Logged-in farmer AI page: `/chatbot`, which calls authenticated `/ai/`.
 
 

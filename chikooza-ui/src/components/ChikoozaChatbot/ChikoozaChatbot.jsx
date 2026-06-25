@@ -7,10 +7,10 @@ import './styles.css';
 const INITIAL_MESSAGE = {
   id: 'initial',
   role: 'bot',
-  text: 'Hi, I am Chikbot. Ask me about Chikooza, getting started, poultry farm setup, broiler management, feed, mortality, FCR, or reports. For private farm records, please login and use Farmer AI.',
+  text: 'Hi, I am Chikbot. Ask me about Chikooza or poultry farming.',
   display: {
     kind: 'public_answer',
-    summary: 'Hi, I am Chikbot. Ask me about Chikooza, getting started, poultry farm setup, broiler management, feed, mortality, FCR, or reports. For private farm records, please login and use Farmer AI.',
+    summary: 'Hi, I am Chikbot. Ask me about Chikooza or poultry farming.',
     items: [],
     sources: []
   }
@@ -116,6 +116,7 @@ const ChikoozaChatbot = ({ defaultOpen = false, alwaysVisible = true }) => {
   const [messages, setMessages] = useState([INITIAL_MESSAGE]);
   const [inputValue, setInputValue] = useState('');
   const [isSending, setIsSending] = useState(false);
+  const [sessionId, setSessionId] = useState(null);
   const messageListRef = useRef(null);
   const shouldStickToBottomRef = useRef(true);
 
@@ -165,14 +166,14 @@ const ChikoozaChatbot = ({ defaultOpen = false, alwaysVisible = true }) => {
       id: `loading-${Date.now()}`,
       role: 'bot',
       loading: true,
-      text: 'Searching the Chikooza knowledge base...'
+      text: 'Finding the right answer...'
     });
 
     try {
       const response = await fetch(getChatApiUrl(), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query, mode: 'site', history })
+        body: JSON.stringify({ query, mode: 'rag', history, session_id: sessionId })
       });
       const data = await response.json().catch(() => ({}));
 
@@ -182,6 +183,10 @@ const ChikoozaChatbot = ({ defaultOpen = false, alwaysVisible = true }) => {
             ? 'Chikbot is temporarily unavailable. Please try again in a moment.'
             : data.error || data.message || 'Chatbot request failed.'
         );
+      }
+
+      if (data.session_id) {
+        setSessionId(data.session_id);
       }
 
       setMessages(prev => [
