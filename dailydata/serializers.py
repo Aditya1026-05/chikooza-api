@@ -166,15 +166,8 @@ class YesterdayDailyDataGetSerializer(serializers.ModelSerializer):
         return GetFlockVaccinationSerializer(flock_vaccine, many=True).data
 
     def get_current_bird_count(self, obj):
-        lifting_count = 0
-        if Sales.objects.filter(flock=obj.flock, date__gt=obj.date).exists():
-            sales = Sales.objects.filter(flock=obj.flock, date__gt=obj.date)
-            for sale in sales:
-                lifting_count += sale.lifting_count
-            current_bird_count = obj.current_bird_count - lifting_count
-        else:
-            current_bird_count = obj.current_bird_count
-        return current_bird_count
+        return obj.current_bird_count
+
 
 class ListDailyDataSerializer(serializers.Serializer):
     flock_public_id = serializers.IntegerField(source="flock.public_id")

@@ -67,6 +67,10 @@ class AddSalesService(services.Service):
         sales.integration_cost = integration_cost
         sales.save()
         flock.save()
+
+        from dailydata.services import recalculate_daily_data_for_flock
+        recalculate_daily_data_for_flock(flock, sales.date)
+
         return sales
 
 
@@ -76,6 +80,7 @@ class UpdateSalesService(services.Service):
         sales = self.data.get("sales")
         # Update supplied fields and adjust birds by the lifting-count delta.
         old_lifting_count = sales.lifting_count or 0
+        old_sales_date = sales.date
         if "date" in data:
             sales.date = data.get("date")
         if "lifting_count" in data:
@@ -142,3 +147,7 @@ class UpdateSalesService(services.Service):
         integration_cost = (total_cost + total_incentives) - total_taxes - total_penalties
         sales.integration_cost = integration_cost
         sales.save()
+
+        from dailydata.services import recalculate_daily_data_for_flock
+        start_date = min(old_sales_date, sales.date)
+        recalculate_daily_data_for_flock(sales.flock, start_date)

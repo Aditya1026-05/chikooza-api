@@ -69,13 +69,8 @@ class GetSalesSerializer(serializers.ModelSerializer):
                   'other_taxes', 'integration_cost', 'buyer_address', 'buyer_phone_no', 'buyer_email','current_bird_count', 'age']
 
     def get_current_bird_count(self, obj):
-        cbc = 0
-        latest_daily_data = DailyData.objects.filter(flock=obj.flock).order_by("date").last()
-        count = latest_daily_data.current_bird_count if latest_daily_data else obj.flock.actual_birds
-        sales = Sales.objects.filter(flock=obj.flock)
-        for sale in sales:
-            cbc += sale.lifting_count
-        return count - cbc
+        from flocks.utils import calculate_current_bird_count
+        return calculate_current_bird_count(obj.flock, obj.date)
 
     def get_age(self, obj):
         sale_date = obj.date

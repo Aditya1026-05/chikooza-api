@@ -77,22 +77,18 @@ def calculate_total_feed_purchased(flock, date=None, user=None):
     return total_quantity
 
 
-def calculate_current_bird_count(flock, daily_data=None, yesterday_daily_data=None):
+def calculate_current_bird_count(flock, date):
     """
-    Calculate current bird count considering only mortality (not sales)
+    Calculate current bird count considering starting birds, cumulative mortality, and cumulative sales up to a date.
     """
-    if yesterday_daily_data:
-        current_bird_count = yesterday_daily_data.current_bird_count
-    else:
-        current_bird_count = flock.flock_bird
+    from django.db.models import Sum
+    from dailydata.models import DailyData
+    from sales.models import Sales
 
-    # Only subtract mortality, ignore sales
-    if daily_data:
-        actual_bird_count = current_bird_count - daily_data.mortality
-    else:
-        actual_bird_count = current_bird_count
+    cumulative_mortality = DailyData.objects.filter(flock=flock, date__lte=date).aggregate(total=Sum('mortality'))['total'] or 0
+    cumulative_sales = Sales.objects.filter(flock=flock, date__lte=date).aggregate(total=Sum('lifting_count'))['total'] or 0
 
-    return actual_bird_count
+    return flock.flock_bird - cumulative_mortality - cumulative_sales
 
 
 def calculate_total_feed(yesterday_daily_data, feed_intake):
@@ -128,19 +124,23 @@ def calculate_total_average_feed(yesterday_avg_feed, current_avg_feed):
     return round(yesterday_avg_feed + current_avg_feed, 2)
 
 
-def calculate_total_mortality_percentage(flock, current_bird_count):
+def calculate_total_mortality_percentage(flock, date):
     """
     Calculate cumulative mortality percentage
     """
-    total_dead_birds = flock.flock_bird - current_bird_count
+    from dailydata.models import DailyData
+    from django.db.models import Sum
+    total_dead_birds = DailyData.objects.filter(flock=flock, date__lte=date).aggregate(total=Sum('mortality'))['total'] or 0
     return round((total_dead_birds * 100) / flock.flock_bird, 2)
 
 
-def cum_mort_fn(flock, current_bird_count):
+def cum_mort_fn(flock, date):
     """
     Calculate cumulative mortality
     """
-    total_dead_birds = flock.flock_bird - current_bird_count
+    from dailydata.models import DailyData
+    from django.db.models import Sum
+    total_dead_birds = DailyData.objects.filter(flock=flock, date__lte=date).aggregate(total=Sum('mortality'))['total'] or 0
     return total_dead_birds
 
 
@@ -197,7 +197,7 @@ def prepare_daily_data_response(daily_data, flock):
         flock, daily_data.date, daily_data.user
     )
     calculated_current_bird_count = calculate_current_bird_count(
-        flock, daily_data, yesterday_data
+        flock, daily_data.date
     )
     # Recalculate from earlier daily rows so edited feed purchases/daily rows stay correct.
     calculated_total_feed = (
@@ -217,9 +217,9 @@ def prepare_daily_data_response(daily_data, flock):
     )
 
     calculated_total_mortality = calculate_total_mortality_percentage(
-        flock, calculated_current_bird_count
+        flock, daily_data.date
     )
-    cum_mort = cum_mort_fn(flock, calculated_current_bird_count)
+    cum_mort = cum_mort_fn(flock, daily_data.date)
 
     yesterday_fcr = yesterday_data.fcr if yesterday_data else 0
     calculated_fcr = calculate_fcr(

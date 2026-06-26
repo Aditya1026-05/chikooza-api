@@ -1,4 +1,5 @@
 import datetime
+from django.db.models import Sum
 
 from service_objects import services
 
@@ -44,51 +45,42 @@ class CreateDailyDataService(services.Service):
             validation_return_response("feed_intake", FEED_STOCK_VALIDATION_MESSAGE)
 
         yesterday = data.get("date") - datetime.timedelta(days=1)
+        last_daily_data = DailyData.objects.filter(flock=flock, date__lt=data.get("date")).order_by('date').last()
 
-        if DailyData.objects.filter(date=yesterday, flock=flock).exists():
-            yesterday_daily_data = DailyData.objects.get(date=yesterday, flock=flock)
-            if yesterday_daily_data:
-                current_bird_count = yesterday_daily_data.current_bird_count
-            else:
-                current_bird_count = flock.actual_birds
+        # Calculate current bird count at the start of today (end of yesterday)
+        yesterday_mortality = DailyData.objects.filter(flock=flock, date__lte=yesterday).aggregate(total=Sum('mortality'))['total'] or 0
+        yesterday_sales = Sales.objects.filter(flock=flock, date__lte=yesterday).aggregate(total=Sum('lifting_count'))['total'] or 0
+        current_bird_count = flock.flock_bird - yesterday_mortality - yesterday_sales
 
-            total_feed = total_feed_consumed_before_date(
-                flock, user, data.get("date")
-            ) + data.get("feed_intake")
-            real_current_bird_count = current_bird_count - data.get("mortality")
-            avg_feed = yesterday_daily_data.total_average_feed
-            res_fcr = yesterday_daily_data.fcr
+        total_feed = total_feed_consumed_before_date(
+            flock, user, data.get("date")
+        ) + data.get("feed_intake")
+
+        if last_daily_data:
+            avg_feed = last_daily_data.total_average_feed
+            res_fcr = last_daily_data.fcr
         else:
-            current_bird_count = flock.actual_birds
-            real_current_bird_count = current_bird_count - data.get("mortality")
-            total_feed = total_feed_consumed_before_date(
-                flock, user, data.get("date")
-            ) + data.get("feed_intake")
-
             avg_feed = 0
             res_fcr = 0
 
         feed_stock = available_feed_stock - data.get("feed_intake")
 
-        if Sales.objects.filter(flock=flock).exists():
-            sale = Sales.objects.filter(flock=flock).last()
-            sales_date = sale.date
-            if datetime.datetime.today().date() > sales_date:
-                final_current_bird_count = current_bird_count - sale.lifting_count
-                actual_bird_count = final_current_bird_count - data.get("mortality")
-            else:
-                actual_bird_count = real_current_bird_count
-        else:
-            actual_bird_count = real_current_bird_count
+        mortality_before = DailyData.objects.filter(flock=flock, date__lt=data.get("date")).aggregate(total=Sum('mortality'))['total'] or 0
+        cumulative_mortality = mortality_before + data.get("mortality")
+        
+        sales_to_date = Sales.objects.filter(flock=flock, date__lte=data.get("date")).aggregate(total=Sum('lifting_count'))['total'] or 0
+        
+        actual_bird_count = flock.flock_bird - cumulative_mortality - sales_to_date
+
         average_bird_weight = data.get("average_bird_weight")
-        if real_current_bird_count == 0:
+        if actual_bird_count == 0:
             average_feed = 0
         else:
-            average_feed = (data.get("feed_intake") * 1000) / real_current_bird_count
+            average_feed = (data.get("feed_intake") * 1000) / actual_bird_count
         total_average_feed = avg_feed + average_feed
 
-        total_dead_birds = flock.actual_birds - actual_bird_count
-        total_mortality = (total_dead_birds * 100) / flock.actual_birds
+        total_dead_birds = cumulative_mortality
+        total_mortality = (total_dead_birds * 100) / flock.flock_bird
 
         fcr = (
             total_average_feed / (average_bird_weight - flock.chick_weight)
@@ -191,24 +183,23 @@ class UpdateDailyDataService(services.Service):
         if feed_intake > available_feed_stock:
             validation_return_response("feed_intake", FEED_STOCK_VALIDATION_MESSAGE)
 
-        if DailyData.objects.filter(date=yesterday, flock=flock).exists():
-            yesterday_daily_data = DailyData.objects.get(date=yesterday, flock=flock)
-            current_bird_count = yesterday_daily_data.current_bird_count
-            total_feed = total_feed_consumed_before_date(
-                flock, daily_data.user, daily_data.date
-            ) + feed_intake
-            feed_stock = available_feed_stock - feed_intake
-            real_current_bird_count = current_bird_count - mortality
-            average_feed = round(yesterday_daily_data.total_average_feed, 2)
-            fallback_fcr = yesterday_daily_data.fcr
-            fallback_total_fcr = yesterday_daily_data.total_fcr
+        last_daily_data = DailyData.objects.filter(flock=flock, date__lt=daily_data.date).exclude(id=daily_data.id).order_by('date').last()
+
+        # Calculate current bird count at the start of today (end of yesterday)
+        yesterday_mortality = DailyData.objects.filter(flock=flock, date__lte=yesterday).exclude(id=daily_data.id).aggregate(total=Sum('mortality'))['total'] or 0
+        yesterday_sales = Sales.objects.filter(flock=flock, date__lte=yesterday).aggregate(total=Sum('lifting_count'))['total'] or 0
+        current_bird_count = flock.flock_bird - yesterday_mortality - yesterday_sales
+
+        total_feed = total_feed_consumed_before_date(
+            flock, daily_data.user, daily_data.date
+        ) + feed_intake
+        feed_stock = available_feed_stock - feed_intake
+
+        if last_daily_data:
+            average_feed = round(last_daily_data.total_average_feed, 2)
+            fallback_fcr = last_daily_data.fcr
+            fallback_total_fcr = last_daily_data.total_fcr
         else:
-            current_bird_count = flock.actual_birds
-            real_current_bird_count = current_bird_count - mortality
-            total_feed = total_feed_consumed_before_date(
-                flock, daily_data.user, daily_data.date
-            ) + feed_intake
-            feed_stock = available_feed_stock - feed_intake
             average_feed = 0
             fallback_fcr = daily_data.fcr
             fallback_total_fcr = daily_data.total_fcr
@@ -217,14 +208,22 @@ class UpdateDailyDataService(services.Service):
             if "average_bird_weight" in data
             else daily_data.average_bird_weight
         )
+
+        mortality_before = DailyData.objects.filter(flock=flock, date__lt=daily_data.date).exclude(id=daily_data.id).aggregate(total=Sum('mortality'))['total'] or 0
+        cumulative_mortality = mortality_before + mortality
+        
+        sales_to_date = Sales.objects.filter(flock=flock, date__lte=daily_data.date).aggregate(total=Sum('lifting_count'))['total'] or 0
+        
+        real_current_bird_count = flock.flock_bird - cumulative_mortality - sales_to_date
+
         if real_current_bird_count == 0:
             avg_feed = 0
         else:
             avg_feed = round((feed_intake * 1000) / real_current_bird_count, 2)
         total_average_feed = avg_feed + average_feed
 
-        total_dead_birds = flock.actual_birds - real_current_bird_count
-        total_mortality = (total_dead_birds * 100) / flock.actual_birds
+        total_dead_birds = cumulative_mortality
+        total_mortality = (total_dead_birds * 100) / flock.flock_bird
 
         fcr = (
             total_average_feed / (average_bird_weight - flock.chick_weight)
@@ -322,43 +321,49 @@ class UpdateDailyDataService(services.Service):
                     flock_vaccine.status = flock_vaccinations["status"][i]
                     flock_vaccine.save()
         daily_data.save()
-        dailydatas = DailyData.objects.filter(date__gt=daily_data.date, flock=flock)
+        dailydatas = DailyData.objects.filter(date__gt=daily_data.date, flock=flock).order_by("date")
         for dailydata in dailydatas:
-            yes = dailydata.date - datetime.timedelta(days=1)
-            yes_daily_data = DailyData.objects.get(date=yes, flock=flock)
-            if data.get("mortality"):
-                dailydata.current_bird_count = (
-                    yes_daily_data.current_bird_count - dailydata.mortality
-                )
+            prev_dd = DailyData.objects.filter(flock=flock, date__lt=dailydata.date).order_by('date').last()
+            
+            if "mortality" in data:
+                cumulative_mortality = DailyData.objects.filter(flock=flock, date__lte=dailydata.date).aggregate(total=Sum('mortality'))['total'] or 0
+                cumulative_sales = Sales.objects.filter(flock=flock, date__lte=dailydata.date).aggregate(total=Sum('lifting_count'))['total'] or 0
+                dailydata.current_bird_count = flock.flock_bird - cumulative_mortality - cumulative_sales
 
-                total_dead_birds = flock.actual_birds - dailydata.current_bird_count
                 dailydata.total_mort = round(
-                    (total_dead_birds * 100) / flock.actual_birds, 2
+                    (cumulative_mortality * 100) / flock.flock_bird, 2
                 )
+                dailydata.save()
 
-                dailydata.save()
-            if "feed_intake" in data:
-                dailydata.average_feed = round(
-                    (dailydata.feed_intake * 1000)
-                    / dailydata.current_bird_count,
-                    2,
-                )
+            if "feed_intake" in data or "mortality" in data:
+                if dailydata.current_bird_count == 0:
+                    dailydata.average_feed = 0
+                else:
+                    dailydata.average_feed = round(
+                        (dailydata.feed_intake * 1000)
+                        / dailydata.current_bird_count,
+                        2,
+                    )
+                prev_total_avg_feed = prev_dd.total_average_feed if prev_dd else 0
                 dailydata.total_average_feed = round(
-                    yes_daily_data.total_average_feed + dailydata.average_feed,
+                    prev_total_avg_feed + dailydata.average_feed,
                     2,
                 )
                 dailydata.save()
-            if data.get("average_bird_weight"):
+
+            if "average_bird_weight" in data or "feed_intake" in data or "mortality" in data:
+                prev_fcr = prev_dd.fcr if prev_dd else 0
+                prev_total_fcr = prev_dd.total_fcr if prev_dd else 0
                 dailydata.fcr = (
                     dailydata.total_average_feed
                     / (dailydata.average_bird_weight - flock.chick_weight)
                     if (dailydata.average_bird_weight - flock.chick_weight) > 0
-                    else yes_daily_data.fcr
+                    else prev_fcr
                 )
                 dailydata.total_fcr = round(
                     dailydata.total_average_feed / dailydata.average_bird_weight
                     if dailydata.average_bird_weight
-                    else yes_daily_data.total_fcr,
+                    else prev_total_fcr,
                     2,
                 )
                 dailydata.save()
@@ -386,3 +391,44 @@ class CreateFlockVaccinationService(services.Service):
         )
 
         return flock_vaccination
+
+
+def recalculate_daily_data_for_flock(flock, start_date):
+    """Recalculate daily data records for a flock from the start_date onwards."""
+    daily_datas = DailyData.objects.filter(flock=flock, date__gte=start_date).order_by('date')
+    for dd in daily_datas:
+        prev_dd = DailyData.objects.filter(flock=flock, date__lt=dd.date).order_by('date').last()
+        
+        # Calculate current bird count using cumulative database sums
+        cumulative_mortality = DailyData.objects.filter(flock=flock, date__lte=dd.date).aggregate(total=Sum('mortality'))['total'] or 0
+        cumulative_sales = Sales.objects.filter(flock=flock, date__lte=dd.date).aggregate(total=Sum('lifting_count'))['total'] or 0
+        
+        dd.current_bird_count = flock.flock_bird - cumulative_mortality - cumulative_sales
+        
+        # Recalculate total_mort
+        dd.total_mort = round((cumulative_mortality * 100) / flock.flock_bird, 2)
+        
+        # Recalculate average_feed & total_average_feed
+        avg_feed = prev_dd.total_average_feed if prev_dd else 0
+        if dd.current_bird_count == 0:
+            dd.average_feed = 0
+        else:
+            dd.average_feed = round((dd.feed_intake * 1000) / dd.current_bird_count, 2)
+        dd.total_average_feed = round(avg_feed + dd.average_feed, 2)
+        
+        # Recalculate FCR
+        prev_fcr = prev_dd.fcr if prev_dd else 0
+        prev_total_fcr = prev_dd.total_fcr if prev_dd else 0
+        dd.fcr = (
+            dd.total_average_feed / (dd.average_bird_weight - flock.chick_weight)
+            if (dd.average_bird_weight - flock.chick_weight) > 0
+            else prev_fcr
+        )
+        dd.total_fcr = round(
+            dd.total_average_feed / dd.average_bird_weight
+            if dd.average_bird_weight
+            else prev_total_fcr,
+            2,
+        )
+            
+        dd.save()
