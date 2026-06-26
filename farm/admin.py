@@ -1,7 +1,10 @@
 from django.contrib import admin
+from django.utils.html import format_html
 
-from common.admin_mixins import PublicIdAdminMixin
+from common.admin_mixins import AdminWorkflowLinkMixin, PublicIdAdminMixin
+from dailydata.models import DailyData
 from farm.models import Country, Farm, State
+from flocks.models import Flock
 
 
 @admin.register(State)
@@ -20,14 +23,15 @@ class CountryAdmin(PublicIdAdminMixin, admin.ModelAdmin):
 
 
 @admin.register(Farm)
-class FarmAdmin(PublicIdAdminMixin, admin.ModelAdmin):
+class FarmAdmin(AdminWorkflowLinkMixin, PublicIdAdminMixin, admin.ModelAdmin):
     list_display = (
         "name",
-        "user",
+        "farmer",
         "city",
         "district",
         "state",
         "shed_count",
+        "flock_records",
         "status",
         "public_id",
     )
@@ -45,6 +49,8 @@ class FarmAdmin(PublicIdAdminMixin, admin.ModelAdmin):
     autocomplete_fields = ("user", "country", "state")
     list_select_related = ("user", "country", "state")
     ordering = ("name",)
+    list_per_page = 25
+    readonly_fields = PublicIdAdminMixin.readonly_fields + ("flock_records",)
     fieldsets = (
         (
             "Ownership",
@@ -81,3 +87,21 @@ class FarmAdmin(PublicIdAdminMixin, admin.ModelAdmin):
         ),
         ("Audit", {"fields": ("created_at", "updated_at")}),
     )
+
+    @admin.display(description="Farmer")
+    def farmer(self, obj):
+        return self.admin_change_link(obj.user, obj.user.username)
+
+    @admin.display(description="Records")
+    def flock_records(self, obj):
+        flock_count = Flock.objects.filter(farm=obj).count()
+        daily_count = DailyData.objects.filter(flock__farm=obj).count()
+        return format_html(
+            "{} · {}",
+            self.admin_changelist_link(Flock, f"{flock_count} flocks", {"farm__id__exact": obj.pk}),
+            self.admin_changelist_link(
+                DailyData,
+                f"{daily_count} daily entries",
+                {"flock__farm__id__exact": obj.pk},
+            ),
+        )

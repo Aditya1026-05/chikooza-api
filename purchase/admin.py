@@ -1,16 +1,17 @@
 from django.contrib import admin
 
-from common.admin_mixins import PublicIdAdminMixin
+from common.admin_mixins import AdminWorkflowLinkMixin, PublicIdAdminMixin
 from purchase.models import Purchase
 
 
 @admin.register(Purchase)
-class PurchaseAdmin(PublicIdAdminMixin, admin.ModelAdmin):
+class PurchaseAdmin(AdminWorkflowLinkMixin, PublicIdAdminMixin, admin.ModelAdmin):
     list_display = (
         "date",
         "type",
-        "flock",
-        "user",
+        "flock_link",
+        "farm",
+        "farmer",
         "cost",
         "quantity",
         "item_name",
@@ -31,3 +32,16 @@ class PurchaseAdmin(PublicIdAdminMixin, admin.ModelAdmin):
     list_select_related = ("flock", "flock__farm", "user")
     date_hierarchy = "date"
     ordering = ("-date", "-created_at")
+    list_per_page = 25
+
+    @admin.display(description="Flock")
+    def flock_link(self, obj):
+        return self.admin_change_link(obj.flock, obj.flock.name)
+
+    @admin.display(description="Farm")
+    def farm(self, obj):
+        return self.admin_change_link(obj.flock.farm, obj.flock.farm.name)
+
+    @admin.display(description="Farmer")
+    def farmer(self, obj):
+        return self.admin_change_link(obj.user, obj.user.username)

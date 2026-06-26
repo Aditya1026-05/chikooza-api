@@ -12,6 +12,7 @@ const AuthLayout = lazy(() => import("../layouts/AuthLayout.jsx"));
 
 //Original Pages
 const Login = lazy(() => import("../views/ui/Login.jsx"));
+const AdminAccess = lazy(() => import("../views/ui/AdminAccess.jsx"));
 // U: OLD unused route-level import caused a build warning; chatbot is mounted inside Home/Chatbot pages.
 // const ChikoozaChatbot = lazy(() => import('../components/ChikoozaChatbot/ChikoozaChatbot'));
 const Register = lazy(() => import("../views/ui/Register.jsx"));
@@ -62,6 +63,7 @@ const ThemeRoutes = [
     children: [
       // U: NEW: auth screens are standalone pages without public header/footer.
       { path: "/login", exact: true, element: <Login /> },
+      { path: "/admin-access", exact: true, element: <AdminAccess /> },
       { path: "/register", exact: true, element: <Register /> },
       { path: "/forgetpassword", exact: true, element: <ForgetPassword /> },
     ],

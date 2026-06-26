@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from common.admin_mixins import PublicIdAdminMixin
+from common.admin_mixins import AdminWorkflowLinkMixin, PublicIdAdminMixin
 from dailydata.models import (
     DailyData,
     DarknessTime,
@@ -33,11 +33,12 @@ class VaccinesAdmin(PublicIdAdminMixin, admin.ModelAdmin):
 
 
 @admin.register(DailyData)
-class DailyDataAdmin(PublicIdAdminMixin, admin.ModelAdmin):
+class DailyDataAdmin(AdminWorkflowLinkMixin, PublicIdAdminMixin, admin.ModelAdmin):
     list_display = (
         "date",
-        "flock",
-        "user",
+        "flock_link",
+        "farm",
+        "farmer",
         "current_bird_count",
         "mortality",
         "total_mort",
@@ -76,11 +77,24 @@ class DailyDataAdmin(PublicIdAdminMixin, admin.ModelAdmin):
     )
     date_hierarchy = "date"
     ordering = ("-date", "-created_at")
+    list_per_page = 25
+
+    @admin.display(description="Flock")
+    def flock_link(self, obj):
+        return self.admin_change_link(obj.flock, obj.flock.name)
+
+    @admin.display(description="Farm")
+    def farm(self, obj):
+        return self.admin_change_link(obj.flock.farm, obj.flock.farm.name)
+
+    @admin.display(description="Farmer")
+    def farmer(self, obj):
+        return self.admin_change_link(obj.user, obj.user.username)
 
 
 @admin.register(FlockVaccination)
-class FlockVaccinationAdmin(PublicIdAdminMixin, admin.ModelAdmin):
-    list_display = ("dailydata", "flock", "vaccine", "status", "public_id")
+class FlockVaccinationAdmin(AdminWorkflowLinkMixin, PublicIdAdminMixin, admin.ModelAdmin):
+    list_display = ("daily_data", "flock_link", "vaccine", "status", "public_id")
     list_filter = ("status", "vaccine", "flock__farm")
     search_fields = (
         "flock__name",
@@ -90,3 +104,11 @@ class FlockVaccinationAdmin(PublicIdAdminMixin, admin.ModelAdmin):
     )
     autocomplete_fields = ("dailydata", "flock", "vaccine")
     list_select_related = ("dailydata", "flock", "vaccine")
+
+    @admin.display(description="Daily data")
+    def daily_data(self, obj):
+        return self.admin_change_link(obj.dailydata, obj.dailydata.date)
+
+    @admin.display(description="Flock")
+    def flock_link(self, obj):
+        return self.admin_change_link(obj.flock, obj.flock.name)

@@ -1,0 +1,121 @@
+{% extends "admin/base_site.html" %}
+{% load i18n jazzmin chikooza_admin %}
+{% get_jazzmin_ui_tweaks as jazzmin_ui %}
+
+{% block bodyclass %}{{ block.super }} dashboard chikooza-admin-dashboard{% endblock %}
+
+{% block content_title %}Chikooza admin{% endblock %}
+
+{% block breadcrumbs %}
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{% url 'admin:index' %}">{% trans 'Home' %}</a></li>
+        <li class="breadcrumb-item">{% trans 'Dashboard' %}</li>
+    </ol>
+{% endblock %}
+
+{% block content %}
+    {% get_side_menu using="app_list" as dashboard_list %}
+    {% chikooza_admin_dashboard as dashboard %}
+
+    <div class="col-12 chikooza-admin-home">
+        <section class="admin-workspace-header">
+            <div>
+                <span class="admin-eyebrow">Product flow</span>
+                <h2>Manage Chikooza from farmer to flock to sale.</h2>
+                <p>Start with farmer accounts, inspect farm setup, then follow daily data, purchases, sales, and support.</p>
+            </div>
+            <a class="btn {{ jazzmin_ui.button_classes.primary }}" href="{% url 'admin:common_users_changelist' %}">
+                Open farmers
+            </a>
+        </section>
+
+        <section class="admin-metric-grid" aria-label="Admin overview">
+            {% for metric in dashboard.metrics %}
+                <a class="admin-metric admin-metric--{{ metric.tone }}" href="{{ metric.url }}">
+                    <span>{{ metric.label }}</span>
+                    <strong>{{ metric.value }}</strong>
+                </a>
+            {% endfor %}
+        </section>
+
+        <section class="admin-flow-grid" aria-label="Chikooza admin workflow">
+            {% for section in dashboard.sections %}
+                <article class="admin-flow-card">
+                    <div class="admin-flow-step">{{ section.step }}</div>
+                    <div class="admin-flow-body">
+                        <h3>{{ section.title }}</h3>
+                        <p>{{ section.summary }}</p>
+                        <div class="admin-flow-actions">
+                            {% for link in section.links %}
+                                <a href="{{ link.url }}">{{ link.label }}</a>
+                            {% empty %}
+                                <span>No tools available for your permissions.</span>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </article>
+            {% endfor %}
+        </section>
+
+        <div class="admin-secondary-grid">
+            <section class="admin-simple-panel">
+                <h3>Master data</h3>
+                <p>Reference records used by farm, flock, and daily entry forms.</p>
+                <div class="admin-chip-list">
+                    {% for link in dashboard.master_links %}
+                        <a href="{{ link.url }}">{{ link.label }}</a>
+                    {% endfor %}
+                </div>
+            </section>
+
+            <section class="admin-simple-panel">
+                <h3>Recent admin activity</h3>
+                <div class="admin-activity-list">
+                    {% for entry in dashboard.recent_activity %}
+                        <div class="admin-activity-item">
+                            <span>{{ entry.action_time|timesince }} ago</span>
+                            {% if entry.is_deletion or not entry.get_admin_url %}
+                                <strong>{{ entry.object_repr }}</strong>
+                            {% else %}
+                                <strong><a href="{{ entry.get_admin_url }}">{{ entry.object_repr }}</a></strong>
+                            {% endif %}
+                            {% if entry.content_type %}
+                                <small>{{ entry.content_type }}</small>
+                            {% endif %}
+                        </div>
+                    {% empty %}
+                        <p>No recent admin activity.</p>
+                    {% endfor %}
+                </div>
+            </section>
+        </div>
+
+        <details class="admin-all-tools">
+            <summary>All admin tools</summary>
+            <div class="admin-tool-grid">
+                {% for app in dashboard_list %}
+                    <section class="admin-tool-group">
+                        <h3>{{ app.name }}</h3>
+                        {% for model in app.models %}
+                            <div class="admin-tool-row">
+                                {% if model.url %}
+                                    <a href="{{ model.url }}">{{ model.name }}</a>
+                                {% else %}
+                                    <span>{{ model.name }}</span>
+                                {% endif %}
+                                <span>
+                                    {% if model.add_url %}
+                                        <a href="{{ model.add_url }}">Add</a>
+                                    {% endif %}
+                                    {% if model.url %}
+                                        <a href="{{ model.url }}">View</a>
+                                    {% endif %}
+                                </span>
+                            </div>
+                        {% endfor %}
+                    </section>
+                {% endfor %}
+            </div>
+        </details>
+    </div>
+{% endblock %}

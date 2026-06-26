@@ -72,8 +72,10 @@ JAZZMIN_SETTINGS = {
     "site_title": "Chikooza Admin",
     "site_header": "Chikooza Admin",
     "site_brand": "Chikooza",
-    "welcome_sign": "Chikooza farm operations admin",
+    "welcome_sign": "Manage farmers, flocks, daily data, purchases, and sales",
     "copyright": "Chikooza",
+    "custom_css": "common/admin.css",
+    "use_google_fonts_cdn": False,
     "search_model": [
         "common.Users",
         "farm.Farm",
@@ -84,16 +86,36 @@ JAZZMIN_SETTINGS = {
     ],
     "topmenu_links": [
         {
-            "name": "Dashboard",
+            "name": "Workflow",
             "url": "admin:index",
-            "permissions": ["auth.view_user"],
+            "permissions": ["common.view_users"],
+        },
+        {
+            "name": "Farmers",
+            "model": "common.Users",
+        },
+        {
+            "name": "Flocks",
+            "model": "flocks.Flock",
+        },
+        {
+            "name": "Daily data",
+            "model": "dailydata.DailyData",
         },
     ],
     "show_sidebar": True,
-    "navigation_expanded": True,
-    "hide_apps": ("oauth2_provider",),
+    "navigation_expanded": False,
+    "hide_apps": ("oauth2_provider", "auth", "users"),
+    "hide_models": (
+        "common.Otp",
+        "common.EmailOtp",
+        "common.UsersForgotPassword",
+        "chatbot.KnowledgeChunk",
+        "chatbot.ChatMessage",
+    ),
     "order_with_respect_to": [
         "common.Users",
+        "common.RegistrationApprovalPolicy",
         "farm",
         "flocks",
         "dailydata",
@@ -102,11 +124,45 @@ JAZZMIN_SETTINGS = {
         "chatbot",
         "aibot",
     ],
+    "icons": {
+        "common": "fas fa-user-check",
+        "common.Users": "fas fa-users",
+        "common.RegistrationApprovalPolicy": "fas fa-clipboard-check",
+        "farm": "fas fa-warehouse",
+        "farm.Farm": "fas fa-tractor",
+        "flocks": "fas fa-layer-group",
+        "flocks.Flock": "fas fa-list",
+        "dailydata": "fas fa-calendar-check",
+        "dailydata.DailyData": "fas fa-clipboard-list",
+        "dailydata.FlockVaccination": "fas fa-syringe",
+        "purchase": "fas fa-shopping-cart",
+        "purchase.Purchase": "fas fa-receipt",
+        "sales": "fas fa-file-invoice-dollar",
+        "sales.Sales": "fas fa-chart-line",
+        "chatbot": "fas fa-comments",
+        "aibot": "fas fa-robot",
+    },
+}
+JAZZMIN_UI_TWEAKS = {
+    "theme": "flatly",
+    "accent": "accent-success",
+    "navbar": "navbar-white navbar-light",
+    "sidebar": "sidebar-dark-success",
+    "sidebar_nav_compact_style": True,
+    "button_classes": {
+        "primary": "btn-success",
+        "secondary": "btn-secondary",
+        "info": "btn-outline-primary",
+        "warning": "btn-warning",
+        "danger": "btn-danger",
+        "success": "btn-success",
+    },
 }
 # Base URL used to build OAuth and account callback URLs.
 HOSTNAME = os.environ.get("CHIKOOZA_API_BASE_URL", "http://127.0.0.1:8002/")
 if not HOSTNAME.endswith("/"):
     HOSTNAME = f"{HOSTNAME}/"
+CHIKOOZA_UI_BASE_URL = os.environ.get("CHIKOOZA_UI_BASE_URL", "http://localhost:5173")
 
 # Optional fixed OTP for local MVP testing. Leave unset in production.
 CHIKOOZA_FIXED_OTP = os.environ.get("CHIKOOZA_FIXED_OTP")
@@ -193,7 +249,11 @@ STORAGES = {
         "BACKEND": "django.core.files.storage.FileSystemStorage",
     },
     "staticfiles": {
-        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+        "BACKEND": (
+            "django.contrib.staticfiles.storage.StaticFilesStorage"
+            if DEBUG
+            else "whitenoise.storage.CompressedManifestStaticFilesStorage"
+        ),
     },
 }
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")

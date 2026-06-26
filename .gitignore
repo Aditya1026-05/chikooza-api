@@ -45,6 +45,9 @@ htmlcov/
 /media/
 /staticfiles/
 /data/
+/db-transfer/
+/sqlite-to-postgres*.json
+
 
 #Logs
 /chatbot_logs/
