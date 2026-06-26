@@ -26,7 +26,7 @@ const Login = () => {
   const validate = () => {
     const errors = {};
     if (!loginData.username.trim()) {
-      errors.username = "Username is required.";
+      errors.username = "Username or email is required.";
     }
     if (!loginData.password) {
       errors.password = "Password is required.";
@@ -89,17 +89,17 @@ const Login = () => {
           </Link>
           <span className="auth-kicker">Farmer login</span>
           <h1>Welcome back.</h1>
-          <p>Use your Chikooza username and password to open the farmer dashboard.</p>
+          <p>Use your Chikooza username or email and password to open the farmer dashboard.</p>
           {error && <Alert color="danger">{error}</Alert>}
           <form className="auth-form" onSubmit={submitLogin}>
             <div className="form-field">
-              <label htmlFor="login-username">Username</label>
+              <label htmlFor="login-username">Username or email</label>
               <input
                 autoComplete="username"
                 id="login-username"
                 name="username"
                 onChange={updateField}
-                placeholder="Enter username"
+                placeholder="Enter username or email"
                 type="text"
                 value={loginData.username}
               />

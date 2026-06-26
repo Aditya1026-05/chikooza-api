@@ -1,4 +1,5 @@
 from django.test import TestCase, override_settings
+from unittest.mock import patch
 from rest_framework import status
 from rest_framework.test import APIRequestFactory
 
@@ -86,3 +87,35 @@ class UserVerificationApprovalTests(TestCase):
 
         self.assertEqual(response.status_code, status.HTTP_406_NOT_ACCEPTABLE)
         self.assertIn("approval", response.data["error"].lower())
+
+    def test_login_accepts_email_when_username_is_different(self):
+        user = Users.objects.create_user(
+            username="demo_farmer",
+            email="demo@example.com",
+            password=self.password,
+            mobile_number="9998887776",
+            public_id=123456789,
+            is_phone_verified=True,
+            is_email_verified=True,
+            approval_status=Users.APPROVAL_APPROVED,
+            is_active=True,
+        )
+        view = LoginView.as_view({"post": "create"})
+        request = self.factory.post(
+            "/users/login/",
+            {"username": user.email, "password": self.password},
+            format="json",
+        )
+
+        with patch(
+            "users.views.create_token",
+            return_value={
+                "access_token": "test-token",
+                "expires_in": 3600,
+                "token_type": "Bearer",
+            },
+        ):
+            response = view(request)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["results"]["public_id"], user.public_id)

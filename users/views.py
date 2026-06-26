@@ -209,15 +209,25 @@ class LoginView(viewsets.ViewSet):
     Class for login of a user.
     """
 
+    @staticmethod
+    def _get_user_by_identifier(identifier):
+        identifier = (identifier or "").strip()
+        return (
+            Users.objects.filter(username__iexact=identifier).first()
+            or Users.objects.filter(email__iexact=identifier).first()
+        )
+
     @classmethod
     def create(cls, request):
         try:
             serializer = LoginSerializer(data=request.data)
             if serializer.is_valid(raise_exception=True):
                 serializer_data = serializer.validated_data
-                username = serializer_data.get("username")
+                username = serializer_data.get("username", "").strip()
                 password = serializer_data.get("password")
-                user = Users.objects.get(username=username)
+                user = cls._get_user_by_identifier(username)
+                if user is None:
+                    raise Users.DoesNotExist
                 if not user.is_phone_verified:
                     return Response(
                         {ERROR: MOBILE_NUMBER_NOT_VERIFIED},
@@ -238,7 +248,9 @@ class LoginView(viewsets.ViewSet):
                         status.HTTP_406_NOT_ACCEPTABLE,
                     )
                 if user.is_active is True:
-                    validate_user = authenticate(username=username, password=password)
+                    validate_user = authenticate(
+                        username=user.username, password=password
+                    )
                     if validate_user is None:
                         raise ValidationError(
                             {ERROR: INVALID_CREDENTIALS}, status.HTTP_400_BAD_REQUEST
