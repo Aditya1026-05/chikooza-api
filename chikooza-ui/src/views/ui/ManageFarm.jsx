@@ -418,7 +418,6 @@ const ManageFarm = () => {
                                 <div className="input-group input-group">
                                   <input onChange={farmnameChange} name="farmname" value={addData.name || ""} placeholder="Farm Name" type="text" maxLength="30" className="form-control" aria-label="Farm Name" aria-describedby="basic-addon1" />
                                 </div>
-                                <small className="text-muted">{(addData.name || "").length}/30 characters</small>
                                 <small id="passwordHelp" className="text-danger">{farmnameError}</small>
                               </FormGroup>
                               <FormGroup>

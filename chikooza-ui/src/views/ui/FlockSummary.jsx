@@ -518,7 +518,7 @@ const FlockSummary = () => {
                     <h3>Cost breakdown</h3>
                     <span className="report-muted">{filteredPurchases.length} purchase records</span>
                   </div>
-                  <Table responsive className="report-table report-table--soft">
+                  <Table responsive className="report-table report-table--soft report-table--cost">
                     <thead>
                       <tr>
                         <th>Cost type</th>

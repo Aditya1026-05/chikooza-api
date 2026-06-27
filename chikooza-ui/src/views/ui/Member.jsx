@@ -716,19 +716,6 @@ const Member = () => {
         </div>
       </section>
 
-      <section className="member-mobile-quick-actions" aria-label="Quick actions">
-        <div className="member-mobile-section-heading">
-          <div><span>Quick actions</span><strong>What do you want to do?</strong></div>
-          <button type="button" onClick={() => setShowWorkflow((current) => !current)}>View plan</button>
-        </div>
-        <div className="member-mobile-action-grid">
-          <Link to="/flockdailydata"><i className="bi bi-calendar2-check" /><span>Daily data</span></Link>
-          <Link to="/addpurchase" state={selectedFlock !== "0" ? { farmPublicId: selectedFarm, flockPublicId: selectedFlock } : undefined}><i className="bi bi-cart-plus" /><span>Purchase</span></Link>
-          <Link to="/flocksale" state={selectedFlock !== "0" ? { farmPublicId: selectedFarm, flockPublicId: selectedFlock } : undefined}><i className="bi bi-cash-coin" /><span>Sale</span></Link>
-          <Link to="/chatbot"><i className="bi bi-stars" /><span>Farmer AI</span></Link>
-        </div>
-      </section>
-
       <section className="member-continue-card">
         <div>
           <span>{continueActionLabel}</span>
@@ -736,7 +723,7 @@ const Member = () => {
         </div>
         <div className="member-continue-actions">
           <button type="button" onClick={() => setShowWorkflow((current) => !current)}>
-            {showWorkflow ? "Hide workflow" : "View workflow"}
+            {showWorkflow ? "Hide plan" : "View plan"}
           </button>
           <Link to={continueAction.href} state={continueAction.state}>{continueAction.action}</Link>
         </div>

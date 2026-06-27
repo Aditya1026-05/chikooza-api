@@ -2106,16 +2106,27 @@
     border-top: 8px solid #f5f5f6 !important;
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
+    column-gap: 10px;
     padding: 16px var(--ck-mobile-gutter);
   }
 
   .member-app-layout .member-continue-actions {
-    display: block;
+    align-items: center;
+    display: flex;
+    gap: 8px;
     width: auto;
   }
 
   .member-app-layout .member-continue-card button {
-    display: none;
+    background: transparent !important;
+    border: 0 !important;
+    color: #b42318 !important;
+    display: inline-flex;
+    font-size: 0.76rem;
+    font-weight: 850;
+    min-height: 38px;
+    padding: 0 2px;
+    white-space: nowrap;
   }
 
   .member-app-layout .member-continue-card a {
@@ -2126,16 +2137,19 @@
     font-size: 0;
     height: 42px;
     justify-content: center;
+    line-height: 1;
     padding: 0;
     width: 42px;
   }
 
   .member-app-layout .member-continue-card a::before {
     content: "\203A";
-    font-size: 1.8rem;
+    display: block;
+    font-size: 2rem;
     font-weight: 500;
-    line-height: 1;
-    margin-top: -2px;
+    line-height: 0.7;
+    margin: 0;
+    transform: translate(1px, -1px);
   }
 
   .member-app-layout .member-workflow-card,
@@ -2216,5 +2230,50 @@
   .member-route-profile .form-wizard-actions > .btn:last-child,
   .member-route-flockdailydata .form-wizard-actions > .btn:last-child {
     display: none !important;
+  }
+
+  .member-app-layout .form-wizard-actions:not(.manage-farm-actions):not(.manage-flock-actions):has(> .btn-secondary):has(> .btn-danger) > .btn-danger,
+  .member-app-layout .form-wizard-actions:not(.manage-farm-actions):not(.manage-flock-actions):has(> .btn-secondary):has(> .btn-primary) > .btn-primary,
+  .member-app-layout .form-wizard-actions:not(.manage-farm-actions):not(.manage-flock-actions):has(> .btn-secondary):has(> .btn-success) > .btn-success {
+    grid-column: auto;
+    grid-row: auto;
+  }
+
+  .member-app-layout .form-wizard-actions:not(.manage-farm-actions):not(.manage-flock-actions):has(> .btn-secondary):has(> .btn-danger) > .btn-secondary,
+  .member-app-layout .form-wizard-actions:not(.manage-farm-actions):not(.manage-flock-actions):has(> .btn-secondary):has(> .btn-primary) > .btn-secondary,
+  .member-app-layout .form-wizard-actions:not(.manage-farm-actions):not(.manage-flock-actions):has(> .btn-secondary):has(> .btn-success) > .btn-secondary {
+    grid-column: auto;
+    grid-row: auto;
+  }
+
+  .member-app-layout .report-table--cost {
+    min-width: 0 !important;
+    table-layout: fixed;
+    width: 100%;
+  }
+
+  .member-app-layout .report-table--cost th,
+  .member-app-layout .report-table--cost td {
+    overflow-wrap: anywhere;
+    position: static !important;
+    white-space: normal;
+    z-index: auto;
+  }
+
+  .member-app-layout .report-table--cost th:last-child,
+  .member-app-layout .report-table--cost td:last-child {
+    text-align: right;
+  }
+
+  .member-app-layout .farmer-ai-form .farmer-ai-composer .btn {
+    align-items: center;
+    display: inline-flex;
+    justify-content: center;
+    line-height: 1;
+  }
+
+  .member-app-layout .farmer-ai-form .farmer-ai-composer .btn::before {
+    display: block;
+    transform: translateY(-1px);
   }
 }

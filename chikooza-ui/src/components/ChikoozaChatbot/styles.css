@@ -393,21 +393,27 @@
 }
 
 @media (max-width: 600px) {
+  .chikooza-chatbot-container {
+    z-index: 3900;
+  }
+
   .chikbot-panel {
     border: 0;
     border-radius: 0;
-    bottom: 0;
-    height: calc(100dvh - 68px - env(safe-area-inset-bottom));
+    bottom: calc(var(--ck-mobile-nav-height, 68px) + env(safe-area-inset-bottom));
+    height: auto;
     left: 0;
     max-height: none;
     max-width: none;
     right: 0;
-    top: 0;
+    top: var(--ck-mobile-header-height, 64px);
     width: 100vw;
+    z-index: 3900;
   }
 
   .chikbot-panel-header {
-    padding: calc(0.75rem + env(safe-area-inset-top)) 0.85rem 0.75rem;
+    min-height: 56px;
+    padding: 0.7rem 0.85rem;
   }
 
   .chikbot-panel-header p {
@@ -431,6 +437,7 @@
   }
 
   .chikbot-composer {
+    align-items: center;
     position: relative;
     z-index: 2;
   }
@@ -453,8 +460,16 @@
   }
 
   .chikbot-composer button {
+    align-items: center;
+    display: inline-flex;
     flex-basis: 48px;
     height: 48px;
+    justify-content: center;
+    line-height: 1;
     width: 48px;
+  }
+
+  .chikbot-composer button span {
+    transform: translate(0, -1px);
   }
 }

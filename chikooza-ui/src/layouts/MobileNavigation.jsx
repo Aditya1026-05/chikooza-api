@@ -8,29 +8,41 @@ const publicItems = [
   { to: "/login", label: "Login", icon: "person" },
 ];
 
-const recordRoutes = [
+const setupRoutes = [
+  "/addfarm",
+  "/managefarm",
+  "/addflock",
+  "/manageflock",
+  "/flockdailydata",
+  "/daydata",
+];
+
+const businessRecordRoutes = [
   "/flocksale",
   "/viewsale",
   "/editsale",
   "/addpurchase",
   "/listpurchase",
   "/viewpurchase",
+];
+
+const reportRoutes = [
   "/dailydatasheet",
   "/flocksummary",
 ];
 
-const moreRoutes = [
-  "/addflock",
-  "/manageflock",
+const aiRoutes = [
   "/chatbot",
-  "/profile",
-  "/changepassword",
-  "/updatemobile",
-  "/member/about",
-  "/member/contact",
 ];
 
 const routeMatches = (pathname, routes) => routes.some((route) => pathname.startsWith(route));
+
+const getSheetTitle = (activeSheet) => ({
+  setup: "Farm setup",
+  records: "Records",
+  reports: "Reports",
+  all: "All tools",
+}[activeSheet] || "Tools");
 
 export const PublicMobileNavigation = () => (
   <nav className="mobile-tab-bar public-mobile-tab-bar" aria-label="Public mobile navigation">
@@ -86,8 +98,10 @@ const SheetLink = ({ close, icon, label, supportingText, to }) => (
 export const MemberMobileNavigation = ({ activeSheet, closeSheet, logout, openSheet }) => {
   const location = useLocation();
   const pathname = location.pathname;
-  const recordsActive = routeMatches(pathname, recordRoutes);
-  const moreActive = routeMatches(pathname, moreRoutes);
+  const setupActive = routeMatches(pathname, setupRoutes);
+  const recordsActive = routeMatches(pathname, businessRecordRoutes);
+  const reportsActive = routeMatches(pathname, reportRoutes);
+  const aiActive = routeMatches(pathname, aiRoutes);
 
   useEffect(() => {
     if (!activeSheet) return undefined;
@@ -113,7 +127,7 @@ export const MemberMobileNavigation = ({ activeSheet, closeSheet, logout, openSh
             <div className="mobile-sheet-header">
               <div>
                 <span>Chikooza workspace</span>
-                <h2 id="mobile-sheet-title">{activeSheet === "records" ? "Records and reports" : activeSheet === "all" ? "All tools" : "More tools"}</h2>
+                <h2 id="mobile-sheet-title">{getSheetTitle(activeSheet)}</h2>
               </div>
               <button className="mobile-sheet-close" aria-label="Close menu" onClick={closeSheet} type="button">
                 <i className="bi bi-x-lg" aria-hidden="true" />
@@ -121,28 +135,40 @@ export const MemberMobileNavigation = ({ activeSheet, closeSheet, logout, openSh
             </div>
 
             <div className="mobile-sheet-list">
-              {activeSheet === "records" ? (
+              {activeSheet === "setup" ? (
+                <>
+                  <SheetLink close={closeSheet} icon="plus-circle" label="Add farm" supportingText="Create a farm record" to="/addfarm" />
+                  <SheetLink close={closeSheet} icon="buildings" label="View/edit farm" supportingText="Manage farm details" to="/managefarm" />
+                  <SheetLink close={closeSheet} icon="plus-square" label="Add flock" supportingText="Start a flock cycle" to="/addflock" />
+                  <SheetLink close={closeSheet} icon="collection" label="View/edit flock" supportingText="Manage flock details" to="/manageflock" />
+                  <SheetLink close={closeSheet} icon="calendar2-check" label="Flock daily data" supportingText="Record today’s flock activity" to="/flockdailydata" />
+                </>
+              ) : activeSheet === "records" ? (
                 <>
                   <SheetLink close={closeSheet} icon="cash-coin" label="Add sale" supportingText="Record a flock lifting" to="/flocksale" />
                   <SheetLink close={closeSheet} icon="receipt" label="Sales" supportingText="Review and edit sales" to="/viewsale" />
                   <SheetLink close={closeSheet} icon="cart-plus" label="Add purchase" supportingText="Save feed and other costs" to="/addpurchase" />
                   <SheetLink close={closeSheet} icon="bag-check" label="Purchases" supportingText="Review and edit purchases" to="/listpurchase" />
+                </>
+              ) : activeSheet === "reports" ? (
+                <>
                   <SheetLink close={closeSheet} icon="table" label="Daily data sheet" supportingText="Filter and export daily records" to="/dailydatasheet" />
                   <SheetLink close={closeSheet} icon="graph-up-arrow" label="Flock summary" supportingText="Performance, costs, and sales" to="/flocksummary" />
                 </>
               ) : activeSheet === "all" ? (
                 <>
-                  <p className="mobile-sheet-section-label">Daily work</p>
+                  <p className="mobile-sheet-section-label">Dashboard</p>
                   <SheetLink close={closeSheet} icon="house-door" label="Dashboard" supportingText="Farm overview and next action" to="/member" />
-                  <SheetLink close={closeSheet} icon="calendar2-check" label="Daily data" supportingText="Record today’s flock activity" to="/flockdailydata" />
-                  <SheetLink close={closeSheet} icon="stars" label="Farmer AI" supportingText="Ask about your records" to="/chatbot" />
                   <p className="mobile-sheet-section-label">Farm setup</p>
                   <SheetLink close={closeSheet} icon="buildings" label="Farms" supportingText="Add, view, and update farms" to="/managefarm" />
                   <SheetLink close={closeSheet} icon="collection" label="Flocks" supportingText="Add, view, and update flocks" to="/manageflock" />
+                  <SheetLink close={closeSheet} icon="calendar2-check" label="Daily data" supportingText="Record today’s flock activity" to="/flockdailydata" />
                   <p className="mobile-sheet-section-label">Business records</p>
                   <SheetLink close={closeSheet} icon="receipt" label="Sales" supportingText="Add and review sales" to="/viewsale" />
                   <SheetLink close={closeSheet} icon="bag-check" label="Purchases" supportingText="Add and review costs" to="/listpurchase" />
+                  <p className="mobile-sheet-section-label">Insights</p>
                   <SheetLink close={closeSheet} icon="graph-up-arrow" label="Reports" supportingText="Daily sheet and flock summary" to="/flocksummary" />
+                  <SheetLink close={closeSheet} icon="stars" label="AI assistant" supportingText="Ask about your records" to="/chatbot" />
                   <p className="mobile-sheet-section-label">Account</p>
                   <SheetLink close={closeSheet} icon="person-circle" label="Profile" supportingText="Farmer account information" to="/profile" />
                   <SheetLink close={closeSheet} icon="shield-lock" label="Security" supportingText="Change your password" to="/changepassword" />
@@ -151,21 +177,7 @@ export const MemberMobileNavigation = ({ activeSheet, closeSheet, logout, openSh
                     <span><strong>Logout</strong><small>Sign out of this device</small></span>
                   </button>
                 </>
-              ) : (
-                <>
-                  <SheetLink close={closeSheet} icon="plus-circle" label="Add flock" supportingText="Start a new flock cycle" to="/addflock" />
-                  <SheetLink close={closeSheet} icon="collection" label="Manage flocks" supportingText="View and update flock details" to="/manageflock" />
-                  <SheetLink close={closeSheet} icon="stars" label="AI assistant" supportingText="Ask questions about farm records" to="/chatbot" />
-                  <SheetLink close={closeSheet} icon="person-circle" label="Profile" supportingText="Farmer and contact details" to="/profile" />
-                  <SheetLink close={closeSheet} icon="shield-lock" label="Change password" supportingText="Update account security" to="/changepassword" />
-                  <SheetLink close={closeSheet} icon="info-circle" label="About Chikooza" to="/member/about" />
-                  <SheetLink close={closeSheet} icon="headset" label="Contact support" to="/member/contact" />
-                  <button className="mobile-sheet-link mobile-sheet-logout" onClick={logout} type="button">
-                    <span className="mobile-sheet-icon"><i className="bi bi-box-arrow-right" aria-hidden="true" /></span>
-                    <span><strong>Logout</strong><small>Sign out of this device</small></span>
-                  </button>
-                </>
-              )}
+              ) : null}
             </div>
           </section>
         </div>
@@ -175,18 +187,18 @@ export const MemberMobileNavigation = ({ activeSheet, closeSheet, logout, openSh
         <NavLink className={({ isActive }) => `mobile-tab ${isActive ? "is-active" : ""}`} end to="/member">
           <i className="bi bi-house-door" aria-hidden="true" /><span>Home</span>
         </NavLink>
-        <NavLink className={({ isActive }) => `mobile-tab ${isActive || pathname === "/addfarm" ? "is-active" : ""}`} to="/managefarm">
-          <i className="bi bi-buildings" aria-hidden="true" /><span>Farms</span>
-        </NavLink>
-        <NavLink className={() => `mobile-tab ${pathname.startsWith("/flockdailydata") || pathname.startsWith("/daydata") ? "is-active" : ""}`} to="/flockdailydata">
-          <i className="bi bi-calendar2-check" aria-hidden="true" /><span>Daily</span>
-        </NavLink>
+        <button className={`mobile-tab ${setupActive || activeSheet === "setup" ? "is-active" : ""}`} onClick={() => openSheet("setup")} type="button">
+          <i className="bi bi-buildings" aria-hidden="true" /><span>Setup</span>
+        </button>
         <button className={`mobile-tab ${recordsActive || activeSheet === "records" ? "is-active" : ""}`} onClick={() => openSheet("records")} type="button">
-          <i className="bi bi-journal-text" aria-hidden="true" /><span>Records</span>
+          <i className="bi bi-receipt" aria-hidden="true" /><span>Records</span>
         </button>
-        <button className={`mobile-tab ${moreActive || activeSheet === "more" ? "is-active" : ""}`} onClick={() => openSheet("more")} type="button">
-          <i className="bi bi-grid" aria-hidden="true" /><span>More</span>
+        <button className={`mobile-tab ${reportsActive || activeSheet === "reports" ? "is-active" : ""}`} onClick={() => openSheet("reports")} type="button">
+          <i className="bi bi-graph-up-arrow" aria-hidden="true" /><span>Reports</span>
         </button>
+        <NavLink className={({ isActive }) => `mobile-tab ${isActive || aiActive ? "is-active" : ""}`} to="/chatbot">
+          <i className="bi bi-stars" aria-hidden="true" /><span>AI</span>
+        </NavLink>
       </nav>
     </>
   );
