@@ -1,6 +1,7 @@
 from django.contrib import admin
 from django.utils.html import format_html
 
+from common.admin_filters import FarmerWorkflowFilter
 from common.admin_mixins import AdminWorkflowLinkMixin, PublicIdAdminMixin
 from dailydata.models import DailyData
 from farm.models import Country, Farm, State
@@ -35,7 +36,7 @@ class FarmAdmin(AdminWorkflowLinkMixin, PublicIdAdminMixin, admin.ModelAdmin):
         "status",
         "public_id",
     )
-    list_filter = ("status", "country", "state", "district", "city")
+    list_filter = (FarmerWorkflowFilter, "status", "country", "state", "district", "city")
     search_fields = (
         "name",
         "city",

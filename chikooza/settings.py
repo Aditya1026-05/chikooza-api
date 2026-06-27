@@ -75,6 +75,7 @@ JAZZMIN_SETTINGS = {
     "welcome_sign": "Manage farmers, flocks, daily data, purchases, and sales",
     "copyright": "Chikooza",
     "custom_css": "common/admin.css",
+    "custom_js": "common/admin.js",
     "use_google_fonts_cdn": False,
     "search_model": [
         "common.Users",

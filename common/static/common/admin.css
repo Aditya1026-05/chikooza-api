@@ -236,6 +236,14 @@
     white-space: nowrap;
 }
 
+.chikooza-filter-waiting::after {
+    color: #62748a;
+    content: attr(data-waiting-text);
+    display: block;
+    font-size: 0.78rem;
+    margin-top: 4px;
+}
+
 @media (max-width: 991.98px) {
     .admin-workspace-header,
     .admin-secondary-grid {

@@ -1,5 +1,10 @@
 from django.contrib import admin
 
+from common.admin_filters import (
+    FlockFarmWorkflowFilter,
+    FlockFarmerWorkflowFilter,
+    FlockWorkflowFilter,
+)
 from common.admin_mixins import AdminWorkflowLinkMixin, PublicIdAdminMixin
 from dailydata.models import (
     DailyData,
@@ -50,9 +55,11 @@ class DailyDataAdmin(AdminWorkflowLinkMixin, PublicIdAdminMixin, admin.ModelAdmi
         "public_id",
     )
     list_filter = (
+        FlockFarmerWorkflowFilter,
+        FlockFarmWorkflowFilter,
+        FlockWorkflowFilter,
         "status",
         "date",
-        "flock__farm",
         "cooling",
         "heating",
         "seek",
@@ -95,7 +102,13 @@ class DailyDataAdmin(AdminWorkflowLinkMixin, PublicIdAdminMixin, admin.ModelAdmi
 @admin.register(FlockVaccination)
 class FlockVaccinationAdmin(AdminWorkflowLinkMixin, PublicIdAdminMixin, admin.ModelAdmin):
     list_display = ("daily_data", "flock_link", "vaccine", "status", "public_id")
-    list_filter = ("status", "vaccine", "flock__farm")
+    list_filter = (
+        FlockFarmerWorkflowFilter,
+        FlockFarmWorkflowFilter,
+        FlockWorkflowFilter,
+        "status",
+        "vaccine",
+    )
     search_fields = (
         "flock__name",
         "flock__farm__name",

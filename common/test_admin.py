@@ -1,9 +1,10 @@
 from django.contrib.admin.sites import site
-from django.test import TestCase, override_settings
+from django.test import RequestFactory, TestCase, override_settings
 from django.urls import reverse
 from oauth2_provider.models import AccessToken
 
 from aibot.models import AIChatLog
+from common.admin_filters import FarmWorkflowFilter, FlockWorkflowFilter
 from common.base_models import PublicId, Users
 from chatbot.models import ChatLog
 from dailydata.models import DailyData, FlockVaccination, Vaccines
@@ -96,6 +97,7 @@ class AdminWorkflowTests(TestCase):
         self.assertContains(response, "Manage Chikooza from farmer to flock to sale.")
         self.assertContains(response, "Farmers")
         self.assertContains(response, "Operations")
+        self.assertContains(response, "common/admin.js")
 
     @override_settings(CHIKOOZA_UI_BASE_URL="http://localhost:5173")
     def test_open_dashboard_as_farmer_creates_short_lived_access_token(self):
@@ -110,3 +112,163 @@ class AdminWorkflowTests(TestCase):
         token = AccessToken.objects.get(user=self.farmer)
         self.assertIn(token.token, response["Location"])
         self.assertEqual(token.scope, "read create update delete groups")
+
+
+class AdminCascadingFilterTests(TestCase):
+    def setUp(self):
+        self.factory = RequestFactory()
+        self.admin_user = Users.objects.create_superuser(
+            username="admin-filter@example.com",
+            email="admin-filter@example.com",
+            password="admin-pass",
+            mobile_number="9999999991",
+            public_id=PublicId.create_public_id(),
+            is_phone_verified=True,
+            is_email_verified=True,
+            approval_status=Users.APPROVAL_APPROVED,
+        )
+        self.owner = Users.objects.create_user(
+            username="owner-filter@example.com",
+            email="owner-filter@example.com",
+            password="owner-pass",
+            mobile_number="9999999992",
+            public_id=PublicId.create_public_id(),
+            is_phone_verified=True,
+            is_email_verified=True,
+            approval_status=Users.APPROVAL_APPROVED,
+            is_active=True,
+        )
+        self.other = Users.objects.create_user(
+            username="other-filter@example.com",
+            email="other-filter@example.com",
+            password="other-pass",
+            mobile_number="9999999993",
+            public_id=PublicId.create_public_id(),
+            is_phone_verified=True,
+            is_email_verified=True,
+            approval_status=Users.APPROVAL_APPROVED,
+            is_active=True,
+        )
+        country = Country.objects.create(
+            name="India",
+            code="IN",
+            isd_code=91,
+            public_id=PublicId.create_public_id(),
+        )
+        state = State.objects.create(
+            name="Delhi",
+            code="DL",
+            country=country,
+            public_id=PublicId.create_public_id(),
+        )
+        breed = Breed.objects.create(
+            code="B1",
+            name="Broiler",
+            line="Commercial",
+            public_id=PublicId.create_public_id(),
+        )
+        self.owner_farm = Farm.objects.create(
+            user=self.owner,
+            name="Owner Farm",
+            address="A",
+            city="Delhi",
+            district="Central",
+            state=state,
+            country=country,
+            pin="110001",
+            lat_long="0,0",
+            shed_count=1,
+            public_id=PublicId.create_public_id(),
+        )
+        self.other_farm = Farm.objects.create(
+            user=self.other,
+            name="Other Farm",
+            address="B",
+            city="Delhi",
+            district="Central",
+            state=state,
+            country=country,
+            pin="110002",
+            lat_long="0,0",
+            shed_count=1,
+            public_id=PublicId.create_public_id(),
+        )
+        self.owner_flock = Flock.objects.create(
+            user=self.owner,
+            farm=self.owner_farm,
+            name="Owner Flock",
+            integration=False,
+            hatch_date="2026-01-01",
+            flock_size=100,
+            actual_birds=100,
+            breed=breed,
+            chick_weight=40,
+            hatchery_vaccine=1,
+            feed_sys="M",
+            drinking_sys="M",
+            ec_shed=False,
+            chick_cost=10,
+            status=True,
+            flock_bird=100,
+            public_id=PublicId.create_public_id(),
+        )
+        self.other_flock = Flock.objects.create(
+            user=self.other,
+            farm=self.other_farm,
+            name="Other Flock",
+            integration=False,
+            hatch_date="2026-01-01",
+            flock_size=100,
+            actual_birds=100,
+            breed=breed,
+            chick_weight=40,
+            hatchery_vaccine=1,
+            feed_sys="M",
+            drinking_sys="M",
+            ec_shed=False,
+            chick_cost=10,
+            status=True,
+            flock_bird=100,
+            public_id=PublicId.create_public_id(),
+        )
+
+    def _request(self, params=None):
+        request = self.factory.get("/admin/", data=params or {})
+        request.user = self.admin_user
+        return request
+
+    def test_farm_filter_waits_for_farmer_then_shows_only_that_farmers_farms(self):
+        empty_filter = FarmWorkflowFilter(
+            self._request(),
+            {},
+            Flock,
+            site._registry[Flock],
+        )
+        self.assertEqual(empty_filter.lookup_choices, [])
+
+        filtered = FarmWorkflowFilter(
+            self._request({"farmer": self.owner.pk}),
+            {},
+            Flock,
+            site._registry[Flock],
+        )
+
+        self.assertEqual(filtered.lookup_choices, [(str(self.owner_farm.pk), "Owner Farm (owner-filter@example.com)")])
+
+    def test_flock_filter_waits_for_farmer_or_farm_then_scopes_choices(self):
+        empty_filter = FlockWorkflowFilter(
+            self._request(),
+            {},
+            Flock,
+            site._registry[Flock],
+        )
+        self.assertEqual(empty_filter.lookup_choices, [])
+
+        filtered = FlockWorkflowFilter(
+            self._request({"farmer": self.owner.pk, "farm": self.owner_farm.pk}),
+            {},
+            Flock,
+            site._registry[Flock],
+        )
+
+        self.assertEqual(filtered.lookup_choices, [(str(self.owner_flock.pk), "Owner Flock (Owner Farm)")])

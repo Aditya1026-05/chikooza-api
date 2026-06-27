@@ -1,6 +1,7 @@
 from django.contrib import admin
 from django.utils.html import format_html
 
+from common.admin_filters import FarmerWorkflowFilter, FarmWorkflowFilter
 from common.admin_mixins import AdminWorkflowLinkMixin, PublicIdAdminMixin
 from dailydata.models import DailyData
 from flocks.models import Breed, Flock, Hatchery, Integrator
@@ -68,11 +69,12 @@ class FlockAdmin(AdminWorkflowLinkMixin, PublicIdAdminMixin, admin.ModelAdmin):
         "public_id",
     )
     list_filter = (
+        FarmerWorkflowFilter,
+        FarmWorkflowFilter,
         "status",
         "integration",
         "ec_shed",
         "breed",
-        "farm__state",
         "hatch_date",
     )
     search_fields = (

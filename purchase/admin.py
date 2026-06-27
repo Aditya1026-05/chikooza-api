@@ -1,5 +1,10 @@
 from django.contrib import admin
 
+from common.admin_filters import (
+    FlockFarmWorkflowFilter,
+    FlockFarmerWorkflowFilter,
+    FlockWorkflowFilter,
+)
 from common.admin_mixins import AdminWorkflowLinkMixin, PublicIdAdminMixin
 from purchase.models import Purchase
 
@@ -18,7 +23,14 @@ class PurchaseAdmin(AdminWorkflowLinkMixin, PublicIdAdminMixin, admin.ModelAdmin
         "adjust_type",
         "public_id",
     )
-    list_filter = ("type", "adjust_type", "date", "flock__farm")
+    list_filter = (
+        FlockFarmerWorkflowFilter,
+        FlockFarmWorkflowFilter,
+        FlockWorkflowFilter,
+        "type",
+        "adjust_type",
+        "date",
+    )
     search_fields = (
         "item_name",
         "company_name",
