@@ -7,7 +7,13 @@ from rest_framework import status
 from rest_framework.exceptions import ValidationError
 
 from common.base_models import Users
-from dailydata.models import DailyData, DarknessTime, FeedAvailability, FlockVaccination, Vaccines
+from dailydata.models import (
+    DailyData,
+    DarknessTime,
+    FeedAvailability,
+    FlockVaccination,
+    Vaccines,
+)
 from dailydata.views import (
     DailyDataAverageFeedBirdsView,
     DailyDataDetailView,
@@ -20,6 +26,7 @@ from dailydata.views import (
 )
 from farm.models import Country, Farm, State
 from flocks.models import Breed, Flock
+from flocks.services import UpdateFlockService
 from purchase.models import Purchase
 
 
@@ -29,7 +36,9 @@ class DailyDataTenantIsolationTests(TestCase):
         self.state = State.objects.create(name="Delhi", code="DL", country=self.country)
         self.breed = Breed.objects.create(code="DD", name="Daily Broiler", line="A")
         self.darkness_time = DarknessTime.objects.create(public_id=9201, name="4 hours")
-        self.feed_availability = FeedAvailability.objects.create(public_id=9202, name="Full day")
+        self.feed_availability = FeedAvailability.objects.create(
+            public_id=9202, name="Full day"
+        )
         self.vaccine = Vaccines.objects.create(
             public_id=9203,
             name="ND",
@@ -43,8 +52,12 @@ class DailyDataTenantIsolationTests(TestCase):
 
         self.owner_farm = self._farm(9303, self.owner, "Owner Daily Farm")
         self.other_farm = self._farm(9304, self.other_user, "Other Daily Farm")
-        self.owner_flock = self._flock(9305, self.owner, self.owner_farm, "Owner Daily Flock")
-        self.other_flock = self._flock(9306, self.other_user, self.other_farm, "Other Daily Flock")
+        self.owner_flock = self._flock(
+            9305, self.owner, self.owner_farm, "Owner Daily Flock"
+        )
+        self.other_flock = self._flock(
+            9306, self.other_user, self.other_farm, "Other Daily Flock"
+        )
         self.day = date(2026, 1, 2)
         self.owner_daily = self._daily_data(9307, self.owner, self.owner_flock)
         self.other_daily = self._daily_data(9308, self.other_user, self.other_flock)
@@ -102,18 +115,28 @@ class DailyDataTenantIsolationTests(TestCase):
             flock_bird=100,
         )
 
-    def _daily_data(self, public_id, user, flock):
+    def _daily_data(
+        self,
+        public_id,
+        user,
+        flock,
+        record_date=None,
+        mortality=1,
+        current_bird_count=99,
+        feed_intake=10,
+        total_feed=10,
+    ):
         return DailyData.objects.create(
             public_id=public_id,
-            date=self.day,
+            date=record_date or self.day,
             flock=flock,
             user=user,
-            mortality=1,
+            mortality=mortality,
             total_mort=1,
-            current_bird_count=99,
+            current_bird_count=current_bird_count,
             feed_stock=90,
-            feed_intake=10,
-            total_feed=10,
+            feed_intake=feed_intake,
+            total_feed=total_feed,
             average_bird_weight=50,
             average_feed=101,
             total_average_feed=101,
@@ -198,7 +221,9 @@ class DailyDataTenantIsolationTests(TestCase):
                 )
             )
 
-        self.assertIn("Feed intake is greater than available feed stock", str(ctx.exception))
+        self.assertIn(
+            "Feed intake is greater than available feed stock", str(ctx.exception)
+        )
 
     def test_create_uses_feed_purchase_as_available_stock(self):
         self._feed_purchase(
@@ -236,6 +261,70 @@ class DailyDataTenantIsolationTests(TestCase):
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(daily_data.total_feed, 30)
         self.assertEqual(daily_data.feed_stock, 20)
+
+    def test_create_recalculates_future_daily_bird_counts_immediately(self):
+        self._feed_purchase(
+            9311,
+            self.owner,
+            self.owner_flock,
+            200,
+            date(2026, 1, 1),
+        )
+        future_daily = self._daily_data(
+            9312,
+            self.owner,
+            self.owner_flock,
+            record_date=date(2026, 1, 4),
+            mortality=1,
+            current_bird_count=98,
+            feed_intake=10,
+            total_feed=20,
+        )
+
+        response = DailyDataView.create(
+            self._request(
+                self.owner,
+                data={
+                    "date": "2026-01-03",
+                    "mortality": 2,
+                    "feed_intake": 5,
+                    "average_bird_weight": 60,
+                    "flock_public_id": self.owner_flock.public_id,
+                    "cooling": False,
+                    "heating": False,
+                    "seek": False,
+                    "medicine": False,
+                    "darkness_time_public_id": self.darkness_time.public_id,
+                    "feed_availability_public_id": self.feed_availability.public_id,
+                },
+            )
+        )
+
+        created_daily = DailyData.objects.get(
+            flock=self.owner_flock,
+            user=self.owner,
+            date=date(2026, 1, 3),
+        )
+        future_daily.refresh_from_db()
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(created_daily.current_bird_count, 97)
+        self.assertEqual(created_daily.total_mort, 3)
+        self.assertEqual(future_daily.current_bird_count, 96)
+        self.assertEqual(future_daily.total_mort, 4)
+        self.assertEqual(future_daily.total_feed, 25)
+
+    def test_flock_opening_bird_update_recalculates_daily_bird_counts(self):
+        UpdateFlockService.execute(
+            {
+                "data": {"actual_birds": 120},
+                "flock": self.owner_flock,
+            }
+        )
+        self.owner_daily.refresh_from_db()
+
+        self.assertEqual(self.owner_daily.current_bird_count, 119)
+        self.assertEqual(self.owner_daily.total_mort, 0.83)
 
     def test_list_rejects_other_users_flock(self):
         response = DailyDataView.list(
@@ -334,7 +423,9 @@ class DailyDataTenantIsolationTests(TestCase):
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
         self.assertTrue(
-            FlockVaccination.objects.filter(public_id=self.other_vaccination.public_id).exists()
+            FlockVaccination.objects.filter(
+                public_id=self.other_vaccination.public_id
+            ).exists()
         )
 
     def test_vaccination_create_rejects_other_users_flock(self):
@@ -415,7 +506,9 @@ class DailyDataTenantIsolationTests(TestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response["Content-Type"], "application/pdf")
-        self.assertIn("Chikooza_DailyDataSheet_Owner_Daily_Flock", response["Content-Disposition"])
+        self.assertIn(
+            "Chikooza_DailyDataSheet_Owner_Daily_Flock", response["Content-Disposition"]
+        )
         self.assertGreater(len(response.content), 0)
 
     def test_pdf_export_rejects_other_users_flock(self):

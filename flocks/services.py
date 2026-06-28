@@ -68,11 +68,13 @@ class UpdateFlockService(services.Service):
     def process(self):
         data = self.data.get("data")
         flock = self.data.get("flock")
+        recalculate_daily_rows = False
         name = data.get("flock_name")
         if name:
             flock.name = name
-        integration = data.get("integration")
-        flock.integration = data.get("integration")
+        integration = data.get("integration", flock.integration)
+        if "integration" in data:
+            flock.integration = integration
         if integration:
             if data.get("integrator_public_id"):
                 flock.integrator = Integrator.objects.get(
@@ -91,6 +93,8 @@ class UpdateFlockService(services.Service):
             flock.flock_size = flock_size
         actual_birds = data.get("actual_birds")
         if actual_birds:
+            if actual_birds != flock.flock_bird:
+                recalculate_daily_rows = True
             flock.actual_birds = actual_birds
             flock.flock_bird = actual_birds
         if data.get("breed_public_id"):
@@ -104,6 +108,8 @@ class UpdateFlockService(services.Service):
             flock.hatchery_name = hatchery_name
         chick_weight = data.get("chick_weight")
         if chick_weight:
+            if chick_weight != flock.chick_weight:
+                recalculate_daily_rows = True
             flock.chick_weight = chick_weight
         hatchery_vaccine = data.get("hatchery_vaccine")
         if hatchery_vaccine:
@@ -118,4 +124,8 @@ class UpdateFlockService(services.Service):
         if ec_shed is not None:
             flock.ec_shed = ec_shed
         flock.save()
+        if recalculate_daily_rows:
+            from dailydata.services import recalculate_daily_data_for_flock
+
+            recalculate_daily_data_for_flock(flock, flock.hatch_date, user=flock.user)
         return flock

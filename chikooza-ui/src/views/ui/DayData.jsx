@@ -41,7 +41,16 @@ const DaywiseData = () => {
     });
 //MV-23-6-25- 17-10 change end
 
-    let [oldValues, setOldValues] = useState({ current_bird_count: null, initial_total_feed: null, total_feed: 0, feed_stock: 0, fcr: null, total_fcr: null });
+    let [oldValues, setOldValues] = useState({
+        current_bird_count: null,
+        initial_total_feed: null,
+        total_feed: 0,
+        feed_stock: 0,
+        total_average_feed: 0,
+        cum_mort: 0,
+        fcr: null,
+        total_fcr: null,
+    });
     let [vaccines, setVaccines] = useState([{}]);
     let [formValues, setFormValues] = useState([{ public_id: "", vaccine_public_id: "", status: "" }])
     let [mortalityError, setMortalityError] = useState(null);
@@ -64,6 +73,80 @@ const DaywiseData = () => {
             return getAvailableFeedStock();
         }
         return Number(addData.feed_stock || 0);
+    };
+    const roundTwo = (value) => {
+        const parsed = Number(value);
+        return Number.isFinite(parsed) ? Math.round(parsed * 100) / 100 : 0;
+    };
+    const getFlockOpeningBirds = () => Number(flockDetails.flock_bird ?? flockDetails.actual_birds ?? 0);
+    const getStartingBirdCount = () => Number(oldValues.current_bird_count ?? getFlockOpeningBirds());
+    const getStartingCumMort = () => Number(oldValues.cum_mort ?? 0);
+    const buildMortalityValues = (mortalityValue) => {
+        const mortality = Number(mortalityValue);
+        const openingBirds = getFlockOpeningBirds();
+        const startingBirdCount = getStartingBirdCount();
+
+        if (!Number.isFinite(mortality)) {
+            const baselineMortality = getStartingCumMort();
+            return {
+                current_bird_count: startingBirdCount || null,
+                cum_mort: baselineMortality,
+                total_mortality_percentage: openingBirds > 0
+                    ? roundTwo((baselineMortality * 100) / openingBirds)
+                    : 0,
+            };
+        }
+
+        const cumulativeMortality = getStartingCumMort() + mortality;
+        return {
+            current_bird_count: startingBirdCount - mortality,
+            cum_mort: cumulativeMortality,
+            total_mortality_percentage: openingBirds > 0
+                ? roundTwo((cumulativeMortality * 100) / openingBirds)
+                : 0,
+        };
+    };
+    const buildFeedValues = (feedValue, birdCount = addData.current_bird_count) => {
+        const feedIntake = Number(feedValue);
+        const currentBirdCount = Number(birdCount || 0);
+        const availableFeedStock = getAvailableFeedStock();
+
+        if (!Number.isFinite(feedIntake) || feedIntake <= 0) {
+            return {
+                avg_feed_per_bird: 0,
+                total_feed: Number(oldValues.total_feed || 0),
+                feed_stock: availableFeedStock,
+            };
+        }
+
+        return {
+            avg_feed_per_bird: currentBirdCount > 0
+                ? roundTwo((feedIntake * 1000) / currentBirdCount)
+                : 0,
+            total_feed: Number(oldValues.total_feed || 0) + feedIntake,
+            feed_stock: availableFeedStock - feedIntake,
+        };
+    };
+    const buildFcrValues = (averageBirdWeight, avgFeedPerBird = addData.avg_feed_per_bird) => {
+        const weight = Number(averageBirdWeight);
+        const totalAverageFeed = Number(oldValues.total_average_feed || 0) + Number(avgFeedPerBird || 0);
+        const chickWeight = Number(flockDetails.chick_weight || 0);
+        const fallbackFcr = Number(oldValues.fcr || 0);
+        const fallbackTotalFcr = Number(oldValues.total_fcr || 0);
+
+        if (!Number.isFinite(weight) || weight <= 0) {
+            return {
+                fcr: fallbackFcr,
+                total_fcr: fallbackTotalFcr,
+            };
+        }
+
+        return {
+            fcr: weight - chickWeight > 0
+                ? roundTwo(totalAverageFeed / (weight - chickWeight))
+                : fallbackFcr,
+            total_fcr: roundTwo(totalAverageFeed / weight),
+        };
     };
     const getApiErrorMessage = (error) => {
         const payload = error?.response?.data || {};
@@ -139,16 +222,16 @@ const DaywiseData = () => {
         let midData = 0;
         if (addData.darkness_time_public_id === 0 || addData.darkness_time_public_id === "0") { setDarknessError('This fields is not a valid.'); error = 1; } else { setDarknessError(''); }
         if (addData.feed_availability_public_id === 0 || addData.feed_availability_public_id === "0") { setFeedAvaibilityError('This fields is not a valid.'); error = 1; } else { setFeedAvaibilityError(''); }
-        if (oldValues.current_bird_count === null) { midData = flockDetails.actual_birds; } else { midData = oldValues.current_bird_count; }
+        if (oldValues.current_bird_count === null) { midData = getFlockOpeningBirds(); } else { midData = oldValues.current_bird_count; }
         // console.log(addData.mortality + " > " + midData);
-        if (addData.mortality === null || addData.mortality === '' || addData.mortality < 0 || addData.mortality >= midData) { setMortalityError('This fields is not a valid.'); error = 1; } else { setMortalityError(''); }
+        if (addData.mortality === null || addData.mortality === '' || Number(addData.mortality) < 0 || Number(addData.mortality) >= Number(midData || 0)) { setMortalityError('This fields is not a valid.'); error = 1; } else { setMortalityError(''); }
         midData = getAvailableFeedStock();
         if (addData.feed_intake === null || addData.feed_intake === '' || Number(addData.feed_intake) <= 0 || Number(addData.feed_intake) > midData) { setFeedintakeError(FEED_STOCK_ERROR); error = 1; } else { setFeedintakeError(''); }
         let midWeight = 0;
-        if (addData.average_bird_weight === null || addData.feed_intake === '') {
+        if (addData.average_bird_weight === null || addData.average_bird_weight === '') {
             midWeight = 0;
         } else {
-            midWeight = addData.average_bird_weight;
+            midWeight = Number(addData.average_bird_weight);
         }
 
         //console.log(error);
@@ -157,9 +240,9 @@ const DaywiseData = () => {
             let dailyData = {
                 flock_public_id: flockid,
                 date: date,
-                mortality: addData.mortality,
+                mortality: Number(addData.mortality),
                 average_bird_weight: midWeight,
-                feed_intake: addData.feed_intake,
+                feed_intake: Number(addData.feed_intake),
                 heating: addData.heating,
                 cooling: addData.cooling,
 
@@ -176,9 +259,9 @@ const DaywiseData = () => {
             let dailyDataVaccination = {
                 flock_public_id: flockid,
                 date: date,
-                mortality: addData.mortality,
+                mortality: Number(addData.mortality),
                 average_bird_weight: midWeight,
-                feed_intake: addData.feed_intake,
+                feed_intake: Number(addData.feed_intake),
                 heating: addData.heating,
                 cooling: addData.cooling,
                 seek: addData.seek,
@@ -359,8 +442,8 @@ const DaywiseData = () => {
                 // console.log(res.data.results.yesterday_daily_data.mort, "nkjnj");
                 if (results.number_of_days === 1 && dailyData.current_bird_count === undefined) {
                     setUpdation(false);
-                    setAddData((current) => ({ ...current, type: 'Save', feed_stock: initialQuantity }));
-                    setOldValues((current) => ({ ...current, feed_stock: initialQuantity }));
+                    setAddData((current) => ({ ...current, type: 'Save', feed_stock: initialQuantity, total_feed: 0, avg_feed_per_bird: 0, cum_mort: 0, total_mortality_percentage: 0 }));
+                    setOldValues((current) => ({ ...current, current_bird_count: null, feed_stock: initialQuantity, total_feed: 0, total_average_feed: 0, cum_mort: 0, fcr: 0, total_fcr: 0 }));
                     // console.log("first day first time");
                 } else if (dailyData.current_bird_count === undefined) {
                     // console.log("first time");
@@ -371,7 +454,7 @@ const DaywiseData = () => {
                     setAddData((current) => ({ ...current, type: 'Save', cooling: false, heating: false, medicine: false, seek: false, darkness_time_public_id: 0, feed_availability_public_id: 0, mortality: null, feed_intake: null, average_bird_weight: null, mortalityPer: yesterdayData.total_mort, current_bird_count: yesterdayData.current_bird_count, feed_stock: initialQuantity - yesterdayData.total_feed, total_feed: yesterdayData.total_feed, avg_feed_per_bird: yesterdayData.average_feed, total_fcr: yesterdayData.total_fcr, fcr: yesterdayData.fcr, mort: yesterdayData.mort, cum_mort: yesterdayData.cum_mort, total_mortality_percentage: yesterdayData.total_mortality_percentage }));
 //MV-23-6-25- 17-10 change end
 
-                    setOldValues((current) => ({ ...current, current_bird_count: yesterdayData.current_bird_count, feed_stock: initialQuantity - yesterdayData.total_feed, total_feed: yesterdayData.total_feed }))
+                    setOldValues((current) => ({ ...current, current_bird_count: yesterdayData.current_bird_count, feed_stock: initialQuantity - yesterdayData.total_feed, total_feed: yesterdayData.total_feed, total_average_feed: yesterdayData.total_average_feed, cum_mort: yesterdayData.cum_mort, fcr: yesterdayData.fcr, total_fcr: yesterdayData.total_fcr }))
                 } else {
                     //console.log("updation");
                     setDailyDataPublicID(dailyData.public_id);
@@ -383,9 +466,9 @@ const DaywiseData = () => {
 //MV-23-6-25- 17-10 change end
 
                     if (yesterdayData.current_bird_count === undefined) {
-                        setOldValues((current) => ({ ...current, feed_stock: initialQuantity }));
+                        setOldValues((current) => ({ ...current, current_bird_count: null, feed_stock: initialQuantity, total_feed: 0, total_average_feed: 0, cum_mort: 0, fcr: 0, total_fcr: 0 }));
                     } else {
-                        setOldValues((current) => ({ ...current, current_bird_count: yesterdayData.current_bird_count, feed_stock: initialQuantity - yesterdayData.total_feed, total_feed: yesterdayData.total_feed }))
+                        setOldValues((current) => ({ ...current, current_bird_count: yesterdayData.current_bird_count, feed_stock: initialQuantity - yesterdayData.total_feed, total_feed: yesterdayData.total_feed, total_average_feed: yesterdayData.total_average_feed, cum_mort: yesterdayData.cum_mort, fcr: yesterdayData.fcr, total_fcr: yesterdayData.total_fcr }))
                     }
                     if (dailyData.flock_vaccination.length > 0) {
                         const midvar = dailyData.flock_vaccination.map((item) => ({ public_id: item.public_id, vaccine_public_id: item.vaccine_public_id, status: item.status }));
@@ -439,66 +522,76 @@ const DaywiseData = () => {
         });
     }, [navigate])
     let mortalityData = (e) => {
-        let midData = 0;
-        if (oldValues.current_bird_count === null) { midData = flockDetails.actual_birds; } else { midData = oldValues.current_bird_count; }
-        if (e.target.value !== null && e.target.value !== '' && e.target.value >= 0) {
-            if (e.target.value <= midData - 1) {
+        const value = e.target.value;
+        const mortality = Number(value);
+        const startingBirdCount = getStartingBirdCount();
+        const mortalityValues = buildMortalityValues(value);
+        const feedValues = addData.feed_intake !== null && addData.feed_intake !== ''
+            ? buildFeedValues(addData.feed_intake, mortalityValues.current_bird_count)
+            : {};
+        const fcrValues = addData.average_bird_weight !== null && addData.average_bird_weight !== ''
+            ? buildFcrValues(addData.average_bird_weight, feedValues.avg_feed_per_bird ?? addData.avg_feed_per_bird)
+            : {};
+
+        setAddData({
+            ...addData,
+            ...mortalityValues,
+            ...feedValues,
+            ...fcrValues,
+            mortality: value,
+            mortalityCount: mortalityValues.cum_mort,
+            mortalityPer: mortalityValues.total_mortality_percentage,
+        });
+
+        if (value !== null && value !== '' && Number.isFinite(mortality) && mortality >= 0) {
+            if (mortality <= startingBirdCount - 1) {
                 setMortalityError('');
-                let current = 0;
-                if (oldValues.current_bird_count === null) {
-                    current = flockDetails.actual_birds - e.target.value;
-                } else {
-                    current = oldValues.current_bird_count - e.target.value;
-                }
-                let url = `${apiPath}dailyDataMortality/?current_bird_count=${current}&actual_birds=${flockDetails.actual_birds}`;
-                axios.get(url, getAuthConfig()).then((res) => {
-                    setAddData({ ...addData, current_bird_count: current, mortality: e.target.value, mortalityCount: res.data.results.total_mort_value, mortalityPer: res.data.results.total_mort_percent });
-                }).catch((err) => {
-                    setAddData({ ...addData, mortality: e.target.value });
-                    handleUnauthorized(err, navigate);
-                });
             } else {
-                setAddData({ ...addData, mortality: e.target.value });
                 setMortalityError('Mortality cannot be more than the bird count.');
             }
         } else {
-            setAddData({ ...addData, mortality: e.target.value });
             setMortalityError('This fields is not a valid.');
         }
     }
     let feedData = (e) => {
-        const feedIntake = Number(e.target.value);
+        const value = e.target.value;
+        const feedIntake = Number(value);
         const availableFeedStock = getAvailableFeedStock();
-        if (e.target.value !== '' && feedIntake > 0) {
+        const feedValues = buildFeedValues(value);
+        const fcrValues = addData.average_bird_weight !== null && addData.average_bird_weight !== ''
+            ? buildFcrValues(addData.average_bird_weight, feedValues.avg_feed_per_bird)
+            : {};
+
+        setAddData({
+            ...addData,
+            ...feedValues,
+            ...fcrValues,
+            feed_intake: value,
+        });
+
+        if (value !== '' && feedIntake > 0) {
             if (feedIntake <= availableFeedStock) {
                 setFeedintakeError('');
-                let url = `${apiPath}dailyDataAvgFeed/?current_bird_count=${addData.current_bird_count}&date=${date}&feed_intake=${e.target.value}&flock_public_id=${flockid}`;
-                axios.get(url, getAuthConfig()).then((res) => {
-                    // console.log(url); console.log(res.data.results);
-                    setAddData({ ...addData, feed_intake: e.target.value, avg_feed_per_bird: res.data.results.avg_feed_per_bird, total_feed: Number(oldValues.total_feed) + feedIntake, feed_stock: availableFeedStock - feedIntake });
-                }).catch((err) => {
-                    setAddData({ ...addData, feed_intake: e.target.value });
-                    handleUnauthorized(err, navigate);
-                });
             } else {
-                setAddData({ ...addData, feed_intake: e.target.value });
                 setFeedintakeError(FEED_STOCK_ERROR);
             }
         } else {
-            setAddData({ ...addData, feed_intake: e.target.value });
             setFeedintakeError('This fields is not a valid.');
         }
     }
     let getFcr = (e) => {
-        if (e.target.value > 0) {
+        const value = e.target.value;
+        const weight = Number(value);
+        const fcrValues = buildFcrValues(value);
+
+        setAddData({ ...addData, ...fcrValues, average_bird_weight: value });
+
+        if (weight > 0) {
             setAverageBirdError('')
-            let url = `${apiPath}dailyDataFCR/?date=${date}&flock_public_id=${flockid}&average_feed=${addData.avg_feed_per_bird}&average_bird_weight=${e.target.value}`;
-            axios.get(url, getAuthConfig()).then((res) => {
-                setAddData({ ...addData, average_bird_weight: e.target.value, fcr: res.data.results.fcr, total_fcr: res.data.results.total_fcr })
-            }).catch((err) => {
-                setAddData({ ...addData, average_bird_weight: e.target.value });
-                handleUnauthorized(err, navigate);
-            });
+        } else if (value !== '') {
+            setAverageBirdError('Average bird weight must be greater than 0.');
+        } else {
+            setAverageBirdError('');
         }
 
         // else {
@@ -514,7 +607,7 @@ const DaywiseData = () => {
     const validateDailyStep = () => {
         let valid = true;
         if (dailyStep === 0) {
-            let midData = oldValues.current_bird_count === null ? flockDetails.actual_birds : oldValues.current_bird_count;
+            let midData = getStartingBirdCount();
             let feedStock = getAvailableFeedStock();
             if (addData.mortality === null || addData.mortality === '' || Number(addData.mortality) < 0 || Number(addData.mortality) >= Number(midData || 0)) {
                 setMortalityError('Mortality must be 0 or more and less than current bird count.');
@@ -633,7 +726,7 @@ const DaywiseData = () => {
                                                         <Row>
                                                             <Col sm="6" md="4" lg="4">
                                                                 <Label for="Mortality" className="font-bold">Mortality</Label>
-                                                                <input type="number" onBlur={mortalityData} name="mortality" defaultValue={addData.mortality} placeholder="Mortality count" className="form-control" aria-label="Mortality" aria-describedby="basic-addon1" />
+                                                                <input type="number" onChange={mortalityData} name="mortality" value={addData.mortality ?? ""} placeholder="Mortality count" className="form-control" aria-label="Mortality" aria-describedby="basic-addon1" />
                                                                 <small className="text-danger">{mortalityError}</small>
                                                             </Col>
                                                             <Col sm="6" md="4" lg="4">
@@ -654,7 +747,7 @@ const DaywiseData = () => {
                                                                 {/* <Alert color="secondary" style={{ color: '#000' }}>{addData.current_bird_count == null ? flockDetails.actual_birds : addData.current_bird_count}</Alert> */}
 
 {/* MV-23-6-25- 17-10 0 displayed when null count */}
-                                                                <Alert color="secondary" style={{ color: '#000' }}>{addData.current_bird_count === null ? 0 : addData.current_bird_count}</Alert>
+                                                                <Alert color="secondary" style={{ color: '#000' }}>{addData.current_bird_count === null ? getStartingBirdCount() : addData.current_bird_count}</Alert>
 {/* MV-23-6-25- 17-10 change end */}
 
                                                             </Col>
@@ -662,7 +755,7 @@ const DaywiseData = () => {
                                                         <Row>
                                                             <Col sm="6" md="4" lg="4">
                                                                 <Label for="flockname " className="font-bold">Feed Intake(Kgs)</Label>
-                                                                <input onBlur={feedData} name="feedintake" defaultValue={addData.feed_intake} placeholder="Feed Intake(Kgs)" type="number" className="form-control" aria-label="feedintake" aria-describedby="basic-addon1" />
+                                                                <input onChange={feedData} name="feedintake" value={addData.feed_intake ?? ""} placeholder="Feed Intake(Kgs)" type="number" className="form-control" aria-label="feedintake" aria-describedby="basic-addon1" />
                                                                 <small className="text-danger">{feedintakeError}</small>
                                                             </Col>
                                                             <Col sm="6" md="4" lg="4">
@@ -695,7 +788,7 @@ const DaywiseData = () => {
                                                             </Col>
                                                             <Col sm="6" md="4" lg="4">
                                                                 <Label for="flockname" className="font-bold flex">Avg. Bird Wt.(gm) (optional)</Label>
-                                                                <input onBlur={getFcr} name="avgbirdweight" defaultValue={addData.average_bird_weight} placeholder="Avg. Bird Wt.(gm)" type="number" className="form-control" aria-label="avgcount" aria-describedby="basic-addon1" />
+                                                                <input onChange={getFcr} name="avgbirdweight" value={addData.average_bird_weight ?? ""} placeholder="Avg. Bird Wt.(gm)" type="number" className="form-control" aria-label="avgcount" aria-describedby="basic-addon1" />
                                                                 <small className="text-danger">{averageBirdError}</small>
                                                             </Col>
                                                             <Col sm="6" md="4" lg="4">
