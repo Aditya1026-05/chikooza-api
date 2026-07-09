@@ -45,6 +45,7 @@ htmlcov/
 # Media and static
 /media/
 /staticfiles/
+/static/
 /data/
 /db-transfer/
 /sqlite-to-postgres*.json
