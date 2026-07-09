@@ -3,6 +3,7 @@
 .env.local
 .env.prod
 .env.dev
+/scripts/chikooza_deploy.env
 /venv/
 # U: NEW: ignore alternate local virtualenv names created from setup docs.
 /chikooza_env/
