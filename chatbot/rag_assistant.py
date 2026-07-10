@@ -357,6 +357,7 @@ class RAGChatResponse:
     fallback: bool = False
     sources: list[dict] = field(default_factory=list)
     display: dict = field(default_factory=dict)
+    metrics: dict = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -572,6 +573,8 @@ class RAGRetriever:
             if require_pgvector is not None
             else _env_bool("CHIKOOZA_RAG_REQUIRE_PGVECTOR", False)
         )
+        self.last_embedding_time = 0.0
+        self.last_retrieval_time = 0.0
 
     def retrieve(
         self,
@@ -581,13 +584,21 @@ class RAGRetriever:
         self._validate_database_backend()
         search_text = self._search_text(query_text, history or [])
         if not self._is_allowed_topic(search_text):
+            self.last_embedding_time = 0.0
+            self.last_retrieval_time = 0.0
             return []
 
+        import time
+        start_embed = time.time()
         query_vector = self.embedding_service.embed_text(search_text)
+        self.last_embedding_time = time.time() - start_embed
+
+        start_retrieve = time.time()
         if connection.vendor == "postgresql":
             chunks = self._retrieve_postgres(search_text, query_vector)
         else:
             chunks = self._retrieve_python(search_text, query_vector)
+        self.last_retrieval_time = time.time() - start_retrieve
 
         return self._dedupe(chunks)[: self.top_k]
 
@@ -776,52 +787,242 @@ class RAGAssistantService:
         session_id: str | None = None,
         client_history: list[dict[str, str]] | None = None,
     ) -> RAGChatResponse:
+        import time
+        import uuid
+        import traceback
+        from datetime import datetime
+        from django.conf import settings
+        from django.db import connection
+
+        request_id = str(uuid.uuid4())
+        question_timestamp = datetime.utcnow().isoformat() + "Z"
+        start_time = time.time()
+
         query_text = query_text.strip()
-        session = self._resolve_session(session_id, user)
-        control_response = self._control_answer(query_text, session)
-        if control_response:
-            self._store_exchange(session, query_text, control_response)
-            return control_response
 
-        history = self._session_history(session)
-        if not history and client_history:
-            history = self._sanitize_client_history(client_history)
+        def _calculate_cost(model_name: str, p_tokens: int, c_tokens: int) -> float:
+            model_lower = str(model_name or "").lower()
+            if "8b" in model_lower:
+                input_rate = 0.05 / 1000000
+                output_rate = 0.08 / 1000000
+            elif "70b" in model_lower:
+                input_rate = 0.59 / 1000000
+                output_rate = 0.79 / 1000000
+            elif "405b" in model_lower:
+                input_rate = 3.50 / 1000000
+                output_rate = 3.50 / 1000000
+            else:
+                input_rate = 0.15 / 1000000
+                output_rate = 0.60 / 1000000
+            return (p_tokens * input_rate) + (c_tokens * output_rate)
 
-        retrieval_query = _question_for_retrieval(query_text)
-        history_for_answer = (
-            history if self.retriever.should_use_history(query_text) else []
-        )
-        chunks = self.retriever.retrieve(retrieval_query, history=history_for_answer)
-        if not chunks:
-            response = self._no_context_answer(query_text, session)
-        elif not self.groq_client.has_keys:
-            response = self._groq_unavailable_answer(session)
-        else:
-            try:
+        # Initialize base metrics
+        metrics = {
+            "request_id": request_id,
+            "conversation_id": session_id or "",
+            "session_id": session_id or "",
+            "user_id": str(user.id) if user and hasattr(user, "id") else "anonymous",
+            "question_timestamp": question_timestamp,
+            "original_question": query_text,
+            "processed_question": query_text,
+            "language": "en",
+            "intent": "qa",
+            "embedding_model": os.getenv("CHIKOOZA_RAG_EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2"),
+            "embedding_time": 0.0,
+            "vector_database": "postgresql" if connection.vendor == "postgresql" else "sqlite",
+            "collection_namespace": "KnowledgeChunk",
+            "top_k_requested": self.retriever.top_k,
+            "top_k_returned": 0,
+            "retrieved_chunks": [],
+            "context_chunk_ids": [],
+            "context_tokens": 0,
+            "provider": "unknown",
+            "model": self.groq_model,
+            "temperature": 0.12,
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "total_tokens": 0,
+            "estimated_cost": 0.0,
+            "status": "Success",
+            "timings": {
+                "embedding_time": 0.0,
+                "retrieval_time": 0.0,
+                "prompt_construction_time": 0.0,
+                "llm_generation_time": 0.0,
+                "post_processing_time": 0.0,
+                "total_time": 0.0
+            },
+            "errors": {}
+        }
+
+        try:
+            session = self._resolve_session(session_id, user)
+            metrics["conversation_id"] = str(session.session_id)
+            metrics["session_id"] = str(session.session_id)
+
+            control_response = self._control_answer(query_text, session)
+            if control_response:
+                self._store_exchange(session, query_text, control_response)
+                metrics["status"] = "Success"
+                metrics["timings"]["total_time"] = time.time() - start_time
+                metrics["total_response_time"] = metrics["timings"]["total_time"]
+                metrics["answer_timestamp"] = datetime.utcnow().isoformat() + "Z"
+                metrics["final_answer"] = control_response.result
+                control_response.metrics = metrics
+                return control_response
+
+            history = self._session_history(session)
+            if not history and client_history:
+                history = self._sanitize_client_history(client_history)
+
+            retrieval_query = _question_for_retrieval(query_text)
+            metrics["processed_question"] = retrieval_query
+
+            history_for_answer = (
+                history if self.retriever.should_use_history(query_text) else []
+            )
+
+            # 1. Retrieval
+            chunks = self.retriever.retrieve(retrieval_query, history=history_for_answer)
+            embed_time = getattr(self.retriever, "last_embedding_time", 0.0)
+            db_time = getattr(self.retriever, "last_retrieval_time", 0.0)
+
+            metrics["embedding_time"] = embed_time
+            metrics["timings"]["embedding_time"] = embed_time
+            metrics["timings"]["retrieval_time"] = db_time
+            metrics["top_k_returned"] = len(chunks)
+
+            if not chunks:
+                response = self._no_context_answer(query_text, session)
+                metrics["provider"] = "fallback"
+                metrics["model"] = "none"
+                metrics["final_answer"] = response.result
+            elif not self.groq_client.has_keys:
+                response = self._groq_unavailable_answer(session)
+                metrics["provider"] = "fallback"
+                metrics["model"] = "none"
+                metrics["final_answer"] = response.result
+            else:
+                context_content = self._context_text(chunks, limit=1600)
+                metrics["context_tokens"] = len(context_content) // 4
+                metrics["context_chunk_ids"] = [c.id for c in chunks]
+
                 assessment = self._assess_context(
                     query_text,
                     retrieval_query,
                     chunks,
                     history_for_answer,
                 )
+
                 if assessment.answerable:
-                    response = self._answer_with_groq(
-                        query_text,
-                        retrieval_query,
-                        chunks,
-                        history_for_answer,
-                        session,
+                    # Prompt Construction
+                    start_prompt = time.time()
+                    messages = self._messages(query_text, retrieval_query, chunks, history_for_answer)
+                    metrics["timings"]["prompt_construction_time"] = time.time() - start_prompt
+
+                    # LLM Generation
+                    start_llm = time.time()
+                    result = self.groq_client.chat(
+                        messages,
+                        model=self.groq_model,
+                        temperature=0.12,
+                        max_tokens=620,
+                        timeout=self.timeout,
                     )
+                    metrics["timings"]["llm_generation_time"] = time.time() - start_llm
+
+                    metrics["provider"] = "groq-rag"
+                    metrics["model"] = result.model
+                    metrics["prompt_tokens"] = getattr(result, "prompt_tokens", 0)
+                    metrics["completion_tokens"] = getattr(result, "completion_tokens", 0)
+                    metrics["total_tokens"] = getattr(result, "total_tokens", 0)
+                    metrics["estimated_cost"] = _calculate_cost(
+                        result.model,
+                        metrics["prompt_tokens"],
+                        metrics["completion_tokens"]
+                    )
+
+                    # Post processing
+                    start_post = time.time()
+                    answer = _clean_public_answer(result.content)
+                    sources = self._sources(chunks)
+                    display = self._display_payload(answer, sources)
+                    metrics["timings"]["post_processing_time"] = time.time() - start_post
+
+                    response = RAGChatResponse(
+                        result=answer,
+                        session_id=str(session.session_id),
+                        provider="groq-rag",
+                        model=result.model,
+                        sources=sources,
+                        display=display,
+                    )
+
+                    metrics["final_answer"] = answer
+                    metrics["citations"] = [
+                        {
+                            "document_name": s.get("source"),
+                            "page_number": s.get("page"),
+                            "chunk_id": s.get("chunk_id")
+                        }
+                        for s in sources
+                    ]
+
+                    for chunk in chunks:
+                        metrics["retrieved_chunks"].append({
+                            "chunk_id": chunk.id,
+                            "similarity_score": round(float(chunk.score), 4) if chunk.score else 0.0,
+                            "document_name": chunk.source,
+                            "page_number": chunk.page or None,
+                            "chunk_index": getattr(chunk, "category", "unknown"),
+                            "was_used": True
+                        })
                 else:
                     response = self._not_enough_matching_context_answer(
                         session,
                         assessment.reason,
                     )
-            except Exception as exc:
-                logger.warning("Groq RAG answer failed: %s", exc)
-                response = self._groq_unavailable_answer(session)
+                    metrics["provider"] = "fallback"
+                    metrics["model"] = "none"
+                    metrics["final_answer"] = response.result
 
-        self._store_exchange(session, query_text, response)
+                    for chunk in chunks:
+                        metrics["retrieved_chunks"].append({
+                            "chunk_id": chunk.id,
+                            "similarity_score": round(float(chunk.score), 4) if chunk.score else 0.0,
+                            "document_name": chunk.source,
+                            "page_number": chunk.page or None,
+                            "chunk_index": getattr(chunk, "category", "unknown"),
+                            "was_used": False
+                        })
+
+            self._store_exchange(session, query_text, response)
+
+        except Exception as e:
+            metrics["status"] = "Failed"
+            metrics["errors"] = {
+                "type": type(e).__name__,
+                "message": str(e),
+                "stack_trace": traceback.format_exc()
+            }
+            # Attempt error response fallback
+            try:
+                response = RAGChatResponse(
+                    result="I am sorry, but an unexpected error occurred while processing your request.",
+                    session_id=session_id or "unknown",
+                    provider="error-fallback",
+                    model="none",
+                    fallback=True
+                )
+            except:
+                raise e
+
+        # Finalize timings
+        metrics["timings"]["total_time"] = time.time() - start_time
+        metrics["total_response_time"] = metrics["timings"]["total_time"]
+        metrics["answer_timestamp"] = datetime.utcnow().isoformat() + "Z"
+
+        response.metrics = metrics
         return response
 
     def _answer_with_groq(

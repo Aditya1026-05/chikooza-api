@@ -95,7 +95,12 @@ def chat_api(request):
             query_id=getattr(request, "query_id", str(uuid.uuid4())),
         )
 
+        # Retrieve structured metrics from RAGAssistantService
+        metrics = getattr(assistant_result, "metrics", {})
+        
         request.chat_data = {
+            "query_id": chat_log.query_id,
+            "metrics": metrics,
             "query": clean_query,
             "response": result["result"],
             "context": serializable_context,

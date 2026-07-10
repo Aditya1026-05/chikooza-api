@@ -16,6 +16,9 @@ class GroqAllKeysFailed(RuntimeError):
 class GroqChatResult:
     content: str
     model: str
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    total_tokens: int = 0
 
 
 class GroqChatClient:
@@ -143,9 +146,22 @@ class GroqChatClient:
                     continue
 
                 response.raise_for_status()
-                content = response.json()["choices"][0]["message"]["content"].strip()
+                resp_json = response.json()
+                content = resp_json["choices"][0]["message"]["content"].strip()
+                
+                usage = resp_json.get("usage", {})
+                prompt_tokens = usage.get("prompt_tokens", 0)
+                completion_tokens = usage.get("completion_tokens", 0)
+                total_tokens = usage.get("total_tokens", 0)
+                
                 self._advance_after_success(key_index)
-                return GroqChatResult(content=content, model=model)
+                return GroqChatResult(
+                    content=content,
+                    model=model,
+                    prompt_tokens=prompt_tokens,
+                    completion_tokens=completion_tokens,
+                    total_tokens=total_tokens,
+                )
             except (httpx.TimeoutException, httpx.RequestError) as exc:
                 last_error = exc
                 logger.warning("Groq key #%s request failed; rotating.", key_index + 1)
