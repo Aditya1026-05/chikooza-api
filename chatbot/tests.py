@@ -2,6 +2,7 @@ import json
 from types import SimpleNamespace
 from unittest.mock import patch
 
+from django.core.exceptions import ImproperlyConfigured
 from django.test import RequestFactory, TestCase
 
 from .models import ChatLog, ChatMessage, ChatSession, KnowledgeChunk, KnowledgeDocument
@@ -460,7 +461,7 @@ class DatabaseRAGAssistantTests(TestCase):
         self.assertGreater(len(chunks), 0)
         self.assertEqual(chunks[0].source, "Chikooza product overview")
 
-    def test_can_require_pgvector_for_real_rag_environments(self):
+    def test_require_pgvector_rejects_sqlite(self):
         self._create_chunk(
             "Chikooza tracks farm records and poultry reports.",
             title="Chikooza product overview",
@@ -471,9 +472,11 @@ class DatabaseRAGAssistantTests(TestCase):
             require_pgvector=True,
         )
 
-        chunks = retriever.retrieve("What does Chikooza track?")
-
-        self.assertGreater(len(chunks), 0)
+        with self.assertRaisesMessage(
+            ImproperlyConfigured,
+            "CHIKOOZA_RAG_REQUIRE_PGVECTOR is enabled",
+        ):
+            retriever.retrieve("What does Chikooza track?")
 
     def test_session_id_keeps_follow_up_in_same_conversation(self):
         self._create_chunk(

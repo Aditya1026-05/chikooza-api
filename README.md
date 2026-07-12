@@ -10,6 +10,24 @@ Chikooza is a poultry farm operations MVP with:
 - Local SQLite by default, with deployment database support through `DATABASE_URL`.
 - Database-backed RAG chatbot at `/chat/` and authenticated tenant-safe AI endpoint at `/ai/`.
 
+## Automated Workflows
+
+For a first local run on Linux, macOS, or Windows Git Bash:
+
+```bash
+./scripts/local.sh bootstrap
+```
+
+Windows users can also run `scripts\local-windows.cmd bootstrap`. For native
+Ubuntu 24.04 production deployment, follow `scripts/README.md` and use
+`sudo ./scripts/server-linux.sh bootstrap` after installing the protected
+server configuration. HTTPS staging is enabled by default and must be promoted
+to a production certificate before launch. The native server workflow uses
+fixed, unprivileged build and service identities, staged releases with
+transactional code/environment/Nginx/systemd activation, and verified
+pre-migration database backups. Its rollback does not reverse migrations or
+restore the database.
+
 ## Current Branch
 
 Use `correct-version` for the current working branch:

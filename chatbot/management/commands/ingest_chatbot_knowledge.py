@@ -3,7 +3,7 @@ from pathlib import Path
 
 from django.conf import settings
 from django.core.files import File
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 
 from chatbot.models import KnowledgeDocument
 from chatbot.rag_assistant import KnowledgeIngestionService
@@ -45,9 +45,11 @@ class Command(BaseCommand):
         for path in paths:
             checksum = self._checksum(path)
             document = KnowledgeDocument.objects.filter(checksum=checksum).first()
-            if document and not options["reprocess"]:
-                skipped += 1
-                continue
+            if document is not None:
+                document_is_ready = document.status == KnowledgeDocument.STATUS_READY
+                if document_is_ready and not options["reprocess"]:
+                    skipped += 1
+                    continue
 
             if document is None:
                 document = KnowledgeDocument(
@@ -75,6 +77,8 @@ class Command(BaseCommand):
         self.stdout.write(
             f"Created {created}, processed {processed}, skipped {skipped}, failed {failed}."
         )
+        if failed:
+            raise CommandError(f"{failed} knowledge file(s) failed to process.")
 
     def _paths(self, requested_paths):
         if requested_paths:

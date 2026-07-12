@@ -3,6 +3,48 @@
 from django.db import migrations, models
 
 
+def bound_field(model, field_class):
+    field = field_class(null=True)
+    field.set_attributes_from_name("buyer_phone_no")
+    field.model = model
+    return field
+
+
+def alter_buyer_phone_no(
+    apps,
+    schema_editor,
+    old_field_class,
+    new_field_class,
+):
+    # SQLite integer values are already signed 64-bit. Rebuilding this table to
+    # change its declared type breaks while an AI view references the table.
+    if schema_editor.connection.vendor == "sqlite":
+        return
+
+    sales_model = apps.get_model("sales", "Sales")
+    old_field = bound_field(sales_model, old_field_class)
+    new_field = bound_field(sales_model, new_field_class)
+    schema_editor.alter_field(sales_model, old_field, new_field)
+
+
+def forwards(apps, schema_editor):
+    alter_buyer_phone_no(
+        apps,
+        schema_editor,
+        models.IntegerField,
+        models.BigIntegerField,
+    )
+
+
+def backwards(apps, schema_editor):
+    alter_buyer_phone_no(
+        apps,
+        schema_editor,
+        models.BigIntegerField,
+        models.IntegerField,
+    )
+
+
 class Migration(migrations.Migration):
 
     dependencies = [
@@ -10,9 +52,14 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.AlterField(
-            model_name="sales",
-            name="buyer_phone_no",
-            field=models.BigIntegerField(null=True),
+        migrations.SeparateDatabaseAndState(
+            database_operations=[migrations.RunPython(forwards, backwards)],
+            state_operations=[
+                migrations.AlterField(
+                    model_name="sales",
+                    name="buyer_phone_no",
+                    field=models.BigIntegerField(null=True),
+                ),
+            ],
         ),
     ]

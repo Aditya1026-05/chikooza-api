@@ -4,6 +4,8 @@
 .env.prod
 .env.dev
 /scripts/chikooza_deploy.env
+/scripts/server.env
+/scripts/*.pid
 /venv/
 # U: NEW: ignore alternate local virtualenv names created from setup docs.
 /chikooza_env/
@@ -36,6 +38,7 @@ __pycache__/
 *.pyo
 *.pyd
 *.log
+/logs/
 .DS_Store
 .coverage
 .pytest_cache/

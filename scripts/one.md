@@ -1,100 +1,82 @@
-# Chikooza Automation Scripts Cheatsheet
+# Chikooza Command Cheatsheet
 
-This cheatsheet provides a simple, direct reference for running all developer automation and deployment scripts.
+Use the maintained launchers below. The older `deploy-*`, `test-all.*`, and
+per-platform check scripts are retained only for historical compatibility.
 
-## 💡 Purpose: Development vs. Deployment
+## Local First Run
 
-Before running any script, choose the mode that fits your current task:
+Linux, macOS, or Windows Git Bash:
 
-*   **Deploy Scripts (`deploy-mac.sh`, `deploy-linux.sh`, `deploy.ps1`)**: Use these when you want to **launch the app to run permanently** (e.g., testing production-ready builds or deploying on a live host). The servers run in the background (as daemons), and pressing `Ctrl+C` only detaches you from the log stream (the app stays online).
-*   **Harness Scripts (`test-all.sh`, `test-all.ps1`)**: Use these when you are doing **local coding, testing, and developer validation**. It runs setup, styles check, unit tests, asset builds, and starts the development servers interactively. Pressing `Ctrl+C` immediately stops the servers to free up port resources.
-
----
-
-## 🚀 The Single-Command Deployment Workflows (Start here)
-
-For local production checks or live hosting, you only need to run a single command depending on your operating system.
-
-> [!IMPORTANT]
-> **Managing the Live App & Logs during Deployment:**
-> *   **How to stop watching logs**: Press **`Ctrl+C`**. This exits the log viewer back to your command line, but **leaves the application running** in the background.
-> *   **How to completely stop the app**: Run the stop script: `./scripts/stop.sh` (or `.\scripts\stop.ps1` on Windows).
-
-
-### 🍎 macOS Local Deployment
-Executes code updates, dependency setups, database migrations, asset builds, starts production servers in the background, and streams logs:
 ```bash
-./scripts/deploy-mac.sh
+./scripts/local.sh bootstrap
 ```
-*   **Detaching Logs**: Press **`Ctrl+C`** to exit the log viewer. The application **keeps running in the background**.
-*   **Stopping Servers**: Run `./scripts/stop.sh` to turn off background servers completely.
 
-### 🐧 Debian/Linux Server Deployment
-Pulls latest changes, runs migrations, builds resources, and restarts production services (`gunicorn` and `nginx` systemd services, with background daemon fallback):
+Windows Command Prompt or PowerShell:
+
+```bat
+scripts\local-windows.cmd bootstrap
+```
+
+The local launcher installs/checks runtimes and dependencies, prepares the
+local SQLite database, loads bundled chatbot knowledge, and starts Django and
+Vite. Press `Ctrl+C` to stop both launcher-owned processes.
+
+Common local commands:
+
 ```bash
-./scripts/deploy-linux.sh
+./scripts/local.sh setup
+./scripts/local.sh start
+./scripts/local.sh stop
+./scripts/local.sh status
+./scripts/local.sh logs
+./scripts/local.sh health
 ```
-*   **Detaching Logs**: Press **`Ctrl+C`** to exit the log viewer. The application **keeps running in the background**.
-*   **Stopping Servers**: Run `./scripts/stop.sh` to turn off background servers completely.
 
-### 🪟 Windows Local Deployment
-Executes updates, updates virtualenvs, applies migrations, builds Vite templates, starts backend and frontend preview servers in the background, and streams logs:
-```powershell
-.\scripts\deploy.ps1
+## Ubuntu Production Server
+
+Install and edit the protected configuration first:
+
+```bash
+sudo install -d -m 0750 /etc/chikooza
+sudo install -m 0600 scripts/server.env.example /etc/chikooza/server.env
+sudoedit /etc/chikooza/server.env
 ```
-*   **Detaching Logs**: Press **`Ctrl+C`** to exit the log viewer. The application **keeps running in the background**.
-*   **Stopping Servers**: Run `.\scripts\stop.ps1` to turn off background servers completely.
 
----
+First deployment on Ubuntu 24.04:
 
-## 🛠️ Individual Script Reference (Alphabetical)
+```bash
+sudo ./scripts/server-linux.sh bootstrap
+```
 
-Each script is designed to run the same logical workflow on macOS/Linux (using Bash `.sh` files) and Windows (using PowerShell `.ps1` files). Run all commands from the project root directory.
+Later deployments and operations:
 
-### 1. `build.sh` & `build.ps1` (Compile Production Assets)
-Validates Django configuration settings for deploy readiness, compiles static Django files, and bundles frontend files for production.
-*   **macOS / Linux**: `./scripts/build.sh`
-*   **Windows**: `.\scripts\build.ps1`
+```bash
+sudo ./scripts/server-linux.sh deploy
+sudo ./scripts/server-linux.sh status
+sudo ./scripts/server-linux.sh logs --follow
+sudo ./scripts/server-linux.sh health
+sudo ./scripts/server-linux.sh rollback
+```
 
-### 2. `clean.sh` & `clean.ps1` (Purge Caches & Temp Files)
-Safely deletes python compilation files (`__pycache__`), build directories, logs, and testing caches.
-*   **macOS / Linux**: `./scripts/clean.sh`
-*   **Windows**: `.\scripts\clean.ps1`
-*   **Deep Clean** (Also deletes virtualenv directories, `.env` files, and local SQLite databases):
-    *   macOS / Linux: `./scripts/clean.sh --deep`
-    *   Windows: `.\scripts\clean.ps1 --deep`
+The production launcher uses PostgreSQL/pgvector, Gunicorn, systemd, Nginx,
+and optional Certbot. macOS and Windows launchers are local workflows, not
+public production hosting.
 
-### 3. `common.sh` & `common.ps1` (Shared Configuration Helper)
-Stores common environment loaders, directory paths, and logging utilities. It is imported by the other scripts and is **not** run directly.
+Production identities are fixed: `chikooza-build` builds releases,
+`chikooza` runs the service, and `chikooza-web` grants limited shared access to
+Nginx. A deploy stages code, a root-only release environment, Nginx, and
+systemd; failed activation restores the former code/environment/configuration.
+Manual rollback changes code/assets but keeps the current runtime environment.
+Database migrations are not reversed.
 
-### 4. `dev.sh` & `dev.ps1` (Interactive Development Servers)
-Clears stale process ports and launches Django API (port `8002`) and Vite dev server (port `5173`) in background logs-streaming mode.
-*   **macOS / Linux**: `./scripts/dev.sh`
-*   **Windows**: `.\scripts\dev.ps1`
-*   **Interruption Trap**: Pressing **`Ctrl+C`** in this mode **will stop and clean up all servers** automatically.
+For HTTPS, first deploy with `ENABLE_CERTBOT=true` and
+`CERTBOT_STAGING=true`. After that succeeds, set `CERTBOT_STAGING=false` and
+run `deploy` again to obtain the production certificate through the Certbot
+webroot flow.
 
-### 5. `health.sh` & `health.ps1` (Ecosystem Health Check)
-Audits Python and Node versions, database connection paths, port availability, and AI key configurations, printing a status report list.
-*   **macOS / Linux**: `./scripts/health.sh`
-*   **Windows**: `.\scripts\health.ps1`
+Config edits apply only on `bootstrap` or `deploy`. `stop` and `logs --follow`
+still work if the server config is broken. Pre-migration backups are root-only
+and format-verified, but restoring one is a separate procedure that must be
+tested before production use.
 
-### 6. `setup.sh` & `setup.ps1` (Environment Bootstrap)
-Validates system prerequisites, initializes virtualenvs (`venv` or `chikooza_env`), installs python modules and frontend packages, configures `.env` copies, and runs migrations.
-*   **macOS / Linux**: `./scripts/setup.sh`
-*   **Windows**: `.\scripts\setup.ps1`
-
-### 7. `stop.sh` & `stop.ps1` (Graceful Process Termination)
-Gracefully terminates Gunicorn, Vite, Waitress, or Django dev servers using tracking process PIDs and scanning port bindings (8002, 5173) to ensure a clean exit.
-*   **macOS / Linux**: `./scripts/stop.sh`
-*   **Windows**: `.\scripts\stop.ps1`
-
-### 8. `test.sh` & `test.ps1` (Style Checker & Unit Tests)
-Runs import sorting (`isort`), code formatting checks (`black`), style checkers (`flake8`), and the backend Django unit testing suite (70 tests).
-*   **macOS / Linux**: `./scripts/test.sh`
-*   **Windows**: `.\scripts\test.ps1`
-
-### 9. `test-all.sh` & `test-all.ps1` (Complete Development Harness)
-Runs the entire dev workflow in one go (Setup → Health → Test → Clean → Build → Interactive Dev Startup).
-*   **macOS / Linux**: `./scripts/test-all.sh`
-*   **Windows**: `.\scripts\test-all.ps1`
-*   **Interruption Trap**: Pressing **`Ctrl+C`** in this mode **will stop and clean up all servers** automatically.
+See `scripts/README.md` for configuration, safety checks, and limitations.
