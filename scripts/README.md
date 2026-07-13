@@ -4,6 +4,10 @@ The supported Chikooza launchers and their setup documentation are grouped in
 `scripts/launchers/`:
 
 - `launchers/QUICKSTART.md` provides the short command list.
+- `launchers/start.md` provides copy-ready PostgreSQL and SQLite local startup
+  commands.
+- `launchers/start-linux.md` provides the ordered Ubuntu 24.04 production
+  deployment procedure.
 - `launchers/README.md` is the complete local and Ubuntu server setup guide.
 - `launchers/local.sh` runs local setup and development on Linux, macOS, or
   Windows Git Bash.

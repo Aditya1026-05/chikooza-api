@@ -3,6 +3,12 @@
 Use the maintained launchers below. The older `deploy-*`, `test-all.*`, and
 per-platform check scripts are retained only for historical compatibility.
 
+For exact macOS PostgreSQL and SQLite startup sequences, see
+[`start.md`](start.md).
+
+For the complete ordered Ubuntu 24.04 deployment sequence, see
+[`start-linux.md`](start-linux.md).
+
 ## Local First Run
 
 Linux, macOS, or Windows Git Bash:

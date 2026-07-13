@@ -11,6 +11,12 @@ These workflows do not use Docker. They intentionally share command names where
 the operating systems support the same behavior, but local runs are not public
 server deployments.
 
+For copy-ready macOS PostgreSQL and SQLite startup commands, see
+[`start.md`](start.md).
+
+For the ordered fresh Ubuntu server procedure, see
+[`start-linux.md`](start-linux.md).
+
 ## Local First Run
 
 From the repository root on Linux, macOS, or Git Bash:
