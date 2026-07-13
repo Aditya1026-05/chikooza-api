@@ -15,12 +15,13 @@ Chikooza is a poultry farm operations MVP with:
 For a first local run on Linux, macOS, or Windows Git Bash:
 
 ```bash
-./scripts/local.sh bootstrap
+./scripts/launchers/local.sh bootstrap
 ```
 
-Windows users can also run `scripts\local-windows.cmd bootstrap`. For native
-Ubuntu 24.04 production deployment, follow `scripts/README.md` and use
-`sudo ./scripts/server-linux.sh bootstrap` after installing the protected
+Windows users can also run `scripts\launchers\local-windows.cmd bootstrap`.
+For native Ubuntu 24.04 production deployment, follow
+`scripts/launchers/README.md` and use
+`sudo ./scripts/launchers/server-linux.sh bootstrap` after installing the protected
 server configuration. HTTPS staging is enabled by default and must be promoted
 to a production certificate before launch. The native server workflow uses
 fixed, unprivileged build and service identities, staged releases with

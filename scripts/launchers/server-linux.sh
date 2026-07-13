@@ -117,7 +117,7 @@ trap cleanup_on_exit EXIT
 
 usage() {
     cat <<'EOF'
-Usage: sudo ./scripts/server-linux.sh [--config PATH] <command> [options]
+Usage: sudo ./scripts/launchers/server-linux.sh [--config PATH] <command> [options]
 
 Commands:
   bootstrap        Provision Ubuntu and perform the first deployment
@@ -231,7 +231,7 @@ is_config_key() {
 }
 
 load_config() {
-    [ -f "$CONFIG_FILE" ] || die "Missing config $CONFIG_FILE. Install scripts/server.env.example there first."
+    [ -f "$CONFIG_FILE" ] || die "Missing config $CONFIG_FILE. Install scripts/launchers/server.env.example there first."
     [ ! -L "$CONFIG_FILE" ] || die "The server config must not be a symbolic link."
     local owner mode line line_number=0 key raw value app_key
     owner="$(stat -c '%u' "$CONFIG_FILE")"

@@ -5,7 +5,7 @@
 set -Eeuo pipefail
 
 SCRIPT_DIR="$(cd -P -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
-PROJECT_ROOT="$(cd -P -- "$SCRIPT_DIR/.." >/dev/null 2>&1 && pwd)"
+PROJECT_ROOT="$(cd -P -- "$SCRIPT_DIR/../.." >/dev/null 2>&1 && pwd)"
 FRONTEND_DIR="$PROJECT_ROOT/chikooza-ui"
 SCRIPT_PATH="$SCRIPT_DIR/local.sh"
 VENV_DIR="${CHIKOOZA_LOCAL_VENV:-$PROJECT_ROOT/.venv}"
@@ -74,7 +74,7 @@ prepare_runtime_directory
 
 usage() {
     cat <<'EOF'
-Usage: ./scripts/local.sh <command>
+Usage: ./scripts/launchers/local.sh <command>
 
 Commands:
   bootstrap Bootstrap a fresh machine, then start the app interactively
@@ -498,11 +498,11 @@ install_missing_runtimes() {
 
 validate_runtimes() {
     activate_known_tool_paths
-    select_python || die "Python 3.11+ is required. Run './scripts/local.sh setup'."
-    select_node || die "Node.js ^20.19.0 or >=22.12.0 is required by Vite. Run './scripts/local.sh setup'."
-    select_npm || die "npm is required. Run './scripts/local.sh setup'."
-    git_is_available || die "Git is required. Run './scripts/local.sh setup'."
-    curl_is_available || die "curl is required. Run './scripts/local.sh setup'."
+    select_python || die "Python 3.11+ is required. Run './scripts/launchers/local.sh setup'."
+    select_node || die "Node.js ^20.19.0 or >=22.12.0 is required by Vite. Run './scripts/launchers/local.sh setup'."
+    select_npm || die "npm is required. Run './scripts/launchers/local.sh setup'."
+    git_is_available || die "Git is required. Run './scripts/launchers/local.sh setup'."
+    curl_is_available || die "curl is required. Run './scripts/launchers/local.sh setup'."
 
     log_ok "Python $PYTHON_VERSION: $PYTHON_EXEC"
     log_ok "Node.js $NODE_VERSION: $NODE_EXEC"
@@ -708,7 +708,7 @@ setup_local() {
     log_info "Loading bundled chatbot knowledge. Existing matching documents are skipped."
     run_local_python "$PROJECT_ROOT/manage.py" ingest_chatbot_knowledge
 
-    log_ok "Local setup is complete. Start with: ./scripts/local.sh start"
+    log_ok "Local setup is complete. Start with: ./scripts/launchers/local.sh start"
 }
 
 resolve_start_runtime() {
@@ -716,11 +716,11 @@ resolve_start_runtime() {
     validate_bind_settings
     [ "$(id -u 2>/dev/null || printf 1)" -ne 0 ] || die "Run the local launcher as your regular user, not root."
     validate_runtimes
-    [ -f "$PROJECT_ROOT/.env" ] || die "Backend .env is missing. Run './scripts/local.sh setup'."
-    [ -f "$FRONTEND_DIR/.env" ] || die "Frontend .env is missing. Run './scripts/local.sh setup'."
+    [ -f "$PROJECT_ROOT/.env" ] || die "Backend .env is missing. Run './scripts/launchers/local.sh setup'."
+    [ -f "$FRONTEND_DIR/.env" ] || die "Frontend .env is missing. Run './scripts/launchers/local.sh setup'."
     ensure_venv runtime
     validate_database_target
-    [ -f "$FRONTEND_DIR/node_modules/vite/bin/vite.js" ] || die "Frontend dependencies are missing. Run './scripts/local.sh setup'."
+    [ -f "$FRONTEND_DIR/node_modules/vite/bin/vite.js" ] || die "Frontend dependencies are missing. Run './scripts/launchers/local.sh setup'."
 }
 
 state_file_for() {

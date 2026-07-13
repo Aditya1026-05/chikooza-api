@@ -2,7 +2,7 @@
 setlocal EnableExtensions
 
 set "GIT_BASH="
-set "PROJECT_DIR=%~dp0.."
+set "PROJECT_DIR=%~dp0..\.."
 
 if exist "%ProgramFiles%\Git\bin\bash.exe" set "GIT_BASH=%ProgramFiles%\Git\bin\bash.exe"
 if not defined GIT_BASH if exist "%LocalAppData%\Programs\Git\bin\bash.exe" set "GIT_BASH=%LocalAppData%\Programs\Git\bin\bash.exe"
@@ -35,7 +35,7 @@ if not defined GIT_BASH (
 )
 
 pushd "%PROJECT_DIR%" >nul
-"%GIT_BASH%" "./scripts/local.sh" %*
+"%GIT_BASH%" "./scripts/launchers/local.sh" %*
 set "EXIT_CODE=%ERRORLEVEL%"
 popd >nul
 exit /b %EXIT_CODE%

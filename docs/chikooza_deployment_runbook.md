@@ -1,5 +1,10 @@
 # Chikooza Deployment Runbook
 
+> This is a legacy manual runbook. For new local environments and Ubuntu 24.04
+> deployments, use the maintained launchers and instructions in
+> `scripts/launchers/README.md`. The older scripts referenced below remain only
+> for historical compatibility.
+
 This document explains how to deploy the Chikooza project in a DigitalOcean-style
 setup using Django, PostgreSQL, Gunicorn, Nginx, and the React/Vite frontend.
 

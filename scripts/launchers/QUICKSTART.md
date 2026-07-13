@@ -8,28 +8,30 @@ per-platform check scripts are retained only for historical compatibility.
 Linux, macOS, or Windows Git Bash:
 
 ```bash
-./scripts/local.sh bootstrap
+./scripts/launchers/local.sh bootstrap
 ```
 
 Windows Command Prompt or PowerShell:
 
 ```bat
-scripts\local-windows.cmd bootstrap
+scripts\launchers\local-windows.cmd bootstrap
 ```
 
-The local launcher installs/checks runtimes and dependencies, prepares the
-local SQLite database, loads bundled chatbot knowledge, and starts Django and
-Vite. Press `Ctrl+C` to stop both launcher-owned processes.
+The local launcher installs/checks runtimes and dependencies, prepares SQLite
+for a fresh environment or preserves an existing database configuration, loads
+bundled chatbot knowledge, and starts Django and Vite. Press `Ctrl+C` to stop
+both launcher-owned processes. Existing non-default databases require the
+explicit safety override documented in `scripts/launchers/README.md`.
 
 Common local commands:
 
 ```bash
-./scripts/local.sh setup
-./scripts/local.sh start
-./scripts/local.sh stop
-./scripts/local.sh status
-./scripts/local.sh logs
-./scripts/local.sh health
+./scripts/launchers/local.sh setup
+./scripts/launchers/local.sh start
+./scripts/launchers/local.sh stop
+./scripts/launchers/local.sh status
+./scripts/launchers/local.sh logs
+./scripts/launchers/local.sh health
 ```
 
 ## Ubuntu Production Server
@@ -38,24 +40,24 @@ Install and edit the protected configuration first:
 
 ```bash
 sudo install -d -m 0750 /etc/chikooza
-sudo install -m 0600 scripts/server.env.example /etc/chikooza/server.env
+sudo install -m 0600 scripts/launchers/server.env.example /etc/chikooza/server.env
 sudoedit /etc/chikooza/server.env
 ```
 
 First deployment on Ubuntu 24.04:
 
 ```bash
-sudo ./scripts/server-linux.sh bootstrap
+sudo ./scripts/launchers/server-linux.sh bootstrap
 ```
 
 Later deployments and operations:
 
 ```bash
-sudo ./scripts/server-linux.sh deploy
-sudo ./scripts/server-linux.sh status
-sudo ./scripts/server-linux.sh logs --follow
-sudo ./scripts/server-linux.sh health
-sudo ./scripts/server-linux.sh rollback
+sudo ./scripts/launchers/server-linux.sh deploy
+sudo ./scripts/launchers/server-linux.sh status
+sudo ./scripts/launchers/server-linux.sh logs --follow
+sudo ./scripts/launchers/server-linux.sh health
+sudo ./scripts/launchers/server-linux.sh rollback
 ```
 
 The production launcher uses PostgreSQL/pgvector, Gunicorn, systemd, Nginx,
@@ -79,4 +81,5 @@ still work if the server config is broken. Pre-migration backups are root-only
 and format-verified, but restoring one is a separate procedure that must be
 tested before production use.
 
-See `scripts/README.md` for configuration, safety checks, and limitations.
+See `scripts/launchers/README.md` for configuration, safety checks,
+troubleshooting, and platform limitations.

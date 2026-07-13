@@ -5,6 +5,7 @@
 .env.dev
 /scripts/chikooza_deploy.env
 /scripts/server.env
+/scripts/launchers/server.env
 /scripts/*.pid
 /venv/
 # U: NEW: ignore alternate local virtualenv names created from setup docs.
