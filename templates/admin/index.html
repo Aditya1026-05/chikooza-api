@@ -24,9 +24,16 @@
                 <h2>Manage Chikooza from farmer to flock to sale.</h2>
                 <p>Start with farmer accounts, inspect farm setup, then follow daily data, purchases, sales, and support.</p>
             </div>
-            <a class="btn {{ jazzmin_ui.button_classes.primary }}" href="{% url 'admin:common_users_changelist' %}">
-                Open farmers
-            </a>
+            <div class="d-flex flex-wrap justify-content-end">
+                {% for action in dashboard.primary_actions %}
+                    <a
+                        class="btn {% if forloop.first %}{{ jazzmin_ui.button_classes.primary }}{% else %}{{ jazzmin_ui.button_classes.secondary }}{% endif %} ml-2 mb-2"
+                        href="{{ action.url }}"
+                    >
+                        {{ action.label }}
+                    </a>
+                {% endfor %}
+            </div>
         </section>
 
         <section class="admin-metric-grid" aria-label="Admin overview">

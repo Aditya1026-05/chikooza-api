@@ -4,7 +4,7 @@ from urllib.parse import urlencode
 
 from django.conf import settings
 from django.contrib import admin, messages
-from django.contrib.auth.hashers import identify_hasher
+from django.contrib.auth.admin import UserAdmin
 from django.core.exceptions import PermissionDenied
 from django.http import HttpResponseRedirect
 from django.shortcuts import get_object_or_404
@@ -27,10 +27,18 @@ from farm.models import Farm
 from flocks.models import Flock
 from purchase.models import Purchase
 from sales.models import Sales
+from users.forms import (
+    FarmerAdminPasswordChangeForm,
+    FarmerChangeForm,
+    FarmerCreationForm,
+)
 
 
 @admin.register(Users)
-class UsersAdmin(AdminWorkflowLinkMixin, PublicIdAdminMixin, admin.ModelAdmin):
+class UsersAdmin(AdminWorkflowLinkMixin, PublicIdAdminMixin, UserAdmin):
+    form = FarmerChangeForm
+    add_form = FarmerCreationForm
+    change_password_form = FarmerAdminPasswordChangeForm
     list_display = (
         "username",
         "email",
@@ -40,6 +48,7 @@ class UsersAdmin(AdminWorkflowLinkMixin, PublicIdAdminMixin, admin.ModelAdmin):
         "is_active",
         "is_staff",
         "product_records",
+        "password_action",
         "dashboard_action",
         "date_joined",
         "public_id",
@@ -57,7 +66,6 @@ class UsersAdmin(AdminWorkflowLinkMixin, PublicIdAdminMixin, admin.ModelAdmin):
     ordering = ("-date_joined",)
     list_per_page = 25
     filter_horizontal = ("groups", "user_permissions")
-    raw_id_fields = ("approval_reviewed_by",)
     readonly_fields = (
         "public_id",
         "created_at",
@@ -65,15 +73,39 @@ class UsersAdmin(AdminWorkflowLinkMixin, PublicIdAdminMixin, admin.ModelAdmin):
         "last_login",
         "date_joined",
         "approval_reviewed_at",
+        "approval_reviewed_by",
         "product_records",
+        "password_action",
         "dashboard_action",
     )
     actions = ("approve_farmer_accounts", "reject_farmer_accounts")
+    add_fieldsets = (
+        (
+            "Register farmer",
+            {
+                "classes": ("wide",),
+                "fields": (
+                    "username",
+                    "password1",
+                    "password2",
+                    "first_name",
+                    "last_name",
+                    "email",
+                    "mobile_number",
+                ),
+                "description": (
+                    "Admin-registered farmers are verified, approved, and active "
+                    "immediately. They cannot receive staff privileges from this form."
+                ),
+            },
+        ),
+    )
     fieldsets = (
         (
             "Admin inspection",
             {
                 "fields": (
+                    "password_action",
                     "dashboard_action",
                     "product_records",
                 )
@@ -137,21 +169,63 @@ class UsersAdmin(AdminWorkflowLinkMixin, PublicIdAdminMixin, admin.ModelAdmin):
         urls = super().get_urls()
         custom_urls = [
             path(
+                "<path:object_id>/reset-password/",
+                self.admin_site.admin_view(self.reset_farmer_password),
+                name="common_users_reset_password",
+            ),
+            path(
                 "<path:object_id>/open-dashboard/",
                 self.admin_site.admin_view(self.open_dashboard_as_farmer),
                 name="common_users_open_dashboard",
-            )
+            ),
         ]
         return custom_urls + urls
 
     def save_model(self, request, obj, form, change):
-        password = form.cleaned_data.get("password")
-        if password:
-            try:
-                identify_hasher(password)
-            except ValueError:
-                obj.set_password(password)
+        if not change:
+            obj.is_staff = False
+            obj.is_superuser = False
+            obj.is_active = True
+            obj.is_email_verified = True
+            obj.is_phone_verified = True
+            obj.approval_status = Users.APPROVAL_APPROVED
+            obj.approval_note = "Registered and approved by an administrator."
+            obj.approval_reviewed_at = timezone.now()
+            obj.approval_reviewed_by = request.user
+        else:
+            previous = Users.objects.get(pk=obj.pk)
+            if obj.approval_status != previous.approval_status:
+                obj.is_active = obj.approval_status == Users.APPROVAL_APPROVED
+                obj.approval_reviewed_at = timezone.now()
+                obj.approval_reviewed_by = request.user
         super().save_model(request, obj, form, change)
+
+    def get_fieldsets(self, request, obj=None):
+        fieldsets = super().get_fieldsets(request, obj)
+        if obj is None or request.user.is_superuser:
+            return fieldsets
+        return tuple(
+            fieldset for fieldset in fieldsets if fieldset[0] != "Admin permissions"
+        )
+
+    def has_change_permission(self, request, obj=None):
+        if (
+            obj is not None
+            and (obj.is_staff or obj.is_superuser)
+            and not request.user.is_superuser
+        ):
+            return False
+        return super().has_change_permission(request, obj)
+
+    @staticmethod
+    def _is_farmer_account(user):
+        return not user.is_staff and not user.is_superuser
+
+    def reset_farmer_password(self, request, object_id):
+        farmer = get_object_or_404(Users, pk=object_id)
+        if not self._is_farmer_account(farmer):
+            raise PermissionDenied
+        return self.user_change_password(request, str(farmer.pk))
 
     def _can_open_farmer_dashboard(self, request):
         return request.user.is_superuser or request.user.has_perm("common.change_users")
@@ -161,6 +235,12 @@ class UsersAdmin(AdminWorkflowLinkMixin, PublicIdAdminMixin, admin.ModelAdmin):
             raise PermissionDenied
 
         farmer = get_object_or_404(Users, pk=object_id)
+        if (
+            not self._is_farmer_account(farmer)
+            or not farmer.is_active
+            or farmer.approval_status != Users.APPROVAL_APPROVED
+        ):
+            raise PermissionDenied
         application = get_or_create_oauth_application(farmer)
         AccessToken.objects.filter(
             user=farmer,
@@ -221,19 +301,33 @@ class UsersAdmin(AdminWorkflowLinkMixin, PublicIdAdminMixin, admin.ModelAdmin):
         sale_count = Sales.objects.filter(flock__user=obj).count()
 
         return format_html(
-            '{} · {} · {} · {} · {}',
-            self.admin_changelist_link(Farm, f"{farm_count} farms", {"user__id__exact": obj.pk}),
-            self.admin_changelist_link(Flock, f"{flock_count} flocks", {"user__id__exact": obj.pk}),
-            self.admin_changelist_link(DailyData, f"{daily_count} daily", {"user__id__exact": obj.pk}),
-            self.admin_changelist_link(Purchase, f"{purchase_count} purchases", {"user__id__exact": obj.pk}),
-            self.admin_changelist_link(Sales, f"{sale_count} sales", {"flock__user__id__exact": obj.pk}),
+            "{} · {} · {} · {} · {}",
+            self.admin_changelist_link(
+                Farm, f"{farm_count} farms", {"user__id__exact": obj.pk}
+            ),
+            self.admin_changelist_link(
+                Flock, f"{flock_count} flocks", {"user__id__exact": obj.pk}
+            ),
+            self.admin_changelist_link(
+                DailyData, f"{daily_count} daily", {"user__id__exact": obj.pk}
+            ),
+            self.admin_changelist_link(
+                Purchase, f"{purchase_count} purchases", {"user__id__exact": obj.pk}
+            ),
+            self.admin_changelist_link(
+                Sales, f"{sale_count} sales", {"flock__user__id__exact": obj.pk}
+            ),
         )
 
     @admin.display(description="Dashboard")
     def dashboard_action(self, obj):
         if not obj or not obj.pk:
             return "-"
-        if obj.is_staff or obj.is_superuser:
+        if (
+            not self._is_farmer_account(obj)
+            or not obj.is_active
+            or obj.approval_status != Users.APPROVAL_APPROVED
+        ):
             return "-"
         url = reverse("admin:common_users_open_dashboard", args=(obj.pk,))
         return format_html(
@@ -241,25 +335,106 @@ class UsersAdmin(AdminWorkflowLinkMixin, PublicIdAdminMixin, admin.ModelAdmin):
             url,
         )
 
+    @admin.display(description="Password")
+    def password_action(self, obj):
+        if not obj or not obj.pk or not self._is_farmer_account(obj):
+            return "-"
+        url = reverse("admin:common_users_reset_password", args=(obj.pk,))
+        return format_html(
+            '<a class="btn btn-sm btn-outline-primary" href="{}">Reset password</a>',
+            url,
+        )
+
     @admin.action(description="Approve selected farmer accounts")
     def approve_farmer_accounts(self, request, queryset):
-        queryset.update(
-            approval_status=Users.APPROVAL_APPROVED,
-            approval_note="Approved from admin.",
-            approval_reviewed_at=timezone.now(),
-            approval_reviewed_by_id=request.user.id,
-            is_active=True,
+        selected_count = queryset.count()
+        eligible_farmers = list(
+            queryset.filter(
+                approval_status=Users.APPROVAL_PENDING,
+                is_staff=False,
+                is_superuser=False,
+                is_email_verified=True,
+                is_phone_verified=True,
+            )
         )
+        reviewed_at = timezone.now()
+        for farmer in eligible_farmers:
+            farmer.approval_status = Users.APPROVAL_APPROVED
+            farmer.approval_note = "Approved by an administrator."
+            farmer.approval_reviewed_at = reviewed_at
+            farmer.approval_reviewed_by = request.user
+            farmer.is_active = True
+            farmer.save(
+                update_fields=(
+                    "approval_status",
+                    "approval_note",
+                    "approval_reviewed_at",
+                    "approval_reviewed_by",
+                    "is_active",
+                    "updated_at",
+                )
+            )
+            self.log_change(request, farmer, "Approved farmer registration.")
+
+        approved_count = len(eligible_farmers)
+        self.message_user(
+            request,
+            f"Approved {approved_count} farmer registration(s).",
+            level=messages.SUCCESS,
+        )
+        skipped_count = selected_count - approved_count
+        if skipped_count:
+            self.message_user(
+                request,
+                (
+                    f"Skipped {skipped_count} account(s). Only pending, verified "
+                    "farmer registrations can be approved."
+                ),
+                level=messages.WARNING,
+            )
 
     @admin.action(description="Reject selected farmer accounts")
     def reject_farmer_accounts(self, request, queryset):
-        queryset.update(
-            approval_status=Users.APPROVAL_REJECTED,
-            approval_note="Rejected from admin.",
-            approval_reviewed_at=timezone.now(),
-            approval_reviewed_by_id=request.user.id,
-            is_active=False,
+        selected_count = queryset.count()
+        eligible_farmers = list(
+            queryset.filter(
+                approval_status=Users.APPROVAL_PENDING,
+                is_staff=False,
+                is_superuser=False,
+            )
         )
+        reviewed_at = timezone.now()
+        for farmer in eligible_farmers:
+            farmer.approval_status = Users.APPROVAL_REJECTED
+            farmer.approval_note = "Rejected by an administrator."
+            farmer.approval_reviewed_at = reviewed_at
+            farmer.approval_reviewed_by = request.user
+            farmer.is_active = False
+            farmer.save(
+                update_fields=(
+                    "approval_status",
+                    "approval_note",
+                    "approval_reviewed_at",
+                    "approval_reviewed_by",
+                    "is_active",
+                    "updated_at",
+                )
+            )
+            self.log_change(request, farmer, "Rejected farmer registration.")
+
+        rejected_count = len(eligible_farmers)
+        self.message_user(
+            request,
+            f"Rejected {rejected_count} farmer registration(s).",
+            level=messages.SUCCESS,
+        )
+        skipped_count = selected_count - rejected_count
+        if skipped_count:
+            self.message_user(
+                request,
+                f"Skipped {skipped_count} account(s) that were not pending farmers.",
+                level=messages.WARNING,
+            )
 
 
 @admin.register(Otp)
@@ -288,7 +463,12 @@ class RegistrationApprovalPolicyAdmin(PublicIdAdminMixin, admin.ModelAdmin):
         "is_enabled",
         "updated_at",
     )
-    list_filter = ("mode", "is_enabled", "require_email_verified", "require_phone_verified")
+    list_filter = (
+        "mode",
+        "is_enabled",
+        "require_email_verified",
+        "require_phone_verified",
+    )
     readonly_fields = ("public_id", "created_at", "updated_at")
     fieldsets = (
         (

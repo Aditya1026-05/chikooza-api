@@ -7,8 +7,20 @@ from django.urls import reverse
 
 from aibot.models import AIChatLog
 from chatbot.models import ChatLog, ChatSession, KnowledgeDocument
-from common.base_models import EmailOtp, Otp, RegistrationApprovalPolicy, Users, UsersForgotPassword
-from dailydata.models import DailyData, DarknessTime, FeedAvailability, FlockVaccination, Vaccines
+from common.base_models import (
+    EmailOtp,
+    Otp,
+    RegistrationApprovalPolicy,
+    Users,
+    UsersForgotPassword,
+)
+from dailydata.models import (
+    DailyData,
+    DarknessTime,
+    FeedAvailability,
+    FlockVaccination,
+    Vaccines,
+)
 from farm.models import Country, Farm, State
 from flocks.models import Breed, Flock, Hatchery, Integrator
 from purchase.models import Purchase
@@ -44,11 +56,22 @@ def _can_add(user, model):
     return user.is_superuser or user.has_perm(f"{opts.app_label}.add_{opts.model_name}")
 
 
-def _link(user, label, model, params=None, add=False, description=""):
+def _can_change(user, model):
+    opts = model._meta
+    return user.is_superuser or user.has_perm(
+        f"{opts.app_label}.change_{opts.model_name}"
+    )
+
+
+def _link(user, label, model, params=None, add=False, change=False, description=""):
     if add:
         if not _can_add(user, model):
             return None
         url = _admin_add_url(model)
+    elif change:
+        if not _can_change(user, model):
+            return None
+        url = _admin_url(model, params=params)
     else:
         if not _can_view(user, model):
             return None
@@ -72,17 +95,29 @@ def chikooza_admin_dashboard(context):
 
     pending_param = {"approval_status__exact": Users.APPROVAL_PENDING}
     active_flock_param = {"status__exact": "1"}
+    farmer_account_actions = _visible_links(
+        user,
+        [
+            _link(user, "Register farmer", Users, add=True),
+            _link(user, "Review pending registrations", Users, pending_param),
+            _link(user, "Reset farmer passwords", Users, change=True),
+        ],
+    )
 
     metrics = [
         {
             "label": "Pending farmers",
-            "value": Users.objects.filter(approval_status=Users.APPROVAL_PENDING).count(),
+            "value": Users.objects.filter(
+                approval_status=Users.APPROVAL_PENDING
+            ).count(),
             "url": _admin_url(Users, pending_param),
             "tone": "warning",
         },
         {
             "label": "Active farmers",
-            "value": Users.objects.filter(is_active=True, is_staff=False, is_superuser=False).count(),
+            "value": Users.objects.filter(
+                is_active=True, is_staff=False, is_superuser=False
+            ).count(),
             "url": _admin_url(Users, {"is_active__exact": "1"}),
             "tone": "success",
         },
@@ -104,14 +139,11 @@ def chikooza_admin_dashboard(context):
         {
             "step": "1",
             "title": "Farmers",
-            "summary": "Approve accounts, open a farmer, then inspect their workspace.",
-            "links": _visible_links(
+            "summary": "Register farmers, approve pending accounts, or open an account to reset its password.",
+            "links": farmer_account_actions
+            + _visible_links(
                 user,
-                [
-                    _link(user, "Review pending farmers", Users, pending_param),
-                    _link(user, "All farmer accounts", Users),
-                    _link(user, "Registration policy", RegistrationApprovalPolicy),
-                ],
+                [_link(user, "Registration policy", RegistrationApprovalPolicy)],
             ),
         },
         {
@@ -175,10 +207,13 @@ def chikooza_admin_dashboard(context):
         ],
     )
 
-    recent_activity = LogEntry.objects.select_related("content_type", "user").order_by("-action_time")[:6]
+    recent_activity = LogEntry.objects.select_related("content_type", "user").order_by(
+        "-action_time"
+    )[:6]
 
     return {
         "metrics": metrics,
+        "primary_actions": farmer_account_actions,
         "sections": sections,
         "master_links": master_links,
         "recent_activity": recent_activity,
