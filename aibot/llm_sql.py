@@ -280,6 +280,9 @@ Return the JSON SQL plan now.
         for item in history[-16:]:
             role = item.get("role", "user")
             content = str(item.get("content", "")).strip()
+            
+            if len(content) > 3000:
+                content = content[:3000] + "... (truncated)"
             if content:
                 metadata = self._safe_metadata_text(item)
                 if metadata:
