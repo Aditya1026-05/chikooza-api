@@ -49,16 +49,19 @@ class AIChatViewSet(viewsets.ViewSet):
                 "active_context": self._active_context_from_request(request),
             }
 
+            import time
             # The service scopes all farm-data access to request.user.
             service = ChikoozaModernAgentService(user=request.user)
             history = self._recent_history(request.user)
+            start_time = time.time()
             result = service.query(
                 query,
                 history=history,
                 active_context=request.chat_data["active_context"],
             )
+            duration = time.time() - start_time
 
-            self._log_interaction(request, result)
+            self._log_interaction(request, result, duration)
             self._save_to_db(request, result)
 
             if result["status"] == "error":
@@ -94,13 +97,14 @@ class AIChatViewSet(viewsets.ViewSet):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
-    def _log_interaction(self, request, result):
+    def _log_interaction(self, request, result, duration=None):
         log_data = {
             "user_id": request.user.id,
             "query": request.chat_data["cleaned_query"],
             "response": json.dumps(result, cls=DjangoJSONEncoder),
             "status": result["status"],
             "query_id": request.chat_data["query_id"],
+            "duration": duration,
         }
         self.log_handler.log_interaction(log_data)
 
